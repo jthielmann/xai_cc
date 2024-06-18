@@ -222,52 +222,22 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
 
     # generate training dataframe with all training samples
     for i in train_samples:
-        adata = ad.read_h5ad(
-            data_dir + i + "/Preprocessed_STDataset/tmm_combat_scaled_" + i + ".h5ad")  # loaded preprocessed anndata objects
-        st_dataset = adata.to_df()
+        st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv", index_col=-1)
+        print(st_dataset.head())
         st_dataset["tile"] = st_dataset.index
+        print(st_dataset.head())
+        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
 
-        st_dataset_filtered = st_dataset.copy()
-        st_dataset_filtered = st_dataset_filtered[
-            columns_of_interest]  # filter for columns of interest (i.e. tile and genes of interest)
-        if i == "p007":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-0',
-                                                                                  '')  # remove unwanted path strings
-        elif i == "p014":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-4', '')
-        elif i == "p016":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-5', '')
-        elif i == "p020":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-6', '')
-        elif i == "p025":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-8', '')
-
-        st_dataset_filtered['tile'] = st_dataset_filtered['tile'].apply(
-            lambda x: "{}{}{}{}".format(data_dir, i, "/Tiles_156/",
-                                        x[57:]))  # adjust path to load directory
-
-        train_st_dataset = pd.concat([train_st_dataset, st_dataset_filtered])  # concat all samples
+        train_st_dataset = pd.concat([train_st_dataset, st_dataset[columns_of_interest]])  # concat all samples
 
     # generate validation dataframe with all validation samples
     for i in val_samples:
-        adata = ad.read_h5ad(
-            data_dir + i + "/Preprocessed_STDataset/tmm_combat_scaled_" + i + ".h5ad")
-        st_dataset = adata.to_df()
+
+        st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv")
         st_dataset["tile"] = st_dataset.index
+        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
 
-        st_dataset_filtered = st_dataset.copy()
-        st_dataset_filtered = st_dataset_filtered[columns_of_interest]
-        if i == "p009":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-2',
-                                                                                  '')  # remove unwanted path strings
-        elif i == "p013":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-3', '')
-
-        st_dataset_filtered['tile'] = st_dataset_filtered['tile'].apply(
-            lambda x: "{}{}{}{}".format(data_dir, i, "/Tiles_156/",
-                                        x[57:]))
-
-        valid_st_dataset = pd.concat([valid_st_dataset, st_dataset_filtered])
+        valid_st_dataset = pd.concat([valid_st_dataset, st_dataset[columns_of_interest]])
 
     # reset index of dataframes
     train_st_dataset.reset_index(drop=True, inplace=True)
@@ -347,7 +317,7 @@ def training(resnet, data_dir, epochs, loss_fn, learning_mode, batch_size, gene)
     print(getframeinfo(currentframe()).lineno)
 
     data_path = Path(data_dir)
-    training_log = f"../results/ST_Predict_absolute_single.txt"
+    training_log = f"./results/ST_Predict_absolute_single.txt"
     date = str(datetime.today().strftime('%d%m%Y'))
     log_training(date, training_log)
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
