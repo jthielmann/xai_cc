@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 
 
-
 def plot_train_curves(history, metric_of_interest, batch, lr, date, data_dir):  #metric_of_interest "loss" or "accuracy"
     xi = [5, 10, 15, 20, 25, 30]  #Adapt x-ticks to amount of training episodes
     plt.figure(figsize=(10, 8))
