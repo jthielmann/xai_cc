@@ -63,7 +63,7 @@ class MyNet(nn.Module):
         x = self.pretrained(x)
         x = self.my_new_layers(x)
         gene1 = self.gene1(x)
-        return gene1
+        return gene1.squeeze()
 
 
 def get_model():
@@ -254,7 +254,7 @@ class Subset(torch.utils.data.Dataset):
         return len(self.subset)
 
 
-def get_patient_loader(data_dir, batch_size, patient=None, gene="RUBCNL"):
+def get_patient_loader(data_dir, patient=None, gene="RUBCNL"):
     columns_of_interest = ["tile", gene]
 
     train_st_dataset = pd.DataFrame(columns=columns_of_interest)
@@ -268,19 +268,6 @@ def get_patient_loader(data_dir, batch_size, patient=None, gene="RUBCNL"):
 
     train_st_dataset.reset_index(drop=True, inplace=True)
     loaded_train_dataset = STDataset(train_st_dataset)
-    """
-    # Training and validation transforms (i.e. train data augmentation)
-    train_transforms = transforms.RandomApply([transforms.RandomRotation(degrees=
-                                                                         (0, 180)),
-                                               transforms.RandomHorizontalFlip(
-                                                   p=0.75),
-                                               transforms.RandomVerticalFlip(
-                                                   p=0.75)], p=0.5)
-
-    train_data = Subset(loaded_train_dataset, transform=train_transforms)
-    """
-    #val_data = Subset(loaded_valid_dataset, transform=train_transforms)
-    #train_loader = DataLoader(dataset=loaded_train_dataset, batch_size=batch_size, shuffle=False)
     return loaded_train_dataset
 
 
