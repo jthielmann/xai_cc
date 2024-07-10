@@ -407,8 +407,10 @@ def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, b
         train_corr = training_corr / len(train_loader)
         val_corr = valid_corr / len(val_loader)
 
-        if val_loss < valid_loss_min or val_corr > valid_corr_max:
+        if val_loss < valid_loss_min:
             valid_loss_min = val_loss
+        if val_corr > valid_corr_max:
+            valid_corr_max = val_corr
         model_save = model_save_dir + date + "_ep_" + str(epoch) + "_lr_" + str(learning_rate) + "resnet.pt"
         torch.save(resnet.state_dict(), model_save)
 
