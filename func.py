@@ -139,9 +139,11 @@ def train_epoch(resnet, device, dataloader, criterion, optimizer):
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
-        corr = stats.pearsonr(g_output.cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[0]
+        if len(labels > 1):
+            corr = stats.pearsonr(g_output.cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[0]
+        else:
+            corr = 0
         batch_corr_train += corr
-        once = False
 
     return train_loss, batch_corr_train
 
