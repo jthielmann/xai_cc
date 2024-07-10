@@ -406,7 +406,7 @@ def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, b
         val_loss = (valid_loss / len(val_loader.dataset)) * 1000
         train_corr = training_corr / len(train_loader)
         val_corr = valid_corr / len(val_loader)
-3343
+3343U
         if val_loss < valid_loss_min or val_corr > valid_corr_max:
             valid_loss_min = val_loss
         model_save = model_save_dir + date + "_ep_" + epoch + "_lr_" + str(learning_rate) + "resnet.pt"
