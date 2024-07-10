@@ -62,8 +62,26 @@ class MyNet(nn.Module):
     def forward(self, x):
         x = self.pretrained(x)
         x = self.my_new_layers(x)
+        x = self.gene1(x)
+        return x.squeeze()
+
+    # is fundamentally broken, just a quick workaround as the restructuring expected a sequential to access the upper layers
+    def __getitem__(self, index):
+        return self.gene1[index]
+
+
+
+class MyNet2(nn.Module):
+    def __init__(self, my_pretrained_model):
+        super(MyNet2, self).__init__()
+        self.pretrained = my_pretrained_model
+
+        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
+
+    def forward(self, x):
+        x = self.pretrained(x)
         gene1 = self.gene1(x)
-        return gene1.squeeze()
+        return gene1
 
 
 def get_model():
@@ -80,7 +98,23 @@ def get_model():
 
     extended_net.apply(initialize_weights_linear)
 
-    print(extended_net)  # prints the final model architecture
+    return extended_net
+
+
+def get_model2():
+    extended_net = MyNet2(my_pretrained_model=models.resnet50(weights="IMAGENET1K_V2"))
+
+    # Initializing weights for newly appended layers in MyNet
+    def initialize_weights_linear(model_to_initialize):
+        for m in model_to_initialize.modules():
+            if isinstance(m, nn.Linear):
+                n = m.in_features
+                y = 1.0 / np.sqrt(n)
+                m.weight.data.uniform_(-y, y)
+                m.bias.data.fill_(0)
+
+    extended_net.apply(initialize_weights_linear)
+
     return extended_net
 
 
@@ -101,12 +135,11 @@ def train_epoch(resnet, device, dataloader, criterion, optimizer):
         labels = labels.to(device)
         optimizer.zero_grad()
         g_output = resnet(images)
-        loss = criterion(g_output, labels)
+        loss = criterion(g_output, labels[:, 0])
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
-
-        corr = stats.pearsonr(g_output[:, 0].cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[0]
+        corr = stats.pearsonr(g_output.cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[0]
         batch_corr_train += corr
         once = False
 
@@ -130,10 +163,10 @@ def valid_epoch(resnet, device, dataloader, criterion):
             labels = labels.float()
             labels = labels.to(device)
             g_output = resnet(images)
-            loss = criterion(g_output, labels)
+            loss = criterion(g_output, labels[:, 0])
             valid_loss += loss.item()
 
-            corr = stats.pearsonr(g_output[:, 0].cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[
+            corr = stats.pearsonr(g_output.cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[
                 0]
             batch_corr_val += corr
 
@@ -283,16 +316,15 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
     # generate training dataframe with all training samples
     for i in train_samples:
         st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv", index_col=-1)
-        print(st_dataset.head())
+        #print(st_dataset.head())
         st_dataset["tile"] = st_dataset.index
-        print(st_dataset.head())
+        #print(st_dataset.head())
         st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
 
         train_st_dataset = pd.concat([train_st_dataset, st_dataset[columns_of_interest]])  # concat all samples
 
     # generate validation dataframe with all validation samples
     for i in val_samples:
-
         st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv")
         st_dataset["tile"] = st_dataset.index
         st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
@@ -302,8 +334,6 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
     # reset index of dataframes
     train_st_dataset.reset_index(drop=True, inplace=True)
     valid_st_dataset.reset_index(drop=True, inplace=True)
-
-
 
     loaded_train_dataset = STDataset(train_st_dataset)
     loaded_valid_dataset = STDataset(valid_st_dataset)
@@ -322,14 +352,14 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
     # ], p = 0.5)
 
     train_data = Subset(loaded_train_dataset, transform=train_transforms)
-
+    print("BatchSize: ", batch_size)
     #val_data = Subset(loaded_valid_dataset, transform=train_transforms)
     train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(dataset=loaded_train_dataset, batch_size=batch_size, shuffle=True)
     return train_loader, val_loader
 
 
-def training(resnet, data_dir, epochs, loss_fn, learning_mode, batch_size, gene):
+def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, batch_size, gene):
     print(getframeinfo(currentframe()).lineno)
 
     data_path = Path(data_dir)
@@ -341,8 +371,12 @@ def training(resnet, data_dir, epochs, loss_fn, learning_mode, batch_size, gene)
     resnet.to(device)
     # Defining gradient function
     learning_rate = 0.000005 if learning_mode == "LLR" else 0.00001 if learning_mode == "NLR" else 0.0005
+
+    """
     optimizer = optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate},
                              {"params": resnet.my_new_layers.parameters(), "lr": learning_rate}], weight_decay=0.005)
+    """
+    optimizer = optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate}], weight_decay=0.005)
 
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
@@ -362,6 +396,7 @@ def training(resnet, data_dir, epochs, loss_fn, learning_mode, batch_size, gene)
         #Load data into Dataloader
         print("getting loaders")
         train_loader, val_loader = get_data_loaders(data_dir, batch_size, gene)
+        print(len(train_loader))
         print("train_epoch")
         training_loss, training_corr = train_epoch(resnet, device, train_loader, loss_fn, optimizer)
         print("valid_epoch")
@@ -371,11 +406,11 @@ def training(resnet, data_dir, epochs, loss_fn, learning_mode, batch_size, gene)
         val_loss = (valid_loss / len(val_loader.dataset)) * 1000
         train_corr = training_corr / len(train_loader)
         val_corr = valid_corr / len(val_loader)
-
+3343
         if val_loss < valid_loss_min or val_corr > valid_corr_max:
             valid_loss_min = val_loss
-            model_save = data_dir + date + "_single_" + "_" + str(learning_rate) + "resnet.pt"
-            torch.save(resnet.state_dict(), model_save)
+        model_save = model_save_dir + date + "_ep_" + epoch + "_lr_" + str(learning_rate) + "resnet.pt"
+        torch.save(resnet.state_dict(), model_save)
 
         # Save training log into text file
         log_to_print = "AVG T Loss:{:.3f} AVG T Correlation:{:.3f} AVG V Loss:{:.3f} AVG V Correlation:{:.3f}".format(
