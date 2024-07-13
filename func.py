@@ -84,6 +84,20 @@ class MyNet2(nn.Module):
         return gene1
 
 
+class Res18(nn.Module):
+    def __init__(self, my_pretrained_model):
+        super(Res18, self).__init__()
+        self.pretrained = my_pretrained_model
+
+        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
+
+    def forward(self, x):
+        x = self.pretrained(x)
+        gene1 = self.gene1(x)
+        return gene1
+
+
+
 def get_model():
     extended_net = MyNet(my_pretrained_model=models.resnet50(weights="IMAGENET1K_V2"))
 
@@ -117,8 +131,7 @@ def get_model2():
 
     return extended_net
 
-
-def train_epoch(resnet, device, dataloader, criterion, optimizer):
+def train_epoch(resnet, device, dataloader, criterion, optimizer, epoch):
     train_loss = 0.0
     batch_corr_train = 0.0
     resnet.train()
@@ -135,14 +148,13 @@ def train_epoch(resnet, device, dataloader, criterion, optimizer):
         labels = labels.to(device)
         optimizer.zero_grad()
         g_output = resnet(images)
-        loss = criterion(g_output, labels[:, 0])
+        loss = criterion(g_output.squeeze(), labels[:, 0])
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
-        if len(labels > 1):
-            corr = stats.pearsonr(g_output.cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[0]
-        else:
-            corr = 0
+        corr = stats.pearsonr(g_output[:, 0].cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[0]
+        #print(g_output.shape, labels.shape)
+        #print(corr, batch_corr_train)
         batch_corr_train += corr
 
     return train_loss, batch_corr_train
@@ -168,7 +180,7 @@ def valid_epoch(resnet, device, dataloader, criterion):
             loss = criterion(g_output, labels[:, 0])
             valid_loss += loss.item()
 
-            corr = stats.pearsonr(g_output.cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[
+            corr = stats.pearsonr(g_output[:, 0].cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[
                 0]
             batch_corr_val += corr
 
@@ -213,36 +225,6 @@ class CustomImageDataset(Dataset):
         image = self.dirs[idx]
         label = self.dirs[idx]
         return image, label
-
-
-def load_dataset(data_dir, gene, columns_of_interest):
-    patients = [f.path for f in os.scandir(data_dir) if f.is_dir()]
-
-    # generate training dataframe with all training samples
-    for i in patients:
-        adata = ad.read_h5ad(data_dir + i + "/Preprocessed_STDataset/tmm_combat_scaled_" + i + ".h5ad")
-        st_dataset = adata.to_df()
-        st_dataset["tile"] = st_dataset.index
-
-        st_dataset_filtered = st_dataset.copy()
-        st_dataset_filtered = st_dataset_filtered[columns_of_interest]
-        if i == "p007":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-0',
-                                                                                  '')  # remove unwanted path strings
-        elif i == "p014":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-4', '')
-        elif i == "p016":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-5', '')
-        elif i == "p020":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-6', '')
-        elif i == "p025":
-            st_dataset_filtered['tile'] = st_dataset_filtered['tile'].str.replace('-8', '')
-
-        st_dataset_filtered['tile'] = st_dataset_filtered['tile'].apply(
-            lambda x: "{}{}{}{}".format(data_dir, i, "/Tiles_156/",
-                                        x[57:]))  # adjust path to load directory
-
-        train_st_dataset = pd.concat([train_st_dataset, st_dataset_filtered])  # concat all samples
 
 
 class STDataset(torch.utils.data.Dataset):
@@ -299,7 +281,10 @@ def get_patient_loader(data_dir, patient=None, gene="RUBCNL"):
     st_dataset["tile"] = st_dataset.index
     st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(patient) + "/Tiles_156/" + str(x))
 
-    train_st_dataset = pd.concat([train_st_dataset, st_dataset[columns_of_interest]])  # concat all samples
+    if train_st_dataset.empty:
+        train_st_dataset = st_dataset[columns_of_interest]
+    else:
+        train_st_dataset = pd.concat([train_st_dataset, st_dataset[columns_of_interest]])  # concat all samples
 
     train_st_dataset.reset_index(drop=True, inplace=True)
     loaded_train_dataset = STDataset(train_st_dataset)
@@ -322,8 +307,10 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
         st_dataset["tile"] = st_dataset.index
         #print(st_dataset.head())
         st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
-
-        train_st_dataset = pd.concat([train_st_dataset, st_dataset[columns_of_interest]])  # concat all samples
+        if train_st_dataset.empty:
+            train_st_dataset = st_dataset[columns_of_interest]
+        else:
+            train_st_dataset = pd.concat([train_st_dataset, st_dataset[columns_of_interest]])  # concat all samples
 
     # generate validation dataframe with all validation samples
     for i in val_samples:
@@ -331,7 +318,10 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
         st_dataset["tile"] = st_dataset.index
         st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
 
-        valid_st_dataset = pd.concat([valid_st_dataset, st_dataset[columns_of_interest]])
+        if valid_st_dataset.empty:
+            valid_st_dataset = st_dataset[columns_of_interest]
+        else:
+            valid_st_dataset = pd.concat([valid_st_dataset, st_dataset[columns_of_interest]])  # concat all samples
 
     # reset index of dataframes
     train_st_dataset.reset_index(drop=True, inplace=True)
@@ -364,8 +354,7 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
 def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, batch_size, gene):
     print(getframeinfo(currentframe()).lineno)
 
-    data_path = Path(data_dir)
-    training_log = f"./results/ST_Predict_absolute_single.txt"
+    training_log = f"../results/ST_Predict_absolute_single.txt"
     date = str(datetime.today().strftime('%d%m%Y'))
     log_training(date, training_log)
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -374,11 +363,15 @@ def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, b
     # Defining gradient function
     learning_rate = 0.000005 if learning_mode == "LLR" else 0.00001 if learning_mode == "NLR" else 0.0005
 
-    """
+
     optimizer = optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate},
-                             {"params": resnet.my_new_layers.parameters(), "lr": learning_rate}], weight_decay=0.005)
-    """
-    optimizer = optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate}], weight_decay=0.005)
+                             #{"params": resnet.my_new_layers.parameters(), "lr": learning_rate},
+                             {"params": resnet.gene1.parameters(), "lr": learning_rate}], weight_decay=0.005)
+
+
+
+
+    #optimizer = optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate}], weight_decay=0.005)
 
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
@@ -400,7 +393,7 @@ def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, b
         train_loader, val_loader = get_data_loaders(data_dir, batch_size, gene)
         print(len(train_loader))
         print("train_epoch")
-        training_loss, training_corr = train_epoch(resnet, device, train_loader, loss_fn, optimizer)
+        training_loss, training_corr = train_epoch(resnet, device, train_loader, loss_fn, optimizer, epoch)
         print("valid_epoch")
         valid_loss, valid_corr = valid_epoch(resnet, device, val_loader, loss_fn)
 
