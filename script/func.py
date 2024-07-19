@@ -351,7 +351,7 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
     return train_loader, val_loader
 
 
-def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, batch_size, gene):
+def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_rate, batch_size, gene):
     print(getframeinfo(currentframe()).lineno)
 
     training_log = f"../results/ST_Predict_absolute_single.txt"
@@ -361,8 +361,6 @@ def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, b
     print("device: ", device)
     resnet.to(device)
     # Defining gradient function
-    learning_rate = 0.000005 if learning_mode == "LLR" else 0.00001 if learning_mode == "NLR" else 0.0005
-
 
     optimizer = optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate},
                              #{"params": resnet.my_new_layers.parameters(), "lr": learning_rate},

@@ -43,11 +43,11 @@ class Res18(nn.Module):
 
 
 # for logging purposes
-training(resnet=Res18(ciga),
+training(resnet=Res18(models.resnet18()),
          data_dir='../Training_Data/',
          model_save_dir="./RUBCNL_HLR_Res18/",
          epochs=30,
          loss_fn=nn.MSELoss(),
-         learning_mode="HLR",
+         learning_rate=0.0005,
          batch_size=64,
          gene="RUBCNL")
