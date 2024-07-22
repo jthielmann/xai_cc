@@ -1,4 +1,4 @@
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import pandas as pd
 import scipy
 
@@ -15,6 +15,18 @@ def plot_data_mapped(data_dir, patient, category="diff"):
     plt.title(category + " for patient " + patient)
     plt.show()
     # merge.plot.scatter(x="x", y="y")
+
+
+def plot_data_scatter(data_dir, patient, gene):
+    base_path = data_dir+patient+"/Preprocessed_STDataset/"
+    merge = pd.read_csv(base_path + "merge.csv")
+    plt.scatter(merge['output'], merge['labels'])
+    plt.text(x=-2, y=3 , s="pearson corr: " + str(round(scipy.stats.pearsonr(merge['output'], merge['labels'])[0], 2)))
+    plt.plot( [-2,3],[-2,3], color='red' )
+    plt.title("labels vs output for " + patient + " for gene " + gene)
+    plt.xlabel('output')
+    plt.ylabel('target')
+    plt.show()
 
 
 def plot_hist_comparison(data_dir, patient):

@@ -16,13 +16,12 @@ import anndata as ad
 from torchvision import transforms, models
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
-
+from data_loader import get_data_loaders
+import json
 # debug
 from inspect import currentframe, getframeinfo
 
 DEFAULT_RANDOM_SEED = 42
-print(getframeinfo(currentframe()).lineno)
-
 
 def seed_basic(seed=DEFAULT_RANDOM_SEED):
     random.seed(seed)
@@ -108,7 +107,6 @@ def log_training(date, training_log):
 
 
 def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, batch_size, gene):
-    print(getframeinfo(currentframe()).lineno)
 
     training_log = f"../results/ST_Predict_absolute_single.txt"
     date = str(datetime.today().strftime('%d%m%Y'))
@@ -118,18 +116,14 @@ def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, b
     resnet.to(device)
     # Defining gradient function
     learning_rate = 0.000005 if learning_mode == "LLR" else 0.00001 if learning_mode == "NLR" else 0.0005
-
-
     optimizer = optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate},
                              #{"params": resnet.my_new_layers.parameters(), "lr": learning_rate},
                              {"params": resnet.gene1.parameters(), "lr": learning_rate}], weight_decay=0.005)
 
-
-
-
-    #optimizer = optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate}], weight_decay=0.005)
-
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+    with open("settings.json", "w") as file:
+        json.dump({'model_type': type(resnet), 'loss_fn': loss_fn, 'learning_mode': learning_mode, 'batch_size': batch_size, 'gene': gene,
+                   'epochs': epochs, 'optimizer': optimizer, 'scheduler': scheduler, 'device': device}, file)
 
     #Defining training and validation history dictionary
     history = {'train_loss': [], 'train_corr': [], 'val_loss': [], 'val_corr': []}

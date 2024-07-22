@@ -9,38 +9,11 @@ import torch
 import torchvision
 from torchvision import transforms, models
 
-# debug
-from inspect import currentframe, getframeinfo
-
-DEFAULT_RANDOM_SEED = 42
-print(getframeinfo(currentframe()).lineno)
-
-
-def seed_basic(seed=DEFAULT_RANDOM_SEED):
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    np.random.seed(seed)
-
-
-def seed_torch(seed=DEFAULT_RANDOM_SEED):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
-def seed_everything(seed=DEFAULT_RANDOM_SEED):
-    seed_basic(seed)
-    seed_torch(seed)
-
-
-seed_everything(seed=DEFAULT_RANDOM_SEED)
-
 
 class MyNet(nn.Module):
-    def __init__(self, my_pretrained_model):
+    def __init__(self):
         super(MyNet, self).__init__()
-        self.pretrained = my_pretrained_model
+        self.pretrained = models.resnet50(weights="IMAGENET1K_V2")
         self.my_new_layers = nn.Sequential(nn.Linear(1000, 200),
                                            nn.ReLU(),
                                            nn.BatchNorm1d(200),
@@ -57,10 +30,12 @@ class MyNet(nn.Module):
         x = self.gene1(x)
         return x.squeeze()
 
-    # is fundamentally broken, just a quick workaround as the restructuring expected a sequential to access the upper layers
-    def __getitem__(self, index):
-        return self.gene1[index]
 
+def get_MyNet(path=None):
+    model = MyNet()
+    if path:
+        print(model.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
+    return model
 
 
 class MyNet2(nn.Module):
@@ -73,10 +48,36 @@ class MyNet2(nn.Module):
         return self.gene1(self.pretrained(x))
 
 
+def get_res50(path=None):
+    res50 = MyNet2()
+    if path:
+        print(res50.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
+    return res50
+
+
+# old model from jonas
+# path = "../../models/res50/10082023_RUBCNL_ST_absolute_single_64_NLR_loss_resnet50.pt"
+class MyNet3(nn.Module):
+    def __init__(self, my_pretrained_model):
+        super(MyNet3, self).__init__()
+        self.pretrained = my_pretrained_model
+
+        self.my_new_layers = nn.Sequential(nn.Linear(1000, 200),
+                                            nn.ReLU(),
+                                            nn.BatchNorm1d(200),
+                                            nn.Dropout(0.3),
+                                            nn.Linear(200, 1))
+
+    def forward(self, x):
+        x = self.pretrained(x)
+        output = self.my_new_layers(x)
+        return output
+
+
 class Res18(nn.Module):
-    def __init__(self):
+    def __init__(self, pretrained=models.resnet18()):
         super(Res18, self).__init__()
-        self.pretrained = models.resnet18()
+        self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
@@ -84,15 +85,6 @@ class Res18(nn.Module):
 
 
 def load_res18_ciga(path):
-    def load_model_weights(model, weights):
-        model_dict = model.state_dict()
-        weights = {k: v for k, v in weights.items() if k in model_dict}
-        if weights == {}:
-            print('No weight could be loaded..')
-        model_dict.update(weights)
-        model.load_state_dict(model_dict)
-
-        return model
 
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     model = torchvision.models.__dict__['resnet18'](pretrained=False)
@@ -102,9 +94,27 @@ def load_res18_ciga(path):
     for key in list(state_dict.keys()):
         state_dict[key.replace('model.', '').replace('resnet.', '')] = state_dict.pop(key)
 
-    ciga = load_model_weights(model, state_dict)
+    model_dict = model.state_dict()
+    weights = {k: v for k, v in state_dict.items() if k in model_dict}
+    if weights == {}:
+        print('No weight could be loaded..')
+    model_dict.update(weights)
+    model.load_state_dict(model_dict)
+    model.fc = torch.nn.Sequential()
+    return model
+
+
+def init_res18_ciga(path="../../models/res18/tenpercent_resnet18.ckpt"):
+    ciga = load_res18_ciga(path)
+    return Res18(ciga)
+
+
+def get_res18_ciga(path):
+    ciga = models.resnet18()
     ciga.fc = torch.nn.Sequential()
-    return ciga
+    model = Res18(ciga)
+    print(model.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
+    return model
 
 
 def get_res18(path=None):
@@ -112,13 +122,3 @@ def get_res18(path=None):
     if path:
         print(res18.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
     return res18
-
-
-def get_res50(path=None):
-    res50 = MyNet2()
-    if path:
-        print(res50.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
-    return res50
-
-
-

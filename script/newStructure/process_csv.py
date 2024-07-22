@@ -25,6 +25,18 @@ def ann_data_to_csv(data_dir):
         print(filename)
         st_dataset.to_csv(filename, index=False)
 
+        
+def process_spatial_data(patients, data_dir):
+    for patient in patients:
+        filename = data_dir + "/" + patient + "/Preprocessed_STDataset/spatial_data.csv"
+        spatial_matrix = pd.read_csv(
+            data_dir + patient + "/Preprocessed_STDataset/Raw_Spatial_Matrix_156_" + patient + ".csv")  # adapt to sample
+        spatial_matrix['tile'] = spatial_matrix['tile'].apply(lambda x: "{}{}".format(x, ".tiff"))
+        spatial_matrix['tile'] = spatial_matrix['tile'].apply(
+            lambda x: "{}{}".format(data_dir + patient + "/Tiles_156/", x[57:]))  # adapt to sample
+        spatial_matrix['path'] = spatial_matrix['tile']
+        spatial_matrix['tile'] = spatial_matrix['tile'].apply(lambda x: os.path.basename(x))
+        spatial_matrix.to_csv(filename, index=False)
 
 
 def generate_results(model, device, criterion, data_dir, patient=None, gene="RUBCNL", results_filename="results.csv"):
