@@ -106,24 +106,23 @@ def log_training(date, training_log):
             date + " Resnet50 - single gene\top: AdamW\telrs: 0.9\tlfn: MSE Loss\n")  # Adapt to model and gene name(s) getting trained
 
 
-def training(resnet, data_dir, model_save_dir, epochs, loss_fn, learning_mode, batch_size, gene):
+def training(resnet, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, gene):
 
-    training_log = f"../results/ST_Predict_absolute_single.txt"
+    training_log = model_save_dir + "/log.txt"
+    open(training_log, "a").close()
     date = str(datetime.today().strftime('%d%m%Y'))
     log_training(date, training_log)
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print("device: ", device)
     resnet.to(device)
     # Defining gradient function
-    learning_rate = 0.000005 if learning_mode == "LLR" else 0.00001 if learning_mode == "NLR" else 0.0005
-    optimizer = optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate},
-                             #{"params": resnet.my_new_layers.parameters(), "lr": learning_rate},
-                             {"params": resnet.gene1.parameters(), "lr": learning_rate}], weight_decay=0.005)
+
 
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-    with open("settings.json", "w") as file:
-        json.dump({'model_type': type(resnet), 'loss_fn': loss_fn, 'learning_mode': learning_mode, 'batch_size': batch_size, 'gene': gene,
-                   'epochs': epochs, 'optimizer': optimizer, 'scheduler': scheduler, 'device': device}, file)
+    with open(model_save_dir + "/settings.json", "w") as file:
+        json_dict = {'model_type': str(type(resnet)), 'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'gene': gene,
+                   'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device}
+        json.dump(json_dict, file)
 
     #Defining training and validation history dictionary
     history = {'train_loss': [], 'train_corr': [], 'val_loss': [], 'val_corr': []}

@@ -14,7 +14,6 @@ from PIL import Image
 from inspect import currentframe, getframeinfo
 
 DEFAULT_RANDOM_SEED = 42
-print(getframeinfo(currentframe()).lineno)
 
 
 def seed_basic(seed=DEFAULT_RANDOM_SEED):
@@ -45,8 +44,14 @@ def log_training(date, training_log):
 
 
 class STDataset(torch.utils.data.Dataset):
-    def __init__(self, dataframe):
+    def __init__(self, dataframe, transforms=transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            # mean and std of the whole dataset
+            transforms.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])
+            ])):
         self.dataframe = dataframe
+        self.transforms = transforms
 
     def __len__(self):
         return len(self.dataframe)
@@ -55,19 +60,14 @@ class STDataset(torch.utils.data.Dataset):
         gene_names = list(self.dataframe)[1:]
         gene_vals = []
         row = self.dataframe.iloc[index]
-        transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])
-            # apply normalization transforms as for pretrained colon classifier
-        ])
         a = Image.open(row["tile"]).convert("RGB")
         # print(x.size)
         for j in gene_names:
             gene_val = float(row[j])
             gene_vals.append(gene_val)
         e = row["tile"]
-        a = transform(a)
+        # apply normalization transforms as for pretrained colon classifier
+        a = self.transforms(a)
         return a, gene_vals, e
 
 
@@ -117,7 +117,7 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL", train_samples=None, va
         val_samples   = patients[train_sample_count:]
         print("train_samples: ")
         print(*patients[0:train_sample_count])
-        print("train_samples: ")
+        print("val_samples: ")
         print(*patients[train_sample_count:])
 
     columns_of_interest = ["tile", gene]
@@ -162,5 +162,5 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL", train_samples=None, va
 
     train_data = Subset(loaded_train_dataset, transform=train_transforms)
     train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(dataset=loaded_train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(dataset=loaded_train_dataset, batch_size=batch_size, shuffle=True) # TODO : ???
     return train_loader, val_loader

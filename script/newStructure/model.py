@@ -1,13 +1,8 @@
-import os
-import cv2
-import random
-
-import numpy as np
 import torch.nn as nn
 import torch.nn.functional
 import torch
 import torchvision
-from torchvision import transforms, models
+from torchvision import models
 
 
 class MyNet(nn.Module):
@@ -55,6 +50,25 @@ def get_res50(path=None):
     return res50
 
 
+class Res50Dropout(nn.Module):
+    def __init__(self):
+        super(Res50Dropout, self).__init__()
+        self.pretrained = models.resnet50(weights="IMAGENET1K_V2")
+        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(),
+                                   nn.ReLU(),
+                                   nn.Linear(200, 1), nn.Dropout())
+
+    def forward(self, x):
+        return self.gene1(self.pretrained(x))
+
+
+def get_res50_dropout(path=None):
+    res50 = Res50Dropout()
+    if path:
+        print(res50.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
+    return res50
+
+
 # old model from jonas
 # path = "../../models/res50/10082023_RUBCNL_ST_absolute_single_64_NLR_loss_resnet50.pt"
 class MyNet3(nn.Module):
@@ -63,10 +77,10 @@ class MyNet3(nn.Module):
         self.pretrained = my_pretrained_model
 
         self.my_new_layers = nn.Sequential(nn.Linear(1000, 200),
-                                            nn.ReLU(),
-                                            nn.BatchNorm1d(200),
-                                            nn.Dropout(0.3),
-                                            nn.Linear(200, 1))
+                                           nn.ReLU(),
+                                           nn.BatchNorm1d(200),
+                                           nn.Dropout(0.3),
+                                           nn.Linear(200, 1))
 
     def forward(self, x):
         x = self.pretrained(x)
@@ -81,11 +95,10 @@ class Res18(nn.Module):
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
-        return self.pretrained(self.gene1(x))
+        return self.gene1(self.pretrained(x))
 
 
 def load_res18_ciga(path):
-
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     model = torchvision.models.__dict__['resnet18'](pretrained=False)
     state = torch.load(path, map_location=device)
@@ -122,3 +135,18 @@ def get_res18(path=None):
     if path:
         print(res18.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
     return res18
+
+
+class Res18Dropout(nn.Module):
+    def __init__(self, ciga):
+        super(Res18Dropout, self).__init__()
+        self.pretrained = ciga
+        self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
+
+    def forward(self, x):
+        return self.gene1(self.pretrained(x))
+
+
+def get_res18_dropout(path="../../models/res18/tenpercent_resnet18.ckpt"):
+    ciga = load_res18_ciga(path)
+    return Res18Dropout(ciga)

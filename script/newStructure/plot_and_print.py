@@ -55,3 +55,6 @@ def print_metrics(data_dir, patient, metric):
     if metric == "std":
         print("std diff: ", "{:.4f}".format(abs(std_out - std_labels)), ", std out: ", "{:.4f}".format(std_out),
               ", std labels: ", "{:.4f}".format(std_labels))
+    if metric == "corr":
+        print("corr: ", scipy.stats.pearsonr(out, labels)[0])
+    
