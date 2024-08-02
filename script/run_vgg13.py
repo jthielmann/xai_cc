@@ -7,7 +7,7 @@ from model import get_vgg13
 import os
 import torch.optim as optim
 
-model_save_dir = "../models/res18/RUBCNL_Res18drop/"
+model_save_dir = "../models/vgg13/dropout/"
 os.makedirs(model_save_dir, exist_ok=True)
 
 # for logging purposes

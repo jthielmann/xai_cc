@@ -155,11 +155,11 @@ def get_res18_dropout(path="../models/res18/tenpercent_resnet18.ckpt"):
 class VGG13(nn.Module):
     def __init__(self):
         super(VGG13, self).__init__()
-        self.pretrained = models.vgg13()
-        self.top_layers = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
+        self.pretrained = models.vgg13(weights='IMAGENET1K_V1')
+        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
 
     def forward(self, x):
-        return self.top_layers(self.pretrained(x))
+        return self.gene1(self.pretrained(x))
 
 
 def get_vgg13(path=None):

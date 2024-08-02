@@ -1,4 +1,3 @@
-import copy
 
 import zennit
 from zennit.attribution import Gradient
@@ -10,9 +9,6 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 import os
-
-from restructure import restructure_model
-
 
 def get_img_target_name(loader, device, tile_no):
     image, target, name = loader[tile_no]
@@ -49,7 +45,6 @@ def plot_relevance(att, filename=None):
 
 
 def relevance_and_plot(model, composite, device, input=None):
-    # composite = Composite(module_map=mapping_fn, canonizers=[canonizer])
     if input is None:
         input = torch.randn(1, 3, 224, 224).to(device)
     with Gradient(model, composite) as attributor:
@@ -68,17 +63,10 @@ def get_attributions_from_loader(model, loader, device, data_dir, patient, compo
         if j >= 0:
             i = j
         input, target, name = get_img_target_name(loader,device,i)
-        #model_copy = copy.deepcopy(model)
         x, y = get_coords_from_name(data_dir,patient,os.path.basename(name))
-        #ref = find_a_ref(model_copy)
-        #gene1 = restructure_model(model_copy.gene1, torch.tensor(0), in_layer=-3, out_layer=-1)
-        #model_copy.gene1 = gene1
-        #model_copy.to(device)
         with Gradient(model, composite) as attributor:
             out, grad = attributor(input)
             if grad.count_nonzero() == 0:
                 continue
-        #out_orig_restructured = model_copy(input)
-        #out_orig = model(input)
         out_target.append((out, 0, 0, grad, target, x, y, name))
     return out_target
