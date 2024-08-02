@@ -10,6 +10,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
+
 def get_img_target_name(loader, device, tile_no):
     image, target, name = loader[tile_no]
     image = image.unsqueeze(0).to(device)
