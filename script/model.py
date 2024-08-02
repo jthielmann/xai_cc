@@ -117,7 +117,7 @@ def load_res18_ciga(path):
     return model
 
 
-def init_res18_ciga(path="../../models/res18/tenpercent_resnet18.ckpt"):
+def init_res18_ciga(path="../models/res18/tenpercent_resnet18.ckpt"):
     ciga = load_res18_ciga(path)
     return Res18(ciga)
 
@@ -147,6 +147,23 @@ class Res18Dropout(nn.Module):
         return self.gene1(self.pretrained(x))
 
 
-def get_res18_dropout(path="../../models/res18/tenpercent_resnet18.ckpt"):
+def get_res18_dropout(path="../models/res18/tenpercent_resnet18.ckpt"):
     ciga = load_res18_ciga(path)
     return Res18Dropout(ciga)
+
+
+class VGG13(nn.Module):
+    def __init__(self):
+        super(VGG13, self).__init__()
+        self.pretrained = models.vgg13()
+        self.top_layers = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
+
+    def forward(self, x):
+        return self.top_layers(self.pretrained(x))
+
+
+def get_vgg13(path=None):
+    vgg13 = VGG13()
+    if path:
+        print(vgg13.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
+    return vgg13
