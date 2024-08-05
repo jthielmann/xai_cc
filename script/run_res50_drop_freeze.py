@@ -7,7 +7,7 @@ from model import init_res18_ciga, get_res50_dropout
 import os
 import torch.optim as optim
 
-model_save_dir = "../models/res18/RUBCNL_Res50_freeze/"
+model_save_dir = "../models/res50/RUBCNL_Res50_freeze/"
 os.makedirs(model_save_dir, exist_ok=False)
 
 # for logging purposes
