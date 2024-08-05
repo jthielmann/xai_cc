@@ -81,7 +81,7 @@ class Subset(torch.utils.data.Dataset):
         a, gene_vals, e = self.subset[index]
         if self.transform:
             a = self.transform(a)
-        return (a, gene_vals, e)
+        return a, gene_vals, e
 
     # get length of dataset
     def __len__(self):
@@ -161,6 +161,7 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL", train_samples=None, va
                                                    p=0.75)], p=0.5)
 
     train_data = Subset(loaded_train_dataset, transform=train_transforms)
+    valid_data = Subset(loaded_valid_dataset, transform=train_transforms)
     train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(dataset=loaded_valid_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(dataset=valid_data, batch_size=batch_size, shuffle=False)
     return train_loader, val_loader
