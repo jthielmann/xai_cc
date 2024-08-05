@@ -136,7 +136,7 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL", train_samples=None, va
 
     # generate validation dataframe with all validation samples
     for i in val_samples:
-        st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv")
+        st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv", index_col=-1)
         st_dataset["tile"] = st_dataset.index
         st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
 
