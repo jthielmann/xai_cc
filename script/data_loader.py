@@ -162,5 +162,5 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL", train_samples=None, va
 
     train_data = Subset(loaded_train_dataset, transform=train_transforms)
     train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(dataset=loaded_train_dataset, batch_size=batch_size, shuffle=True) # TODO : ???
+    val_loader = DataLoader(dataset=loaded_valid_dataset, batch_size=batch_size, shuffle=True)
     return train_loader, val_loader

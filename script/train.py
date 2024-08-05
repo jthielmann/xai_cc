@@ -110,26 +110,28 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
 
     training_log = model_save_dir + "/log.txt"
     open(training_log, "a").close()
+
+    open(training_log, "a").close()
     date = str(datetime.today().strftime('%d%m%Y'))
     log_training(date, training_log)
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print("device: ", device)
     model.to(device)
+
     # Defining gradient function
-
-
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     with open(model_save_dir + "/settings.json", "w") as file:
         json_dict = {'model_type': str(model.__class__.__name__), 'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'gene': gene,
                    'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device}
         json.dump(json_dict, file)
 
-    #Defining training and validation history dictionary
+    # Defining training and validation history dictionary
     history = {'train_loss': [], 'train_corr': [], 'val_loss': [], 'val_corr': []}
     valid_loss_min = np.Inf
     valid_corr_max = np.NINF
+    train_loader, val_loader = get_data_loaders(data_dir, batch_size, gene)
 
-    #Iterate through epochs
+    # Iterate through epochs
     for epoch in range(epochs):
         print('Epoch {} / {}:'.format(epoch + 1, epochs))
 
@@ -137,10 +139,7 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
         with open(training_log, "a") as f:
             f.write(epoch_to_print + "\n")
 
-        #Load data into Dataloader
-        print("getting loaders")
-        train_loader, val_loader = get_data_loaders(data_dir, batch_size, gene)
-        print(len(train_loader))
+        # Load data into Dataloader
         print("train_epoch")
         training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer, epoch)
         print("valid_epoch")
@@ -175,5 +174,5 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
         scheduler.step()
     history_df = pd.DataFrame.from_dict(history, orient="columns")
 
-    save_name = (data_dir + date + "_single_" + str(batch_size) + "_" + str(learning_rate) + "_train_history.csv")
+    save_name = (model_save_dir + "/train_history.csv")
     history_df.to_csv(save_name, index=False)
