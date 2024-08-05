@@ -106,7 +106,7 @@ def log_training(date, training_log):
             date + " Resnet50 - single gene\top: AdamW\telrs: 0.9\tlfn: MSE Loss\n")  # Adapt to model and gene name(s) getting trained
 
 
-def training(resnet, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, gene):
+def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, gene):
 
     training_log = model_save_dir + "/log.txt"
     open(training_log, "a").close()
@@ -114,13 +114,13 @@ def training(resnet, data_dir, model_save_dir, epochs, loss_fn, optimizer, learn
     log_training(date, training_log)
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print("device: ", device)
-    resnet.to(device)
+    model.to(device)
     # Defining gradient function
 
 
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     with open(model_save_dir + "/settings.json", "w") as file:
-        json_dict = {'model_type': str(type(resnet)), 'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'gene': gene,
+        json_dict = {'model_type': str(model.__class__.__name__), 'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'gene': gene,
                    'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device}
         json.dump(json_dict, file)
 
@@ -142,9 +142,9 @@ def training(resnet, data_dir, model_save_dir, epochs, loss_fn, optimizer, learn
         train_loader, val_loader = get_data_loaders(data_dir, batch_size, gene)
         print(len(train_loader))
         print("train_epoch")
-        training_loss, training_corr = train_epoch(resnet, device, train_loader, loss_fn, optimizer, epoch)
+        training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer, epoch)
         print("valid_epoch")
-        valid_loss, valid_corr = valid_epoch(resnet, device, val_loader, loss_fn)
+        valid_loss, valid_corr = valid_epoch(model, device, val_loader, loss_fn)
 
         train_loss = (training_loss / len(train_loader.dataset)) * 1000
         val_loss = (valid_loss / len(val_loader.dataset)) * 1000
@@ -155,8 +155,8 @@ def training(resnet, data_dir, model_save_dir, epochs, loss_fn, optimizer, learn
             valid_loss_min = val_loss
         if val_corr > valid_corr_max:
             valid_corr_max = val_corr
-        model_save = model_save_dir + date + "_ep_" + str(epoch) + "_lr_" + str(learning_rate) + "resnet.pt"
-        torch.save(resnet.state_dict(), model_save)
+        model_save = model_save_dir + str(model.__class__.__name__) + "_ep_" + str(epoch) + ".pt"
+        torch.save(model.state_dict(), model_save)
 
         # Save training log into text file
         log_to_print = "AVG T Loss:{:.3f} AVG T Correlation:{:.3f} AVG V Loss:{:.3f} AVG V Correlation:{:.3f}".format(

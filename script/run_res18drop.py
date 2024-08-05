@@ -13,7 +13,7 @@ os.makedirs(model_save_dir, exist_ok=True)
 # for logging purposes
 resnet = get_res18_dropout()
 learning_rate = 0.0005
-training(resnet=resnet,
+training(model=resnet,
          data_dir='../Training_Data/',
          model_save_dir=model_save_dir,
          epochs=30,

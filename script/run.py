@@ -13,7 +13,7 @@ os.makedirs("newStructure/RUBCNL_HLR_Res50", exist_ok=True)
 resnet = get_res50_dropout()
 print(type(resnet))
 learning_rate = 0.0005
-training(resnet=resnet,
+training(model=resnet,
          data_dir='../Training_Data/',
          model_save_dir="newStructure/RUBCNL_HLR_Res50/",
          epochs=30,

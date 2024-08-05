@@ -36,7 +36,7 @@ def plot_relevance(att, filename=None):
     else:
         rel = torch.tensor(plt.imread(filename)).unsqueeze(0)
 
-    rel = rel / ( abs(rel).max()+1e-12 )
+    rel = rel / (abs(rel).max()+1e-12)
     # create an image of the visualize attribution
     img = zennit.image.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
 
