@@ -51,9 +51,9 @@ def get_res50(path=None):
 
 
 class Res50Dropout(nn.Module):
-    def __init__(self):
+    def __init__(self, pretrained=models.resnet50(weights="IMAGENET1K_V2")):
         super(Res50Dropout, self).__init__()
-        self.pretrained = models.resnet50(weights="IMAGENET1K_V2")
+        self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(),
                                    nn.ReLU(),
                                    nn.Linear(200, 1), nn.Dropout())
@@ -128,6 +128,21 @@ def get_res18_ciga(path):
     model = Res18(ciga)
     print(model.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
     return model
+
+
+def init_res18_ciga_dropout(path):
+    ciga = load_res18_ciga(path)
+
+    return Res18Dropout(ciga)
+
+
+def get_res18_ciga_dropout(path):
+    ciga = models.resnet18()
+    ciga.fc = torch.nn.Sequential()
+    model = Res18Dropout(ciga)
+    print(model.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
+    return model
+
 
 
 def get_res18(path=None):

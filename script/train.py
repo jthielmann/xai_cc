@@ -44,10 +44,13 @@ def seed_everything(seed=DEFAULT_RANDOM_SEED):
 seed_everything(seed=DEFAULT_RANDOM_SEED)
 
 
-def train_epoch(resnet, device, dataloader, criterion, optimizer, epoch):
+def train_epoch(model, device, dataloader, criterion, optimizer, epoch, freeze_pretrained):
     train_loss = 0.0
     batch_corr_train = 0.0
-    resnet.train()
+    model.train()
+    if freeze_pretrained:
+        for param in model.pretrained.parameters():
+            param.required_grad = False
     i = 0
     for images, labels, path in dataloader:
         if i % 20 == 0:
@@ -60,7 +63,7 @@ def train_epoch(resnet, device, dataloader, criterion, optimizer, epoch):
         labels = labels.float()
         labels = labels.to(device)
         optimizer.zero_grad()
-        g_output = resnet(images)
+        g_output = model(images)
         loss = criterion(g_output.squeeze(), labels[:, 0])
         loss.backward()
         optimizer.step()
@@ -106,7 +109,7 @@ def log_training(date, training_log):
             date + " Resnet50 - single gene\top: AdamW\telrs: 0.9\tlfn: MSE Loss\n")  # Adapt to model and gene name(s) getting trained
 
 
-def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, gene):
+def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, gene, freeze_pretrained=False):
 
     training_log = model_save_dir + "/log.txt"
     open(training_log, "a").close()
@@ -122,7 +125,7 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     with open(model_save_dir + "/settings.json", "w") as file:
         json_dict = {'model_type': str(model.__class__.__name__), 'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'gene': gene,
-                   'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device}
+                   'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device, 'freeze_pretrained': freeze_pretrained}
         json.dump(json_dict, file)
 
     # Defining training and validation history dictionary
@@ -141,7 +144,7 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
 
         # Load data into Dataloader
         print("train_epoch")
-        training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer, epoch)
+        training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer, epoch, freeze_pretrained)
         print("valid_epoch")
         valid_loss, valid_corr = valid_epoch(model, device, val_loader, loss_fn)
 
