@@ -92,7 +92,7 @@ class Res18(nn.Module):
     def __init__(self, pretrained=models.resnet18()):
         super(Res18, self).__init__()
         self.pretrained = pretrained
-        self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
+        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
         return self.gene1(self.pretrained(x))
