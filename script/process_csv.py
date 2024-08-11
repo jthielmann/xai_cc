@@ -34,7 +34,7 @@ def process_spatial_data(patients, data_dir):
         spatial_matrix.to_csv(filename, index=False)
 
 
-def generate_results(model, device, criterion, data_dir, patient=None, gene="RUBCNL", results_filename="results.csv"):
+def generate_results(model, device, data_dir, patient=None, gene="RUBCNL", results_filename="results.csv"):
     model.eval()
     print("generating results...")
     loader = get_patient_loader(data_dir, patient=patient, gene=gene)
@@ -80,3 +80,53 @@ def merge_data(data_dir, patient, results_filename="results.csv"):
     merge.to_csv(base_path + "merge.csv")
     print(base_path + "merge.csv")
     print(base_path + results_filename)
+
+
+def merge_gene_data_and_coords(data_dir, patient, results_dir, filename, gene):
+    base_path = data_dir + patient + "/Preprocessed_STDataset/"
+    spatial_matrix = pd.read_csv(base_path + "spatial_data.csv")
+    gene_data      = pd.read_csv(base_path + "gene_data.csv")
+    gene_columns  = ['tile', gene]
+    gene_data = gene_data[gene_columns]
+    merge = pd.merge(gene_data, spatial_matrix, on="tile")
+    merge.set_index("tile", inplace=True)
+    results_path = results_dir + "/" + patient + "/"
+    if not os.path.exists(results_path):
+        os.makedirs(results_path)
+    merge.to_csv(results_path + filename)
+
+
+def generate_results2(model, device, data_dir, results_dir,patient=None, gene="RUBCNL", results_filename=None):#
+    if results_filename is None:
+        results_filename = gene + "_results.csv"
+    model.eval()
+    loader = get_patient_loader(data_dir, patient, gene)
+    filename = results_dir + data_dir + patient + results_filename
+    if os.path.exists(filename):
+        file_df = pd.read_csv(filename)
+    columns = ['labels', 'output', 'path', 'tile']
+    df = pd.DataFrame(columns=columns)
+    df.to_csv(filename, index=False)
+    i = 0
+    j = len(loader)
+    with torch.no_grad():
+        for images, labels, name in loader:
+            if i % 1000 == 0:
+                print(i, "/", j)
+            i += 1
+            images = images.unsqueeze(0).to(device)
+            images = images.float()
+            labels = torch.tensor(labels[0]).to(device)
+
+            output = model(images)
+
+            output = output.squeeze().unsqueeze(0)
+            labels = labels.unsqueeze(0)
+
+            output = pd.DataFrame(output.cpu())
+            labels = pd.DataFrame(labels.cpu())
+
+            res = pd.concat([labels, output, pd.Series(name), pd.Series(os.path.basename(name))], axis=1)
+            res.columns = columns
+
+            res.to_csv(filename, index=False, mode='a', header=False)

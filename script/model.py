@@ -88,11 +88,28 @@ class MyNet3(nn.Module):
         return output
 
 
+class Res18_1000(nn.Module):
+    def __init__(self, pretrained=models.resnet18()):
+        super(Res18_1000, self).__init__()
+        self.pretrained = pretrained
+        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
+
+    def forward(self, x):
+        return self.gene1(self.pretrained(x))
+
+
+def get_res18_1000(path=None):
+    res18 = Res18_1000()
+    if path:
+        print(res18.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
+    return res18
+
+
 class Res18(nn.Module):
     def __init__(self, pretrained=models.resnet18()):
         super(Res18, self).__init__()
         self.pretrained = pretrained
-        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
+        self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
         return self.gene1(self.pretrained(x))
@@ -153,7 +170,7 @@ def get_res18(path=None):
 
 
 class Res18Dropout(nn.Module):
-    def __init__(self, ciga):
+    def __init__(self, ciga=models.resnet18):
         super(Res18Dropout, self).__init__()
         self.pretrained = ciga
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
@@ -162,9 +179,17 @@ class Res18Dropout(nn.Module):
         return self.gene1(self.pretrained(x))
 
 
-def get_res18_dropout(path="../models/res18/tenpercent_resnet18.ckpt"):
+def init_res18_dropout(path="../models/res18/tenpercent_resnet18.ckpt"):
     ciga = load_res18_ciga(path)
     return Res18Dropout(ciga)
+
+
+def get_res18_dropout(path=None):
+    res18 = Res18Dropout()
+    if path:
+        print(res18.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
+    return res18
+
 
 
 class VGG13(nn.Module):
