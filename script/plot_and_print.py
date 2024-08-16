@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import scipy
-
+from PIL import Image
 
 def plot_data_mapped(data_dir, patient, category="diff"):
     base_path = data_dir + patient + "/Preprocessed_STDataset/"
@@ -14,7 +14,6 @@ def plot_data_mapped(data_dir, patient, category="diff"):
     plt.ylabel('Y')
     plt.title(category + " for patient " + patient)
     plt.show()
-    # merge.plot.scatter(x="x", y="y")
 
 
 def plot_data_scatter(data_dir, patient, gene):
@@ -57,4 +56,9 @@ def print_metrics(data_dir, patient, metric):
               ", std labels: ", "{:.4f}".format(std_labels))
     if metric == "corr":
         print("corr: ", scipy.stats.pearsonr(out, labels)[0])
-    
+
+
+def plot_tile(tile_path):
+    img = Image.open(tile_path)
+    plt.imshow(img)
+    plt.show()

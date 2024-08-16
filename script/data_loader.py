@@ -71,6 +71,20 @@ class STDataset(torch.utils.data.Dataset):
         return a, gene_vals, e
 
 
+class TileLoader:
+    def __init__(self):
+        self.transforms = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            # mean and std of the whole dataset
+            transforms.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])
+            ])
+
+    def open(self, path):
+        a = Image.open(path).convert("RGB")
+        return self.transforms(a)
+
+
 class Subset(torch.utils.data.Dataset):
     def __init__(self, subset, transform=None):
         self.subset = subset

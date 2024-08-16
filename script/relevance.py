@@ -29,7 +29,7 @@ def get_coords_from_name(data_dir, patient, tile_name):
     return x, y
 
 
-def plot_relevance(att, filename=None):
+def plot_relevance(att, filename=None, only_return=False):
     if filename is None:
     #normalize
         rel = att.sum(1).cpu()
@@ -41,7 +41,8 @@ def plot_relevance(att, filename=None):
     img = zennit.image.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
 
     # show the image
-    display(img)
+    if not only_return:
+        display(img)
     return img
 
 
