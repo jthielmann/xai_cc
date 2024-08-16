@@ -7,14 +7,10 @@ from model import get_vgg13, get_vggs_and_path, get_resnets_and_path
 import os
 import torch.optim as optim
 import random
-#model_save_dir = "../models/vgg13/dropout/"
-model_save_dir = "./dump_" + str(random.random())
+model_save_dir = "../models/vgg13/dropout/"
 os.makedirs(model_save_dir, exist_ok=True)
-#vggs = get_resnets_and_path()
-#vgg = vggs[0][0]
-# for logging purposes
 vgg = get_vgg13()
-learning_rate = 0.0005
+learning_rate = 0.0001
 freeze_pretrained = False
 weight_decay = 0.005
 if freeze_pretrained:
@@ -32,5 +28,4 @@ training(model=vgg,
          learning_rate=learning_rate,
          batch_size=64,
          gene="RUBCNL",
-         freeze_pretrained=False,
-         skip_validation=True)
+         freeze_pretrained=False)
