@@ -3,7 +3,7 @@ import torchvision
 from torchvision import models
 import torch
 from train import training
-from model import init_res18_ciga, get_res18
+from model import init_res18_ciga, get_res18_1000
 import os
 import torch.optim as optim
 
@@ -11,7 +11,7 @@ model_save_dir = "../models/res18/RUBCNL_Res18/"
 os.makedirs(model_save_dir, exist_ok=False)
 
 # for logging purposes
-resnet = get_res18()
+resnet = get_res18_1000()
 learning_rate = 0.0005
 training(model=resnet,
          data_dir='../Training_Data/',

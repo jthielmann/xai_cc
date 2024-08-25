@@ -11,15 +11,14 @@ model_save_dir = "../models/res18/RUBCNL_Res18_freeze_drop/"
 os.makedirs(model_save_dir, exist_ok=False)
 
 # for logging purposes
-resnet = get_res18_dropout()
+resnet = init_res18_ciga()
 learning_rate = 0.0005
 training(model=resnet,
          data_dir='../Training_Data/',
          model_save_dir=model_save_dir,
          epochs=40,
          loss_fn=nn.MSELoss(),
-         optimizer=optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate},
-                                {"params": resnet.gene1.parameters(), "lr": learning_rate}], weight_decay=0.005),
+         optimizer=optim.AdamW([{"params": resnet.gene1.parameters(), "lr": learning_rate}], weight_decay=0.005),
          learning_rate=learning_rate,
          batch_size=64,
          gene="RUBCNL",

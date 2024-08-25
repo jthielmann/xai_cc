@@ -89,7 +89,7 @@ class MyNet3(nn.Module):
 
 
 class Res18_1000(nn.Module):
-    def __init__(self, pretrained=models.resnet18()):
+    def __init__(self, pretrained=models.resnet18(weights="IMAGENET1K_V2")):
         super(Res18_1000, self).__init__()
         self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
@@ -106,7 +106,7 @@ def get_res18_1000(path=None):
 
 
 class Res18(nn.Module):
-    def __init__(self, pretrained=models.resnet18()):
+    def __init__(self, pretrained=models.resnet18(weights="IMAGENET1K_V2")):
         super(Res18, self).__init__()
         self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
@@ -169,8 +169,28 @@ def get_res18(path=None):
     return res18
 
 
+def get_res18_random():
+    not_pretrained = models.resnet18()
+    return Res18(pretrained=not_pretrained)
+
+
+class Res50(nn.Module):
+    def __init__(self, pretrained=models.resnet50(weights="IMAGENET1K_V2")):
+        super(Res50, self).__init__()
+        self.pretrained = pretrained
+        self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
+
+    def forward(self, x):
+        return self.gene1(self.pretrained(x))
+
+
+def get_res50_random():
+    not_pretrained = models.resnet50()
+    return Res50(pretrained=not_pretrained)
+
+
 class Res18Dropout(nn.Module):
-    def __init__(self, ciga=models.resnet18):
+    def __init__(self, ciga=models.resnet18()):
         super(Res18Dropout, self).__init__()
         self.pretrained = ciga
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
@@ -195,7 +215,7 @@ class VGG13(nn.Module):
     def __init__(self):
         super(VGG13, self).__init__()
         self.pretrained = models.vgg13(weights='IMAGENET1K_V1')
-        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
+        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
         return self.gene1(self.pretrained(x))
@@ -203,6 +223,23 @@ class VGG13(nn.Module):
 
 def get_vgg13(path=None):
     vgg13 = VGG13()
+    if path:
+        print(vgg13.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
+    return vgg13
+
+
+class VGG13_Dropout(nn.Module):
+    def __init__(self):
+        super(VGG13_Dropout, self).__init__()
+        self.pretrained = models.vgg13(weights='IMAGENET1K_V1')
+        self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
+
+    def forward(self, x):
+        return self.gene1(self.pretrained(x))
+
+
+def get_vgg13_dropout(path=None):
+    vgg13 = VGG13_Dropout()
     if path:
         print(vgg13.load_state_dict(torch.load(path, map_location=torch.device('cpu'))))
     return vgg13
@@ -219,7 +256,7 @@ def get_models_and_path(device="cpu", log_model_name=False):
     raw.append(("../remote_models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50))
     raw.append(("../remote_models/res50/RUBCNL_Res50_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
     raw.append(("../remote_models/res50/RUBCNL_Res50_drop_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
-    raw.append(("../remote_models/vgg13/dropout/VGG13_ep_29.pt", get_vgg13))
+    raw.append(("../remote_models/vgg13/dropout/VGG13_ep_29.pt", get_vgg13_dropout))
     raw.append(("../remote_models/res18/RUBCNL_Res18/Res18_ep_29.pt", get_res18_1000))
     raw.append(("../remote_models/res18/RUBCNL_Res18_freeze/Res18_ep_29.pt", get_res18_1000))
     raw.append(("../remote_models/res18/RUBCNL_Res18_ciga/Res18_ep_29.pt", get_res18_ciga))
@@ -261,7 +298,7 @@ def get_resnets_and_path(device="cpu", log_model_name=False):
 
 def get_vggs_and_path(device="cpu", log_model_name=False):
     raw = []
-    raw.append(("../remote_models/vgg13/dropout/VGG13_ep_29.pt", get_vgg13))
+    raw.append(("../remote_models/vgg13/dropout/VGG13_ep_29.pt", get_vgg13_dropout))
 
     models = []
     for r in raw:

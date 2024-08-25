@@ -49,6 +49,7 @@ def train_epoch(model, device, dataloader, criterion, optimizer, epoch, freeze_p
     batch_corr_train = 0.0
     model.train()
     if freeze_pretrained:
+        model.pretrained.eval()
         for param in model.pretrained.parameters():
             param.required_grad = False
     i = 0

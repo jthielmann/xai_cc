@@ -8,7 +8,7 @@ import os
 import torch.optim as optim
 
 #model_save_dir = "../models/res18/RUBCNL_Res18_ciga_freeze/"
-model_save_dir = "./dump2"
+model_save_dir = "../models/res18/res18_ciga_freeze"
 os.makedirs(model_save_dir, exist_ok=False)
 
 # for logging purposes
@@ -19,8 +19,7 @@ training(model=resnet,
          model_save_dir=model_save_dir,
          epochs=40,
          loss_fn=nn.MSELoss(),
-         optimizer=optim.AdamW([{"params": resnet.pretrained.parameters(), "lr": learning_rate},
-                                {"params": resnet.gene1.parameters(), "lr": learning_rate}], weight_decay=0.005),
+         optimizer=optim.AdamW([{"params": resnet.gene1.parameters(), "lr": learning_rate}], weight_decay=0.005),
          learning_rate=learning_rate,
          batch_size=64,
          gene="RUBCNL",
