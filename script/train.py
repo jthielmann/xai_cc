@@ -44,7 +44,7 @@ def seed_everything(seed=DEFAULT_RANDOM_SEED):
 seed_everything(seed=DEFAULT_RANDOM_SEED)
 
 
-def train_epoch(model, device, dataloader, criterion, optimizer, epoch, freeze_pretrained):
+def train_epoch(model, device, dataloader, criterion, optimizer, freeze_pretrained):
     train_loss = 0.0
     batch_corr_train = 0.0
     model.train()
@@ -52,11 +52,7 @@ def train_epoch(model, device, dataloader, criterion, optimizer, epoch, freeze_p
         model.pretrained.eval()
         for param in model.pretrained.parameters():
             param.required_grad = False
-    i = 0
     for images, labels, path in dataloader:
-        if i % 100 == 0:
-            print("train_epoch iteration ", i)
-        i += 1
         images = images.to(device)
         images = images.float()
 
@@ -70,8 +66,6 @@ def train_epoch(model, device, dataloader, criterion, optimizer, epoch, freeze_p
         optimizer.step()
         train_loss += loss.item()
         corr = stats.pearsonr(g_output[:, 0].cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[0]
-        #print(g_output.shape, labels.shape)
-        #print(corr, batch_corr_train)
         batch_corr_train += corr
 
     return train_loss, batch_corr_train
@@ -82,11 +76,7 @@ def valid_epoch(model, device, dataloader, criterion):
     batch_corr_val = 0.0
     model.eval()
     with torch.no_grad():
-        i = 0
         for images, labels, path in dataloader:
-            if i % 20 == 0:
-                print("valid_epoch iteration ", i)
-            i += 1
             images = images.to(device)
             images = images.float()
 
@@ -135,8 +125,8 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
             f.write(epoch_to_print + "\n")
 
         # Load data into Dataloader
-        print("train_epoch")
-        training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer, epoch, freeze_pretrained)
+        print("train_epoch ", str(epoch))
+        training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer, freeze_pretrained)
         train_loss = (training_loss / len(train_loader.dataset)) * 1000
         train_corr = training_corr / len(train_loader)
         print("valid_epoch")
@@ -155,8 +145,9 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
 
         history['train_loss'].append(train_loss)
         history['train_corr'].append(train_corr)
-        model_save = model_save_dir + str(model.__class__.__name__) + "_ep_" + str(epoch) + ".pt"
-        torch.save(model.state_dict(), model_save)
+        if (epoch + 1) % 10 == 0:
+            model_save = model_save_dir + str(model.__class__.__name__) + "_ep_" + str(epoch) + ".pt"
+            torch.save(model.state_dict(), model_save)
 
         # Save training log into text file
         with open(training_log, "a") as f:

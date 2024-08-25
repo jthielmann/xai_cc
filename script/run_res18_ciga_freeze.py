@@ -8,7 +8,7 @@ import os
 import torch.optim as optim
 
 #model_save_dir = "../models/res18/RUBCNL_Res18_ciga_freeze/"
-model_save_dir = "../models/res18/res18_ciga_freeze"
+model_save_dir = "../models/res18/res18_ciga_freeze/"
 os.makedirs(model_save_dir, exist_ok=False)
 
 # for logging purposes
