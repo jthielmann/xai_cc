@@ -194,6 +194,11 @@ class Res50_1000(nn.Module):
         return self.gene1(self.pretrained(x))
 
 
+def get_res50_random_1000():
+    not_pretrained = models.resnet50()
+    return Res50_1000(pretrained=not_pretrained)
+
+
 def get_res50_random():
     not_pretrained = models.resnet50()
     return Res50_1000(pretrained=not_pretrained)
@@ -243,7 +248,6 @@ def get_vgg13_random():
     return VGG13(pretrained=not_pretrained)
 
 
-
 class VGG13_Dropout(nn.Module):
     def __init__(self):
         super(VGG13_Dropout, self).__init__()
@@ -261,48 +265,26 @@ def get_vgg13_dropout(path=None):
     return vgg13
 
 
-def get_models_and_path(device="cpu", log_model_name=False):
-    raw = []
-    raw.append(("../models/res50/RUBCNL_HLR_Res50slim/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_ice/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_optim_ice/RUBCNL_HLR_Res50slim_optim_ice15072024_ep_26_lr_0.0005resnet.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_HLR_Res50_Drop/24072024_ep_29_lr_0.0005resnet.pt", get_res50_dropout))
-    raw.append(("../models/res18/res18_iced_e29.pt",get_res18_ciga))
-    raw.append(("../models/res18/res18_not_iced_e29.pt", get_res18_ciga))
-    raw.append(("../remote_models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50))
-    raw.append(("../remote_models/res50/RUBCNL_Res50_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
-    raw.append(("../remote_models/res50/RUBCNL_Res50_drop_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
-    raw.append(("../remote_models/vgg13/dropout/VGG13_ep_29.pt", get_vgg13_dropout))
-    raw.append(("../remote_models/res18/RUBCNL_Res18/Res18_ep_29.pt", get_res18_1000))
-    raw.append(("../remote_models/res18/RUBCNL_Res18_freeze/Res18_ep_29.pt", get_res18_1000))
-    raw.append(("../remote_models/res18/RUBCNL_Res18_ciga/Res18_ep_29.pt", get_res18_ciga))
-    raw.append(("../remote_models/res18/RUBCNL_Res18_ciga_drop/Res18Dropout_ep_29.pt", get_res18_ciga_dropout))
-    raw.append(("../remote_models/res18/RUBCNL_Res18_ciga_freeze_drop/Res18Dropout_ep_29.pt", get_res18_ciga_dropout))
-
-    models = []
-    for r in raw:
-        if log_model_name:
-            print(r[0])
-        models.append((r[1](r[0]).to(device).eval(), r[0]))
-    return models
-
-
 def get_resnets_and_path(device="cpu", log_model_name=False):
     raw = []
+    raw.append(("../models/res18/RUBCNL_Res18/Res18_1000_ep_29.pt", get_res18_1000))
+    raw.append(("../models/res18/res18_ciga_freeze/Res18_ep_29.pt", get_res18_ciga))
+    raw.append(("../models/res18/RUBCNL_Res18_freeze/Res18_1000_ep_29.pt", get_res18_1000))
+    raw.append(("../models/res18/RUBCNL_Res18/Res18_1000_ep_29.pt", get_res18_1000))
+    raw.append(("../models/res18/RUBCNL_Res18_random/Res18_1000_ep_29.pt", get_res18_1000))
+    raw.append(("../models/res18/RUBCNL_Res18_ciga/Res18_ep_29.pt", get_res18_ciga))
+    raw.append(("../models/res18/RUBCNL_Res18_ciga_drop/Res18Dropout_ep_29.pt", get_res18_ciga_dropout))
+    raw.append(("../models/res18/res18_iced_e29.pt",get_res18_ciga))
+    raw.append(("../models/res18/res18_not_iced_e29.pt", get_res18_ciga))
+
     raw.append(("../models/res50/RUBCNL_HLR_Res50slim/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
     raw.append(("../models/res50/RUBCNL_HLR_Res50slim_ice/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
     raw.append(("../models/res50/RUBCNL_HLR_Res50slim_optim_ice/RUBCNL_HLR_Res50slim_optim_ice15072024_ep_26_lr_0.0005resnet.pt", get_res50))
     raw.append(("../models/res50/RUBCNL_HLR_Res50_Drop/24072024_ep_29_lr_0.0005resnet.pt", get_res50_dropout))
-    raw.append(("../models/res18/res18_iced_e29.pt",get_res18_ciga))
-    raw.append(("../models/res18/res18_not_iced_e29.pt", get_res18_ciga))
     raw.append(("../remote_models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50))
-    raw.append(("../remote_models/res50/RUBCNL_Res50_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
-    raw.append(("../remote_models/res50/RUBCNL_Res50_drop_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
-    raw.append(("../remote_models/res18/RUBCNL_Res18/Res18_ep_29.pt", get_res18_1000))
-    raw.append(("../remote_models/res18/RUBCNL_Res18_freeze/Res18_ep_29.pt", get_res18_1000))
-    raw.append(("../remote_models/res18/RUBCNL_Res18_ciga/Res18_ep_29.pt", get_res18_ciga))
-    raw.append(("../remote_models/res18/RUBCNL_Res18_ciga_drop/Res18Dropout_ep_29.pt", get_res18_ciga_dropout))
-    raw.append(("../remote_models/res18/RUBCNL_Res18_ciga_freeze_drop/Res18Dropout_ep_29.pt", get_res18_ciga_dropout))
+    raw.append(("../models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_Res50_drop_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
 
     models = []
     for r in raw:
@@ -314,8 +296,42 @@ def get_resnets_and_path(device="cpu", log_model_name=False):
 
 def get_vggs_and_path(device="cpu", log_model_name=False):
     raw = []
-    raw.append(("../remote_models/vgg13/dropout/VGG13_ep_29.pt", get_vgg13_dropout))
+    raw.append(("../models/vgg13/dropout/VGG13_Dropout_ep_29.pt", get_vgg13_dropout))
+    raw.append(("../models/vgg13/base_model/VGG13_ep_29.pt", get_vgg13))
+    raw.append(("../models/vgg13/random_weights/VGG13_ep_29.pt", get_vgg13))
 
+    models = []
+    for r in raw:
+        if log_model_name:
+            print(r[0])
+        models.append((r[1](r[0]).to(device).eval(), r[0]))
+    return models
+
+
+def get_models_and_path(device="cpu", log_model_name=False):
+    raw = []
+    raw.append(("../models/res18/RUBCNL_Res18/Res18_1000_ep_29.pt", get_res18_1000))
+    raw.append(("../models/res18/res18_ciga_freeze/Res18_ep_29.pt", get_res18_ciga))
+    raw.append(("../models/res18/RUBCNL_Res18_freeze/Res18_1000_ep_29.pt", get_res18_1000))
+    raw.append(("../models/res18/RUBCNL_Res18/Res18_1000_ep_29.pt", get_res18_1000))
+    raw.append(("../models/res18/RUBCNL_Res18_random/Res18_1000_ep_29.pt", get_res18_1000))
+    raw.append(("../models/res18/RUBCNL_Res18_ciga/Res18_ep_29.pt", get_res18_ciga))
+    raw.append(("../models/res18/RUBCNL_Res18_ciga_drop/Res18Dropout_ep_29.pt", get_res18_ciga_dropout))
+    raw.append(("../models/res18/res18_iced_e29.pt",get_res18_ciga))
+    raw.append(("../models/res18/res18_not_iced_e29.pt", get_res18_ciga))
+
+    raw.append(("../models/res50/RUBCNL_HLR_Res50slim/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_ice/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_optim_ice/RUBCNL_HLR_Res50slim_optim_ice15072024_ep_26_lr_0.0005resnet.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_HLR_Res50_Drop/24072024_ep_29_lr_0.0005resnet.pt", get_res50_dropout))
+    raw.append(("../remote_models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_Res50_drop_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
+
+    raw.append(("../models/vgg13/dropout/VGG13_Dropout_ep_29.pt", get_vgg13_dropout))
+    raw.append(("../models/vgg13/base_model/VGG13_ep_29.pt", get_vgg13))
+    raw.append(("../models/vgg13/random_weights/VGG13_ep_29.pt", get_vgg13))
     models = []
     for r in raw:
         if log_model_name:

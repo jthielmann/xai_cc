@@ -44,13 +44,8 @@ def generate_results(model, device, data_dir, patient=None, gene="RUBCNL", resul
     columns = ['labels', 'output', 'path', 'tile']
     df = pd.DataFrame(columns=columns)
     df.to_csv(filename, index=False)
-    i = 0
-    j = len(loader)
     with torch.no_grad():
         for images, labels, name in loader:
-            if i % 1000 == 0:
-                print(i, "/", j)
-            i += 1
             images = images.unsqueeze(0).to(device)
             images = images.float()
             labels = torch.tensor(labels[0]).to(device)
@@ -69,7 +64,7 @@ def generate_results(model, device, data_dir, patient=None, gene="RUBCNL", resul
             res.to_csv(filename, index=False, mode='a', header=False)
 
 
-def merge_data(data_dir, patient, results_filename="results.csv"):
+def merge_data(data_dir, patient, results_filename="results.csv", squelch=True):
     base_path = data_dir + patient + "/Preprocessed_STDataset/"
     spatial_matrix = pd.read_csv(base_path + "spatial_data.csv")
     results = pd.read_csv(base_path + results_filename)
@@ -78,8 +73,9 @@ def merge_data(data_dir, patient, results_filename="results.csv"):
     merge = pd.merge(results, spatial_matrix, on="tile")
     merge.set_index("tile", inplace=True)
     merge.to_csv(base_path + "merge.csv")
-    print(base_path + "merge.csv")
-    print(base_path + results_filename)
+    if not squelch:
+        print(base_path + "merge.csv")
+        print(base_path + results_filename)
 
 
 def merge_gene_data_and_coords(data_dir, patient, results_dir, filename, gene):

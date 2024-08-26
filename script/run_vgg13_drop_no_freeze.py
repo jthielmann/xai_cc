@@ -11,7 +11,7 @@ model_save_dir = "../models/vgg13/dropout/"
 os.makedirs(model_save_dir, exist_ok=True)
 vgg = get_vgg13_dropout()
 learning_rate = 0.00005
-freeze_pretrained = True
+freeze_pretrained = False
 weight_decay = 0.005
 if freeze_pretrained:
     optimizer = optim.SGD([{"params": vgg.pretrained.parameters(), "lr": learning_rate},

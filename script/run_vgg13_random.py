@@ -18,7 +18,7 @@ print("base vgg model, model.gene1.eval(), freeze pretrained, no decay")
 training(model=vgg,
          data_dir='../Training_Data/',
          model_save_dir=model_save_dir,
-         epochs=100,
+         epochs=40,
          loss_fn=nn.MSELoss(),
          optimizer=optimizer,
          learning_rate=learning_rate,
