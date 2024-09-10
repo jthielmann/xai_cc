@@ -125,11 +125,11 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
             f.write(epoch_to_print + "\n")
 
         # Load data into Dataloader
-        print("train_epoch ", str(epoch))
+        print("train")
         training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer, freeze_pretrained)
         train_loss = (training_loss / len(train_loader.dataset)) * 1000
         train_corr = training_corr / len(train_loader)
-        print("valid_epoch")
+        print("valid")
         valid_loss, valid_corr = valid_epoch(model, device, val_loader, loss_fn)
         val_loss = (valid_loss / len(val_loader.dataset)) * 1000
         val_corr = valid_corr / len(val_loader)

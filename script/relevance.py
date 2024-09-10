@@ -31,7 +31,6 @@ def get_coords_from_name(data_dir, patient, tile_name):
 
 def plot_relevance(att, filename=None, only_return=False):
     if filename is None:
-    #normalize
         rel = att.sum(1).cpu()
     else:
         rel = torch.tensor(plt.imread(filename)).unsqueeze(0)

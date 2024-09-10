@@ -123,7 +123,10 @@ def get_patient_loader(data_dir, patient=None, gene="RUBCNL"):
 
 
 def get_data_loaders(data_dir, batch_size, gene="RUBCNL", train_samples=None, val_samples=None):
-    if train_samples is None or val_samples is None:
+    if True:
+        train_samples = ["p007", "p014", "p016", "p020", "p025"]
+        val_samples = ["p009", "p013"]  # 8 21 26 page 42
+    elif train_samples is None or val_samples is None:
         print("setting train and val samples automatically")
         patients = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
         train_sample_count = int(0.5 + len(patients) * 0.8)  # 80% of dataset is train, +0.5 means we round
@@ -179,3 +182,26 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL", train_samples=None, va
     train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(dataset=valid_data, batch_size=batch_size, shuffle=False)
     return train_loader, val_loader
+
+
+def get_dataset(data_dir, gene="RUBCNL", train_samples=None, val_samples=None):
+    train_samples = ["p007", "p014", "p016", "p020", "p025"]
+
+    columns_of_interest = ["tile", gene]
+    train_st_dataset = pd.DataFrame(columns=columns_of_interest)
+
+    # generate training dataframe with all training samples
+    for i in train_samples:
+        st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv", index_col=-1)
+        st_dataset["tile"] = st_dataset.index
+        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
+        if train_st_dataset.empty:
+            train_st_dataset = st_dataset[columns_of_interest]
+        else:
+            train_st_dataset = pd.concat([train_st_dataset, st_dataset[columns_of_interest]])  # concat all samples
+
+
+    # reset index of dataframes
+    train_st_dataset.reset_index(drop=True, inplace=True)
+
+    return train_st_dataset
