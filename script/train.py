@@ -44,7 +44,7 @@ def seed_everything(seed=DEFAULT_RANDOM_SEED):
 seed_everything(seed=DEFAULT_RANDOM_SEED)
 
 
-def train_epoch(model, device, dataloader, criterion, optimizer, freeze_pretrained):
+def train_epoch(model, device, dataloader, criterion, optimizer, freeze_pretrained, error_metric):
     train_loss = 0.0
     batch_corr_train = 0.0
     model.train()
@@ -65,13 +65,13 @@ def train_epoch(model, device, dataloader, criterion, optimizer, freeze_pretrain
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
-        corr = stats.pearsonr(g_output[:, 0].cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[0]
+        corr = error_metric(g_output, labels)
         batch_corr_train += corr
 
     return train_loss, batch_corr_train
 
 
-def valid_epoch(model, device, dataloader, criterion):
+def valid_epoch(model, device, dataloader, criterion, error_metric):
     valid_loss = 0.0
     batch_corr_val = 0.0
     model.eval()
@@ -84,22 +84,25 @@ def valid_epoch(model, device, dataloader, criterion):
             labels = labels.float()
             labels = labels.to(device)
             g_output = model(images)
-            loss = criterion(g_output, labels[:, 0])
+            loss = criterion(g_output.squeeze(), labels[:, 0])
             valid_loss += loss.item()
 
-            corr = stats.pearsonr(g_output[:, 0].cpu().detach().numpy(), labels[:, 0].cpu().detach().numpy())[0]
+            corr = error_metric(g_output, labels)
             batch_corr_val += corr
 
     return valid_loss, batch_corr_val
 
 
-def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, gene, freeze_pretrained=False):
+def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, gene,
+             freeze_pretrained=False, error_metric=
+             lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0]):
 
     training_log = model_save_dir + "/log.txt"
     open(training_log, "a").close()
 
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print("device: ", device)
+    print("gene:", gene)
     model.to(device)
 
     # Defining gradient function
@@ -126,19 +129,20 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
 
         # Load data into Dataloader
         print("train")
-        training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer, freeze_pretrained)
+        training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer,
+                                                   freeze_pretrained, error_metric)
         train_loss = (training_loss / len(train_loader.dataset)) * 1000
         train_corr = training_corr / len(train_loader)
         print("valid")
-        valid_loss, valid_corr = valid_epoch(model, device, val_loader, loss_fn)
+        valid_loss, valid_corr = valid_epoch(model, device, val_loader, loss_fn, error_metric)
         val_loss = (valid_loss / len(val_loader.dataset)) * 1000
         val_corr = valid_corr / len(val_loader)
         if val_loss < valid_loss_min:
             valid_loss_min = val_loss
         if val_corr > valid_corr_max:
             valid_corr_max = val_corr
-        log_text = "AVG T Loss:{:.3f} AVG T Correlation:{:.3f} AVG V Loss:{:.3f} AVG V Correlation:{:.3f}".format(
-            train_loss, train_corr, val_loss, val_corr)
+        log_text = "AVG T Loss:{:.3f} AVG T Correlation:{:.3f} AVG V Loss:{:.3f} AVG V Correlation:{:.3f}, metric: {}".format(
+            train_loss, train_corr, val_loss, val_corr, error_metric.__class__.__name__)
         print(log_text)
         history['val_loss'].append(val_loss)
         history['val_corr'].append(val_corr)

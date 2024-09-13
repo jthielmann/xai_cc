@@ -122,7 +122,7 @@ def get_patient_loader(data_dir, patient=None, gene="RUBCNL"):
     return loaded_train_dataset
 
 
-def get_data_loaders(data_dir, batch_size, gene="RUBCNL", train_samples=None, val_samples=None):
+def get_data_loaders(data_dir, batch_size, gene, train_samples=None, val_samples=None):
     if True:
         train_samples = ["p007", "p014", "p016", "p020", "p025"]
         val_samples = ["p009", "p013"]  # 8 21 26 page 42
