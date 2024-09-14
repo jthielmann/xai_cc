@@ -10,7 +10,7 @@ import torch.optim as optim
 
 gene="MKI67"
 
-model_save_dir = "../models/res50/test26_" + gene + "_Res50/"
+model_save_dir = "../models/res50/test30_" + gene + "_Res50/"
 os.makedirs(model_save_dir, exist_ok=False)
 
 # for logging purposes
@@ -27,4 +27,5 @@ training(model=resnet,
          batch_size=64,
          gene=gene,
          freeze_pretrained=False,
-         error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item())
+         error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
+         error_metric_name="MSE")

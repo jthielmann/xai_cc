@@ -95,7 +95,8 @@ def valid_epoch(model, device, dataloader, criterion, error_metric):
 
 def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, gene,
              freeze_pretrained=False, error_metric=
-             lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0]):
+             lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
+             error_metric_name="pearson corr"):
 
     training_log = model_save_dir + "/log.txt"
     open(training_log, "a").close()
@@ -141,8 +142,8 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
             valid_loss_min = val_loss
         if val_corr > valid_corr_max:
             valid_corr_max = val_corr
-        log_text = "AVG T Loss:{:.3f} AVG T Correlation:{:.3f} AVG V Loss:{:.3f} AVG V Correlation:{:.3f}, metric: {}".format(
-            train_loss, train_corr, val_loss, val_corr, error_metric.__class__.__name__)
+        log_text = "AVG T Loss: {:.3f} AVG T {}: {:.3f} AVG V Loss: {:.3f} AVG V {}: {:.3f}".format(
+            train_loss, error_metric_name, train_corr, val_loss, error_metric_name, val_corr)
         print(log_text)
         history['val_loss'].append(val_loss)
         history['val_corr'].append(val_corr)

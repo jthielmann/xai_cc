@@ -1,10 +1,10 @@
-from crp.attribution import CondAttribution
+from crp_plotting.attribution import CondAttribution
 from zennit.attribution import Gradient
 from zennit.canonizers import CompositeCanonizer
-from crp.concepts import ChannelConcept
-from crp.helper import get_layer_names
-from crp.visualization import FeatureVisualization
-from crp.image import plot_grid
+from crp_plotting.concepts import ChannelConcept
+from crp_plotting.helper import get_layer_names
+from crp_plotting.visualization import FeatureVisualization
+from crp_plotting.image import plot_grid
 
 from zennit.composites import EpsilonPlusFlat
 from zennit.canonizers import SequentialMergeBatchNorm
@@ -12,7 +12,7 @@ import zennit as zen
 import torch.nn as nn
 import torch
 import zennit.torchvision as ztv
-from crp.image import imgify
+from crp_plotting.image import imgify
 
 
 from relevance import plot_relevance
