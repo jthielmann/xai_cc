@@ -420,3 +420,15 @@ def get_remote_models_and_path(device="cpu", log_model_name=False):
             print(r[0])
         models.append((r[1](r[0]).to(device).eval(), r[0]))
     return models
+
+
+def get_remote_models_and_path_mki67(device="cpu", log_model_name=False):
+    raw = []
+    raw.append(("../remote_models/new/models/res18/MKI67_Res18/Res18_1000_ep_29.pt", get_res18_1000))
+    raw.append(("../remote_models/new/models/res50/MKI67_Res50/MyNet2_ep_29.pt", get_res50))
+    models = []
+    for r in raw:
+        if log_model_name:
+            print(r[0])
+        models.append((r[1](r[0]).to(device).eval(), r[0]))
+    return models

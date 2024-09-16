@@ -3,11 +3,14 @@ import torchvision
 from torchvision import models
 import torch
 from train import training
+
+import torchmetrics
+
 from model import init_res18_ciga, get_res18_1000
 import os
 import torch.optim as optim
-#gene="MKI67"
-gene="RUBCNL"
+gene="MKI67"
+#gene="RUBCNL"
 model_save_dir = "../models/res18/" + gene + "_Res18/"
 os.makedirs(model_save_dir, exist_ok=False)
 
@@ -24,4 +27,6 @@ training(model=resnet,
          learning_rate=learning_rate,
          batch_size=256,
          gene=gene,
-         freeze_pretrained=False)
+         freeze_pretrained=False,
+         error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
+         error_metric_name="MSE")
