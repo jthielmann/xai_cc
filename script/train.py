@@ -61,7 +61,7 @@ def train_epoch(model, device, dataloader, criterion, optimizer, freeze_pretrain
         labels = labels.to(device)
         optimizer.zero_grad()
         g_output = model(images)
-        loss = criterion(g_output.squeeze(), labels[:, 0])
+        loss = criterion(g_output, labels)
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
@@ -164,3 +164,82 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
 
     save_name = (model_save_dir + "/train_history.csv")
     history_df.to_csv(save_name, index=False)
+
+
+def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, genes,
+             freeze_pretrained=False, error_metric=
+             lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
+             error_metric_name="pearson corr"):
+
+    print("genes:", genes)
+
+    training_log = model_save_dir + "/log.txt"
+    open(training_log, "a").close()
+
+    device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+    model.to(device)
+    print("device: ", device)
+
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+
+    # Defining gradient function
+    with open(model_save_dir + "/settings.json", "w") as file:
+        json_dict = {'model_type': model.model_type, 'random_weights': model.random_weights,
+                     'dropout': model.dropout, 'pretrained_out_dim': str(model.pretrained_out_dim),
+                     'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'genes': genes,
+                     'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device,
+                     'freeze_pretrained': freeze_pretrained}
+        json.dump(json_dict, file)
+
+    # Defining training and validation history dictionary
+    history = {'train_loss': [], 'train_corr': [], 'val_loss': [], 'val_corr': []}
+
+    valid_loss_min = np.Inf
+    valid_corr_max = np.NINF
+    train_loader, val_loader = get_data_loaders(data_dir, batch_size, genes)
+
+    # Iterate through epochs
+    for epoch in range(epochs):
+        print('Epoch {} / {}:'.format(epoch + 1, epochs))
+
+        epoch_to_print = "Epoch {} / {}:".format(epoch + 1, epochs)
+        with open(training_log, "a") as f:
+            f.write(epoch_to_print + "\n")
+
+        # Load data into Dataloader
+        print("train")
+        training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer,
+                                                   freeze_pretrained, error_metric)
+        train_loss = (training_loss / len(train_loader.dataset)) * 1000
+        train_corr = training_corr / len(train_loader)
+        print("valid")
+        valid_loss, valid_corr = valid_epoch(model, device, val_loader, loss_fn, error_metric)
+        val_loss = (valid_loss / len(val_loader.dataset)) * 1000
+        val_corr = valid_corr / len(val_loader)
+        if val_loss < valid_loss_min:
+            valid_loss_min = val_loss
+        if val_corr > valid_corr_max:
+            valid_corr_max = val_corr
+        log_text = "AVG T Loss: {:.3f} AVG T {}: {:.3f} AVG V Loss: {:.3f} AVG V {}: {:.3f}".format(
+            train_loss, error_metric_name, train_corr, val_loss, error_metric_name, val_corr)
+        print(log_text)
+        history['val_loss'].append(val_loss)
+        history['val_corr'].append(val_corr)
+
+        history['train_loss'].append(train_loss)
+        history['train_corr'].append(train_corr)
+        if (epoch + 1) % 10 == 0:
+            model_save = model_save_dir + str(model.__class__.__name__) + "_ep_" + str(epoch) + ".pt"
+            torch.save(model.state_dict(), model_save)
+
+        # Save training log into text file
+        with open(training_log, "a") as f:
+            f.write(log_text)
+            f.write("\n")
+
+        scheduler.step()
+    history_df = pd.DataFrame.from_dict(history, orient="columns")
+
+    save_name = (model_save_dir + "/train_history.csv")
+    history_df.to_csv(save_name, index=False)
+

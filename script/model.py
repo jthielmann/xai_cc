@@ -3,6 +3,7 @@ import torch.nn.functional
 import torch
 import torchvision
 from torchvision import models
+import json
 
 
 class MyNet(nn.Module):
@@ -43,7 +44,7 @@ class MyNet2(nn.Module):
         return self.gene1(self.pretrained(x))
 
 
-def get_res50(path=None):
+def get_res50_mynet2(path=None):
     res50 = MyNet2()
     if path:
         print(res50.load_state_dict(torch.load(path, map_location=torch.device('cpu'), weights_only=False)))
@@ -282,7 +283,94 @@ def get_vgg13_dropout(path=None):
     return vgg13
 
 
-def get_resnets_and_path(device="cpu", log_model_name=False):
+def get_ae():
+    return None
+
+
+class general_model(nn.Module):
+    def __init__(self, model_type, gene_list, random_weights=False, dropout=True, pretrained_output_dim=1000):
+        super(general_model, self).__init__()
+        if random_weights == True:
+            weights=None
+        else:
+            weights='IMAGENET1K_V1'
+        if model_type == "vgg13":
+            self.pretrained = models.vgg13(weights=weights)
+        elif model_type == "resnet18":
+            self.pretrained = models.resnet18(weights=weights)
+        elif model_type == "resnet50":
+            self.pretrained = models.resnet50(weights=weights)
+        else:
+            print("model type", model_type, "not implemented")
+            exit(1)
+        for gene in gene_list:
+            if dropout:
+                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_output_dim, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout()))
+            else:
+                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_output_dim, 200),nn.ReLU(), nn.Linear(200, 1)))
+
+        self.gene_list = gene_list
+        self.model_type = model_type
+        self.random_weights = random_weights
+        self.dropout = dropout
+        self.pretrained_out_dim = pretrained_output_dim
+        self.ae = get_ae()
+
+    def forward(self, x):
+        if self.ae:
+            x = self.ae(x)
+        x = self.pretrained(x)
+        out = []
+        for gene in self.gene_list:
+            out.append(getattr(self, gene)(x))
+        return torch.cat(out, dim=1)
+
+    def save(self, json_path):
+        with open(json_path, "w") as f:
+            json_dict = {"model_type":self.model_type, "random_weights":self.random_weights, 'gene_list':self.gene_list,
+                         "dropout": self.dropout, "pretrained_output_dim":self.pretrained_out_dim}
+            json.dump(json_dict, f)
+
+
+def load_model(model_dir, model_name, json_name="settings.json"):
+    with open(model_dir + json_name) as f:
+        d = json.load(f)
+        model_type = d["model_type"]
+        gene_list = d["gene_list"]
+        random_weights = d["random_weights"]
+        dropout = d["dropout"]
+        pretrained_output_dim = d["pretrained_output_dim"]
+
+    model = general_model(model_type, gene_list, random_weights, dropout, pretrained_output_dim)
+    print(model.load_state_dict(torch.load(model_dir + model_name, map_location=torch.device('cpu'), weights_only=False)))
+    return model
+
+
+def get_resnet_dirs_and_model_names(gene="RUBCNL"):
+    paths = []
+    paths.append(("../remote_models/new/models/res18/RUBCNL_Res18/", "Res18_1000_ep_29.pt"))
+    paths.append(("../remote_models/new/models/res18/RUBCNL_Res18_ciga/", "Res18_ep_29.pt"))
+    paths.append(("../remote_models/new/models/res18/RUBCNL_Res18_ciga_drop/", "Res18Dropout_ep_29.pt"))
+    paths.append(("../remote_models/new/models/res18/RUBCNL_Res18_freeze/", "Res18_1000_ep_29.pt"))
+    paths.append(("../remote_models/new/models/res18/RUBCNL_Res18_random/", "Res18_1000_ep_29.pt"))
+
+    paths.append(("../models/res18/RUBCNL_Res18_ciga/", "Res18_ep_29.pt"))
+    paths.append(("../models/res18/RUBCNL_Res18_ciga_drop/", "Res18Dropout_ep_29.pt"))
+    paths.append(("../remote_models/new/models/res50/RUBCNL_Res50/", "MyNet2_ep_29.pt"))
+    paths.append(("../remote_models/new/models/res50/RUBCNL_Res50_drop/", "Res50Dropout_ep_29.pt"))
+    paths.append(("../remote_models/new/models/res50/RUBCNL_Res50_drop_freeze/", "Res50Dropout_ep_29.pt"))
+    paths.append(("../remote_models/new/models/res50/RUBCNL_Res50_freeze/", "MyNet2_ep_29.pt"))
+    paths.append(("../remote_models/new/models/res50/RUBCNL_Res50_random/", "Res50_1000_ep_29.pt"))
+    return paths
+
+
+def get_vgg_dirs_and_model_names():
+    paths = []
+    paths.append(("../remote_models/new/models/vgg13/base_model/", "VGG13_ep_29.pt"))
+    paths.append(("../remote_models/new/models/vgg13/dropout/", "VGG13_Dropout_ep_29.pt"))
+    paths.append(("../remote_models/new/models/vgg13/random_weights/", "VGG13_ep_29.pt"))
+
+def get_resnets_and_path(device="cpu", log_model_name=False, model_id=None):
     raw = []
     raw.append(("../models/res18/RUBCNL_Res18/Res18_1000_ep_29.pt", get_res18_1000))
     raw.append(("../models/res18/res18_ciga_freeze/Res18_ep_29.pt", get_res18_ciga))
@@ -294,38 +382,48 @@ def get_resnets_and_path(device="cpu", log_model_name=False):
     raw.append(("../models/res18/res18_iced_e29.pt",get_res18_ciga))
     raw.append(("../models/res18/res18_not_iced_e29.pt", get_res18_ciga))
 
-    raw.append(("../models/res50/RUBCNL_HLR_Res50slim/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_ice/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_optim_ice/RUBCNL_HLR_Res50slim_optim_ice15072024_ep_26_lr_0.0005resnet.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_HLR_Res50slim/15072024_ep_39_lr_0.0005resnet.pt", get_res50_mynet2))
+    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_ice/15072024_ep_39_lr_0.0005resnet.pt", get_res50_mynet2))
+    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_optim_ice/RUBCNL_HLR_Res50slim_optim_ice15072024_ep_26_lr_0.0005resnet.pt", get_res50_mynet2))
     raw.append(("../models/res50/RUBCNL_HLR_Res50_Drop/24072024_ep_29_lr_0.0005resnet.pt", get_res50_dropout))
-    raw.append(("../remote_models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50))
+    raw.append(("../remote_models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50_mynet2))
+    raw.append(("../models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50_mynet2))
+    raw.append(("../models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50_mynet2))
     raw.append(("../models/res50/RUBCNL_Res50_drop_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
 
-    models = []
-    for r in raw:
-        if log_model_name:
-            print(r[0])
-        models.append((r[1](r[0]).to(device).eval(), r[0]))
-    return models
+    if model_id is None:
+        models = []
+        for r in raw:
+            if log_model_name:
+                print(r[0])
+            models.append((r[1](r[0]).to(device).eval(), r[0]))
+
+        return models
+    else:
+        r = raw[model_id]
+        return r[1](r[0]).to(device).eval(), r[0]
 
 
-def get_vggs_and_path(device="cpu", log_model_name=False):
+def get_vggs_and_path(device="cpu", log_model_name=False, model_id=None):
     raw = []
     raw.append(("../models/vgg13/dropout/VGG13_Dropout_ep_29.pt", get_vgg13_dropout))
     raw.append(("../models/vgg13/base_model/VGG13_ep_29.pt", get_vgg13))
     raw.append(("../models/vgg13/random_weights/VGG13_ep_29.pt", get_vgg13))
 
-    models = []
-    for r in raw:
-        if log_model_name:
-            print(r[0])
-        models.append((r[1](r[0]).to(device).eval(), r[0]))
-    return models
+    if model_id is None:
+        models = []
+        for r in raw:
+            if log_model_name:
+                print(r[0])
+            models.append((r[1](r[0]).to(device).eval(), r[0]))
+
+        return models
+    else:
+        r = raw[model_id]
+        return r[1](r[0]).to(device).eval(), r[0]
 
 
-def get_models_and_path(device="cpu", log_model_name=False):
+def get_models_and_path(device="cpu", log_model_name=False, model_id=None):
     raw = []
     raw.append(("../models/res18/RUBCNL_Res18/Res18_1000_ep_29.pt", get_res18_1000))
     raw.append(("../models/res18/res18_ciga_freeze/Res18_ep_29.pt", get_res18_ciga))
@@ -333,30 +431,36 @@ def get_models_and_path(device="cpu", log_model_name=False):
     raw.append(("../models/res18/RUBCNL_Res18_random/Res18_1000_ep_29.pt", get_res18_1000))
     raw.append(("../models/res18/RUBCNL_Res18_ciga/Res18_ep_29.pt", get_res18_ciga))
     raw.append(("../models/res18/RUBCNL_Res18_ciga_drop/Res18Dropout_ep_29.pt", get_res18_ciga_dropout))
-    raw.append(("../models/res18/res18_iced_e29.pt",get_res18_ciga))
-    raw.append(("../models/res18/res18_not_iced_e29.pt", get_res18_ciga))
+    #raw.append(("../models/res18/res18_iced_e29.pt",get_res18_ciga))
+    #raw.append(("../models/res18/res18_not_iced_e29.pt", get_res18_ciga))
 
-    raw.append(("../models/res50/RUBCNL_HLR_Res50slim/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_ice/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_HLR_Res50slim_optim_ice/RUBCNL_HLR_Res50slim_optim_ice15072024_ep_26_lr_0.0005resnet.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_HLR_Res50_Drop/24072024_ep_29_lr_0.0005resnet.pt", get_res50_dropout))
-    raw.append(("../remote_models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50))
-    raw.append(("../models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50))
+    #raw.append(("../models/res50/RUBCNL_HLR_Res50slim/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
+    #raw.append(("../models/res50/RUBCNL_HLR_Res50slim_ice/15072024_ep_39_lr_0.0005resnet.pt", get_res50))
+    #raw.append(("../models/res50/RUBCNL_HLR_Res50slim_optim_ice/RUBCNL_HLR_Res50slim_optim_ice15072024_ep_26_lr_0.0005resnet.pt", get_res50))
+    #raw.append(("../models/res50/RUBCNL_HLR_Res50_Drop/24072024_ep_29_lr_0.0005resnet.pt", get_res50_dropout))
+    #raw.append(("../remote_models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50))
+    raw.append(("../models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50_mynet2))
+    raw.append(("../models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50_mynet2))
     raw.append(("../models/res50/RUBCNL_Res50_drop_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
 
     raw.append(("../models/vgg13/dropout/VGG13_Dropout_ep_29.pt", get_vgg13_dropout))
     raw.append(("../models/vgg13/base_model/VGG13_ep_29.pt", get_vgg13))
     raw.append(("../models/vgg13/random_weights/VGG13_ep_29.pt", get_vgg13))
-    models = []
-    for r in raw:
-        if log_model_name:
-            print(r[0])
-        models.append((r[1](r[0]).to(device).eval(), r[0]))
-    return models
+
+    if model_id is None:
+        models = []
+        for r in raw:
+            if log_model_name:
+                print(r[0])
+            models.append((r[1](r[0]).to(device).eval(), r[0]))
+
+        return models
+    else:
+        r = raw[model_id]
+        return r[1](r[0]).to(device).eval(), r[0]
 
 
-def get_remote_resnets_and_path(device="cpu", log_model_name=False):
+def get_remote_resnets_and_path(device="cpu", log_model_name=False, model_id=None):
     raw = []
     raw.append(("../remote_models/new/models/res18/RUBCNL_Res18/Res18_1000_ep_29.pt", get_res18_1000))
     raw.append(("../remote_models/new/models/res18/RUBCNL_Res18_ciga/Res18_ep_29.pt", get_res18_ciga))
@@ -365,38 +469,47 @@ def get_remote_resnets_and_path(device="cpu", log_model_name=False):
     raw.append(("../remote_models/new/models/res18/RUBCNL_Res18_freeze/Res18_1000_ep_29.pt", get_res18_1000))
     raw.append(("../remote_models/new/models/res18/RUBCNL_Res18_random/Res18_1000_ep_29.pt", get_res18_1000))
 
-    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_9.pt", get_res50))
-    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_19.pt", get_res50))
-    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50))
-    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_39.pt", get_res50))
+    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_9.pt", get_res50_mynet2))
+    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_19.pt", get_res50_mynet2))
+    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50_mynet2))
+    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_39.pt", get_res50_mynet2))
     raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_drop/Res50Dropout_ep_29.pt", get_res50_dropout))
     raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_drop_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
-    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50))
-    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50))
+    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50_mynet2))
+    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50_mynet2))
 
-    models = []
-    for r in raw:
-        if log_model_name:
-            print(r[0])
-        models.append((r[1](r[0]).to(device).eval(), r[0]))
-    return models
+    if model_id is None:
+        models = []
+        for r in raw:
+            if log_model_name:
+                print(r[0])
+            models.append((r[1](r[0]).to(device).eval(), r[0]))
+
+        return models
+    else:
+        r = raw[model_id]
+        return r[1](r[0]).to(device).eval(), r[0]
 
 
-def get_remote_vggs_and_path(device="cpu", log_model_name=False):
+def get_remote_vggs_and_path(device="cpu", log_model_name=False, model_id=None):
     raw = []
 
     raw.append(("../remote_models/new/models/vgg13/base_model/VGG13_ep_29.pt", get_vgg13))
     raw.append(("../remote_models/new/models/vgg13/dropout/VGG13_Dropout_ep_29.pt", get_vgg13_dropout))
     raw.append(("../remote_models/new/models/vgg13/random_weights/VGG13_ep_29.pt", get_vgg13))
-    models = []
-    for r in raw:
-        if log_model_name:
-            print(r[0])
-        models.append((r[1](r[0]).to(device).eval(), r[0]))
-    return models
+    if model_id is None:
+        models = []
+        for r in raw:
+            if log_model_name:
+                print(r[0])
+            models.append((r[1](r[0]).to(device).eval(), r[0]))
 
+        return models
+    else:
+        r = raw[model_id]
+        return r[1](r[0]).to(device).eval(), r[0]
 
-def get_remote_models_and_path(device="cpu", log_model_name=False):
+def get_remote_models_and_path(device="cpu", log_model_name=False, model_id=None):
     raw = []
     raw.append(("../remote_models/new/models/res18/RUBCNL_Res18/Res18_1000_ep_29.pt", get_res18_1000))
     raw.append(("../remote_models/new/models/res18/RUBCNL_Res18_ciga/Res18_ep_29.pt", get_res18_ciga))
@@ -405,30 +518,40 @@ def get_remote_models_and_path(device="cpu", log_model_name=False):
     raw.append(("../remote_models/new/models/res18/RUBCNL_Res18_freeze/Res18_1000_ep_29.pt", get_res18_1000))
     raw.append(("../remote_models/new/models/res18/RUBCNL_Res18_random/Res18_1000_ep_29.pt", get_res18_1000))
 
-    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50))
+    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50/MyNet2_ep_29.pt", get_res50_mynet2))
     raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_drop/Res50Dropout_ep_29.pt", get_res50_dropout))
     raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_drop_freeze/Res50Dropout_ep_29.pt", get_res50_dropout))
-    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50))
-    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50))
+    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_freeze/MyNet2_ep_29.pt", get_res50_mynet2))
+    raw.append(("../remote_models/new/models/res50/RUBCNL_Res50_random/Res50_1000_ep_29.pt", get_res50_mynet2))
 
     raw.append(("../remote_models/new/models/vgg13/base_model/VGG13_ep_29.pt", get_vgg13))
     raw.append(("../remote_models/new/models/vgg13/dropout/VGG13_Dropout_ep_29.pt", get_vgg13_dropout))
     raw.append(("../remote_models/new/models/vgg13/random_weights/VGG13_ep_29.pt", get_vgg13))
-    models = []
-    for r in raw:
-        if log_model_name:
-            print(r[0])
-        models.append((r[1](r[0]).to(device).eval(), r[0]))
-    return models
+    if model_id is None:
+        models = []
+        for r in raw:
+            if log_model_name:
+                print(r[0])
+            models.append((r[1](r[0]).to(device).eval(), r[0]))
+
+        return models
+    else:
+        r = raw[model_id]
+        return r[1](r[0]).to(device).eval(), r[0]
 
 
-def get_remote_models_and_path_mki67(device="cpu", log_model_name=False):
+def get_remote_models_and_path_mki67(device="cpu", log_model_name=False, model_id=None):
     raw = []
     raw.append(("../remote_models/new/models/res18/MKI67_Res18/Res18_1000_ep_29.pt", get_res18_1000))
-    raw.append(("../remote_models/new/models/res50/MKI67_Res50/MyNet2_ep_29.pt", get_res50))
-    models = []
-    for r in raw:
-        if log_model_name:
-            print(r[0])
-        models.append((r[1](r[0]).to(device).eval(), r[0]))
-    return models
+    raw.append(("../remote_models/new/models/res50/MKI67_Res50/MyNet2_ep_29.pt", get_res50_mynet2))
+    if model_id is None:
+        models = []
+        for r in raw:
+            if log_model_name:
+                print(r[0])
+            models.append((r[1](r[0]).to(device).eval(), r[0]))
+
+        return models
+    else:
+        r = raw[model_id]
+        return r[1](r[0]).to(device).eval(), r[0]

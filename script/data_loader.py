@@ -122,7 +122,7 @@ def get_patient_loader(data_dir, patient=None, gene="RUBCNL"):
     return loaded_train_dataset
 
 
-def get_data_loaders(data_dir, batch_size, gene, train_samples=None, val_samples=None):
+def get_data_loaders(data_dir, batch_size, genes, train_samples=None, val_samples=None):
     if True:
         train_samples = ["p007", "p014", "p016", "p020", "p025"]
         val_samples = ["p009", "p013"]  # 8 21 26 page 42
@@ -137,7 +137,9 @@ def get_data_loaders(data_dir, batch_size, gene, train_samples=None, val_samples
         print("val_samples: ")
         print(*patients[train_sample_count:])
 
-    columns_of_interest = ["tile", gene]
+    columns_of_interest = ["tile"]
+    for gene in genes:
+        columns_of_interest.append(gene)
     train_st_dataset = pd.DataFrame(columns=columns_of_interest)
     valid_st_dataset = pd.DataFrame(columns=columns_of_interest)
 
@@ -184,24 +186,59 @@ def get_data_loaders(data_dir, batch_size, gene, train_samples=None, val_samples
     return train_loader, val_loader
 
 
-def get_dataset(data_dir, gene="RUBCNL", train_samples=None, val_samples=None):
-    train_samples = ["p007", "p014", "p016", "p020", "p025"]
+class PlottingDataset(torch.utils.data.Dataset):
+    def __init__(self, dataframe,
+                 device="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu",
+                 transforms=transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            # mean and std of the whole dataset
+            transforms.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])
+            ])):
+        self.dataframe = dataframe
+        self.transforms = transforms
+        self.device = device
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, index):
+        gene_names = list(self.dataframe)[1:]
+        gene_vals = []
+        row = self.dataframe.iloc[index]
+        a = Image.open(row["tile"]).convert("RGB")
+        # print(x.size)
+        for j in gene_names:
+            gene_val = float(row[j])
+            gene_vals.append(gene_val)
+        e = row["tile"]
+        # apply normalization transforms as for pretrained colon classifier
+        a = self.transforms(a)
+        a = a.to(self.device)
+        return a, 0
+
+
+# has the labels set to 0 because that makes it easier to work with the frameworks written for classification
+# the idea is that they filter the attribution by the chosen class, but as we only have one output we always choose y=0
+def get_dataset_for_plotting(data_dir, gene="RUBCNL", samples=None):
+    if samples is None:
+        samples = ["p007", "p014", "p016", "p020", "p025"]
 
     columns_of_interest = ["tile", gene]
-    train_st_dataset = pd.DataFrame(columns=columns_of_interest)
+    dataset = pd.DataFrame(columns=columns_of_interest)
 
     # generate training dataframe with all training samples
-    for i in train_samples:
-        st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv", index_col=-1)
+    for i in samples:
+        st_dataset = pd.read_csv(data_dir + "/" + i + "/Preprocessed_STDataset/gene_data.csv", index_col=-1)
         st_dataset["tile"] = st_dataset.index
         st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
-        if train_st_dataset.empty:
-            train_st_dataset = st_dataset[columns_of_interest]
+        if dataset.empty:
+            dataset = st_dataset[columns_of_interest]
         else:
-            train_st_dataset = pd.concat([train_st_dataset, st_dataset[columns_of_interest]])  # concat all samples
-
+            # concat
+            dataset = pd.concat([dataset, st_dataset[columns_of_interest]])
 
     # reset index of dataframes
-    train_st_dataset.reset_index(drop=True, inplace=True)
+    dataset.reset_index(drop=True, inplace=True)
 
-    return train_st_dataset
+    return PlottingDataset(dataset)

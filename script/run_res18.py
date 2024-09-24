@@ -9,6 +9,12 @@ import torchmetrics
 from model import init_res18_ciga, get_res18_1000
 import os
 import torch.optim as optim
+genes  = []
+genes.append("FLT1")
+genes.append("VWF")
+genes.append("PECAM1")
+genes.append("PLVAP")
+genes.append("DES")
 gene="MKI67"
 #gene="RUBCNL"
 model_save_dir = "../models/res18/" + gene + "_Res18/"
