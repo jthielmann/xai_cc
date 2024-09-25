@@ -102,9 +102,8 @@ class Subset(torch.utils.data.Dataset):
         return len(self.subset)
 
 
-def get_patient_loader(data_dir, patient=None, gene="RUBCNL"):
+def get_patient_loader(data_dir, patient, gene="RUBCNL"):
     columns_of_interest = ["tile", gene]
-
     train_st_dataset = pd.DataFrame(columns=columns_of_interest)
 
     # generate training dataframe with all training samples
@@ -217,6 +216,31 @@ class PlottingDataset(torch.utils.data.Dataset):
         a = a.to(self.device)
         return a, 0
 
+
+# has the labels set to 0 because that makes it easier to work with the frameworks written for classification
+# the idea is that they filter the attribution by the chosen class, but as we only have one output we always choose y=0
+def get_dataset_for_plotting(data_dir, gene="RUBCNL", samples=None):
+    if samples is None:
+        samples = ["p007", "p014", "p016", "p020", "p025"]
+
+    columns_of_interest = ["tile", gene]
+    dataset = pd.DataFrame(columns=columns_of_interest)
+
+    # generate training dataframe with all training samples
+    for i in samples:
+        st_dataset = pd.read_csv(data_dir + "/" + i + "/Preprocessed_STDataset/gene_data.csv", index_col=-1)
+        st_dataset["tile"] = st_dataset.index
+        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
+        if dataset.empty:
+            dataset = st_dataset[columns_of_interest]
+        else:
+            # concat
+            dataset = pd.concat([dataset, st_dataset[columns_of_interest]])
+
+    # reset index of dataframes
+    dataset.reset_index(drop=True, inplace=True)
+
+    return PlottingDataset(dataset)
 
 # has the labels set to 0 because that makes it easier to work with the frameworks written for classification
 # the idea is that they filter the attribution by the chosen class, but as we only have one output we always choose y=0

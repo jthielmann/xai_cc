@@ -84,7 +84,7 @@ def valid_epoch(model, device, dataloader, criterion, error_metric):
             labels = labels.float()
             labels = labels.to(device)
             g_output = model(images)
-            loss = criterion(g_output.squeeze(), labels[:, 0])
+            loss = criterion(g_output, labels)
             valid_loss += loss.item()
 
             corr = error_metric(g_output, labels)
@@ -229,7 +229,7 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
         history['train_loss'].append(train_loss)
         history['train_corr'].append(train_corr)
         if (epoch + 1) % 10 == 0:
-            model_save = model_save_dir + str(model.__class__.__name__) + "_ep_" + str(epoch) + ".pt"
+            model_save = model_save_dir + "/" + model.model_type + "_ep_" + str(epoch) + ".pt"
             torch.save(model.state_dict(), model_save)
 
         # Save training log into text file
