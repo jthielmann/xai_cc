@@ -229,7 +229,7 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
         history['train_loss'].append(train_loss)
         history['train_corr'].append(train_corr)
         if (epoch + 1) % 10 == 0:
-            model_save = model_save_dir + "/" + model.model_type + "_ep_" + str(epoch) + ".pt"
+            model_save = model_save_dir + "/ep_" + str(epoch) + ".pt"
             torch.save(model.state_dict(), model_save)
 
         # Save training log into text file

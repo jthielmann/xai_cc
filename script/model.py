@@ -288,7 +288,7 @@ def get_ae():
 
 
 class general_model(nn.Module):
-    def __init__(self, model_type, gene_list, random_weights=False, dropout=True, pretrained_output_dim=1000):
+    def __init__(self, model_type, gene_list, random_weights=False, dropout=True, pretrained_out_dim=1000):
         super(general_model, self).__init__()
         if random_weights == True:
             weights=None
@@ -305,15 +305,15 @@ class general_model(nn.Module):
             exit(1)
         for gene in gene_list:
             if dropout:
-                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_output_dim, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout()))
+                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout()))
             else:
-                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_output_dim, 200),nn.ReLU(), nn.Linear(200, 1)))
+                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, 200),nn.ReLU(), nn.Linear(200, 1)))
 
         self.gene_list = gene_list
         self.model_type = model_type
         self.random_weights = random_weights
         self.dropout = dropout
-        self.pretrained_out_dim = pretrained_output_dim
+        self.pretrained_out_dim = pretrained_out_dim
         self.ae = get_ae()
 
     def forward(self, x):
@@ -327,22 +327,31 @@ class general_model(nn.Module):
 
     def save(self, json_path):
         with open(json_path, "w") as f:
-            json_dict = {"model_type":self.model_type, "random_weights":self.random_weights, 'gene_list':self.gene_list,
-                         "dropout": self.dropout, "pretrained_output_dim":self.pretrained_out_dim}
+            json_dict = {"model_type": self.model_type, "random_weights": self.random_weights, 'gene_list': self.gene_list,
+                         "dropout": self.dropout, "pretrained_output_dim": self.pretrained_out_dim}
             json.dump(json_dict, f)
 
 
-def load_model(model_dir, model_name, json_name="settings.json"):
+def load_model(model_dir, model_name, json_name="settings.json", log_json=False, squelch=False):
     with open(model_dir + json_name) as f:
         d = json.load(f)
+        if log_json:
+            print(d)
         model_type = d["model_type"]
-        gene_list = d["gene_list"]
+        if "genes" in d:
+            gene_list = d["genes"]
+        else:
+            gene_list = [d["gene"]]
         random_weights = d["random_weights"]
         dropout = d["dropout"]
-        pretrained_output_dim = d["pretrained_output_dim"]
+        pretrained_out_dim = int(d["pretrained_out_dim"])
 
-    model = general_model(model_type, gene_list, random_weights, dropout, pretrained_output_dim)
-    print(model.load_state_dict(torch.load(model_dir + model_name, map_location=torch.device('cpu'), weights_only=False)))
+    model = general_model(model_type, gene_list, random_weights, dropout, pretrained_out_dim)
+    if squelch:
+        model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
+    else:
+        print(model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False)))
+    model.model_path = model_name
     return model
 
 
@@ -508,6 +517,7 @@ def get_remote_vggs_and_path(device="cpu", log_model_name=False, model_id=None):
     else:
         r = raw[model_id]
         return r[1](r[0]).to(device).eval(), r[0]
+
 
 def get_remote_models_and_path(device="cpu", log_model_name=False, model_id=None):
     raw = []

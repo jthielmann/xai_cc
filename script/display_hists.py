@@ -1,0 +1,90 @@
+import torch
+import os
+
+import torchmetrics
+
+from script.plot_and_print import plot_data_scatter
+from script.process_csv import generate_results, merge_data, process_spatial_data, ann_data_to_csv
+import pandas as pd
+from model import load_model
+import json
+from data_loader import get_patient_loader
+import matplotlib.pyplot as plt
+import scipy
+import PIL.Image as Image
+
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+data_dir_train = "../Training_Data/"
+data_dir_test = "../Test_Data/"
+patients_train = [os.path.basename(f) for f in os.scandir(data_dir_train) if f.is_dir()]
+patients_test = [os.path.basename(f) for f in os.scandir(data_dir_test) if f.is_dir()][1:]
+print(patients_train)
+print(patients_test)
+
+model_dir = "../models/"
+skip = 0
+model_dir_path = []
+# gather new models only
+
+model_list_file_name = "new_models.csv"
+update_model_list = False
+if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
+    for model_type_dir in os.listdir(model_dir):
+        sub_path = model_dir + model_type_dir
+        if model_type_dir == ".DS_Store" or model_type_dir == "new" or os.path.isfile(sub_path):
+            continue
+        for model_leaf_dir in os.listdir(sub_path):
+            sub_path = model_dir + model_type_dir + "/" + model_leaf_dir
+            if model_type_dir == ".DS_Store" or os.path.isfile(sub_path):
+                continue
+
+            with open(sub_path + "/settings.json") as settings_json:
+                d = json.load(settings_json)
+                model_type = d["model_type"]
+
+                if "genes" not in d:
+                    continue
+
+            files = os.listdir(sub_path)
+            for f in files:
+                if f[-3:] == ".pt" and f.find("ep_") != -1:
+                    src = sub_path + "/" + f
+                    dst = sub_path + "/" + f[f.find("ep_"):]
+                    os.rename(src, dst)
+                    if f[f.find("ep_"):] == "ep_29.pt":
+                        model_dir_path.append((sub_path + "/", dst))
+
+    frame = pd.DataFrame(model_dir_path, columns=["model_dir", "model_path"])
+    frame.to_csv(model_dir + model_list_file_name, index=False)
+else:
+    frame = pd.read_csv(model_dir + model_list_file_name)
+print(frame.head())
+
+"""row = frame.iloc[0]
+img = plt.imread(row["model_dir"] + "/scatter.png")
+imgplot = plt.imshow(img)
+
+plt.axis('off')
+plt.show()"""
+def plot_hist_comparison(img_paths, width=4, subplot_size=40):
+    print(img_paths[0])
+    plt.figure(figsize=(100,100))
+
+
+    height = int((len(img_paths)) / width + 0.999)
+    f, ax = plt.subplots(height,width)
+    f.set_figheight(subplot_size)
+    f.set_figwidth(subplot_size)
+    for i in range(len(img_paths)):
+        img = plt.imread(img_paths[i])
+        plt.axis('off')
+        ax[int(i/width), i%width].imshow(img)
+        break
+
+    plt.show()
+
+plot_hist_comparison(frame["model_dir"] + "/scatter.png")
+
+
+
+

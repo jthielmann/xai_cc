@@ -55,8 +55,9 @@ layer_map = {layer_name: ChannelConcept()}
 
 out_path = "../crp_out/tmp"
 already_calculated = os.path.exists(out_path)
-preprocessing = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=preprocessing, path=out_path)
+preprocessing = T.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])  # from dataloader
+#preprocessing = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # from tutorial
+fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=None, path=out_path)
 if not already_calculated:
     fv.run(composite, 0, len(dataset) // 1, batch_size=32)
 else:
@@ -135,8 +136,7 @@ for i, X in enumerate([X_attr, X_act]):
     axes[i].plot(x[0], y[0], 'ko', markersize=5, label="test image")
     axes[i].legend()
 plt.tight_layout()
-plt.savefig(out_path + "/umap.png")
-fig.show()
+
 
 from sklearn.mixture import GaussianMixture
 
@@ -150,6 +150,8 @@ for i, (X, emb) in enumerate([(attr, embedding_attr), (act, embedding_act)]):
         axes[i].text(prot[0], prot[1], k, fontsize=4, color="white", ha="center", va="center")
     axes[i].legend()
 
+plt.savefig(out_path + "/umap_test.png")
+fig.show()
 display(fig)
 
 proto_attr = prototypes[0]

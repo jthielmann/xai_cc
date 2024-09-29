@@ -102,8 +102,14 @@ class Subset(torch.utils.data.Dataset):
         return len(self.subset)
 
 
-def get_patient_loader(data_dir, patient, gene="RUBCNL"):
-    columns_of_interest = ["tile", gene]
+def get_patient_loader(data_dir, patient, genes=None):
+
+    if genes is None:
+        columns_of_interest = ["tile", "RUBCNL"]
+    else:
+        columns_of_interest = ["tile"]
+        for gene in genes:
+            columns_of_interest.append(gene)
     train_st_dataset = pd.DataFrame(columns=columns_of_interest)
 
     # generate training dataframe with all training samples
