@@ -1,11 +1,16 @@
 import torch
 import os
+
+import torchmetrics
+
 import pandas as pd
-import json
-import matplotlib.pyplot as plt
 from model import load_model
+import json
+from data_loader import get_patient_loader
+import matplotlib.pyplot as plt
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+print(device)
 data_dir_train = "../Training_Data/"
 data_dir_test = "../Test_Data/"
 patients_train = [os.path.basename(f) for f in os.scandir(data_dir_train) if f.is_dir()]
@@ -34,6 +39,7 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
                 d = json.load(settings_json)
                 model_type = d["model_type"]
 
+                # skip old models
                 if "genes" not in d:
                     continue
 
@@ -50,74 +56,47 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
     frame.to_csv(model_dir + model_list_file_name, index=False)
 else:
     frame = pd.read_csv(model_dir + model_list_file_name)
+#print(frame.head())
 
-"""row = frame.iloc[0]
-img = plt.imread(row["model_dir"] + "/scatter.png")
-imgplot = plt.imshow(img)
+for idx, row in frame.iterrows():
+    results_filename = row["model_dir"] + os.path.basename(row["model_path"][:-3]) + "_results.csv"
+    """    if results_filename.find("resnet50/MKI67_random/") == -1:
+        continue"""
+    print(results_filename)
+    token_name = row["model_dir"] + "generation_token"
+    if os.path.exists(results_filename) and not os.path.exists(token_name):
+        os.remove(results_filename)
+    if os.path.exists(token_name):
+        continue
 
-plt.axis('off')
-plt.show()"""
+    open(token_name, "a").close()
+    model = load_model(row["model_dir"], row["model_path"], squelch=True).to(device).eval()
 
-
-def plot_hist_comparison(img_paths, width=4, subplot_size=10, gene=None):
-
-    height = int((len(img_paths)) / width + 0.999)
-    f, ax = plt.subplots(height,width, figsize=(50,50), dpi=300)
-    f.set_figheight(subplot_size * int(height / width + 0.999))
-    f.set_figwidth(subplot_size)
-    for i in range(len(img_paths)):
-        if not os.path.exists(img_paths[i]):
-            print("missing: ", img_paths[i])
-            continue
-        img = plt.imread(img_paths[i])
-        x = int(i/width)
-        y = i%width
-        if height < 2:
-            ax[y].imshow(img)
-            ax[y].axis('off')
-        else:
-            ax[x, y].imshow(img)
-            ax[x, y].axis('off')
-    plt.subplots_adjust(wspace=0, hspace=0)
-    if gene:
-        plt.savefig("../" + gene + "_hists.png")
-    else:
-        plt.savefig("../hists.png")
-
-    plt.clf()
-
-
-path = "../models/resnet50/VWF_random_freeze/scatter.png"
-#array = [path, path, path, path,path]
-#plot_hist_comparison(array)
-genes = []
-image_paths = []
-for _, row in frame.iterrows():
-    model_dir = row["model_dir"]
-    model_path = row["model_path"]
-    model = load_model(model_dir, model_path, squelch=True)
+    columns = ["path"]
     for gene in model.gene_list:
-        file_name = model_dir + "/" + gene + "_scatter.png"
-        try:
-            gene_idx = genes.index(gene)
-        except ValueError:
-            gene_idx = -1
-        if gene_idx < 0:
-            genes.append(gene)
-            image_paths.append([file_name])
-        else:
-            image_paths[gene_idx].append(file_name)
+        columns.append("labels_" + gene)
+    for gene in model.gene_list:
+        columns.append("out_" + gene)
+    for patient in patients_train:
+        with torch.no_grad():
+            df = pd.DataFrame(columns=columns)
+            loader = get_patient_loader(data_dir_train, patient, model.gene_list)
+            for img, labels, path in loader:
+                out = model(img.unsqueeze(0).to(device))
+                out_row = [path]
+                for label in labels:
+                    out_row.append(label)
+                for out_item in out:
+                    if out_item.shape == torch.Size([1]):
+                        out_row.append(out_item.item())
+                    else:
+                        for t in out_item:
+                            out_row.append(t.item())
+                df.loc[len(df)] = out_row
+            if not os.path.isfile(results_filename):
+                df.to_csv(results_filename, header=columns)
+            else: # else it exists so append without writing the header
+                df.to_csv(results_filename, mode='a', header=False)
 
-for i in range(len(genes)):
-    plot_hist_comparison(image_paths[i], gene=genes[i])
 
-
-
-"""for path in frame["model_dir"] + "/scatter.png":
-    print(path)
-    continue
-    plt.imshow(plt.imread(path))
-    plt.show()
-"""
-
-
+print("done")
