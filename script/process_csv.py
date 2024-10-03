@@ -34,10 +34,10 @@ def process_spatial_data(patients, data_dir):
         spatial_matrix.to_csv(filename, index=False)
 
 
-def generate_results(model, device, data_dir, patient=None, gene="RUBCNL", results_filename="results.csv"):
+def generate_results(model, device, data_dir, patient, genes, results_filename="results.csv"):
     model.eval()
     print("generating results...")
-    loader = get_patient_loader(data_dir, patient=patient, gene=gene)
+    loader = get_patient_loader(data_dir, patient=patient, genes=genes)
     filename = data_dir + patient + "/Preprocessed_STDataset/" + results_filename
     if os.path.exists(filename):
         os.remove(filename)

@@ -16,13 +16,16 @@ def plot_data_mapped(data_dir, patient, category="diff"):
     plt.show()
 
 
-def plot_data_scatter(data_dir, patient, gene):
+def plot_data_scatter(data_dir, patient, genes):
     base_path = data_dir+patient+"/Preprocessed_STDataset/"
     merge = pd.read_csv(base_path + "merge.csv")
     plt.scatter(merge['output'], merge['labels'])
     plt.text(x=-2, y=3 , s="pearson corr: " + str(round(scipy.stats.pearsonr(merge['output'], merge['labels'])[0], 2)))
     plt.plot( [-2,3],[-2,3], color='red' )
-    plt.title("labels vs output for " + patient + " for gene " + gene)
+    title = "labels vs output for " + patient + " for genes"
+    for gene in genes:
+        title += gene 
+    plt.title(title)
     plt.xlabel('output')
     plt.ylabel('target')
     plt.show()

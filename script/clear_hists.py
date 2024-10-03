@@ -1,9 +1,13 @@
 import torch
 import os
-import pandas as pd
-import json
-import matplotlib.pyplot as plt
 
+import torchmetrics
+
+import pandas as pd
+from model import load_model
+import json
+from data_loader import get_patient_loader
+import matplotlib.pyplot as plt
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 data_dir_train = "../Training_Data/"
 data_dir_test = "../Test_Data/"
@@ -50,39 +54,19 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
 else:
     frame = pd.read_csv(model_dir + model_list_file_name)
 
-"""row = frame.iloc[0]
-img = plt.imread(row["model_dir"] + "/scatter.png")
-imgplot = plt.imshow(img)
+for idx, row in frame.iterrows():
+    results_filename = row["model_dir"] + "/" + os.path.basename(row["model_path"][:-3]) + "_results.csv"
+    if os.path.exists(results_filename):
+        print("removing", results_filename)
+        os.remove(results_filename)
+    token_name = row["model_dir"] + "generation_token"
+    if os.path.exists(token_name):
+        print("removing", token_name)
+        os.remove(token_name)
 
-plt.axis('off')
-plt.show()"""
-def plot_hist_comparison(img_paths, width=4, subplot_size=50):
-    plt.figure(figsize=(100,100))
-
-    height = int((len(img_paths)) / width + 0.999)
-    f, ax = plt.subplots(height,width, dpi=120)
-    f.set_figheight(subplot_size)
-    f.set_figwidth(subplot_size)
-    for i in range(len(img_paths)):
-        print(i)
-        if not os.path.exists(img_paths[i]):
-            print("missing: ", img_paths[i])
-            continue
-        img = plt.imread(img_paths[i])
-        ax[int(i/width), i%width].imshow(img)
-        ax[int(i/width), i%width].axis('off')
-
-    plt.show()
-
-path = "../models/resnet50/VWF_random_freeze/scatter.png"
-#array = [path, path, path, path,path]
-#plot_hist_comparison(array)
-plot_hist_comparison(frame["model_dir"] + "/scatter.png")
-"""for path in frame["model_dir"] + "/scatter.png":
-    print(path)
-    continue
-    plt.imshow(plt.imread(path))
-    plt.show()
-"""
+    scatter_name = row["model_dir"] + "scatter.png"
+    if os.path.exists(scatter_name):
+        print("removing", scatter_name)
+        os.remove(scatter_name)
 
 
