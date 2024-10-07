@@ -13,15 +13,17 @@ learning_rate = 0.0005
 
 #gene="MKI67"
 #gene="RUBCNL"
-gene_lists = [["VWF"]]
-#gene_lists = [["FLT1", "VWF", "PECAM1", "PLVAP", "DES"], ["RUBCNL"], ["MKI67"], ["VWF"]]
+#gene_lists = [["VWF"]]
+gene_lists = [["FLT1", "VWF", "PECAM1", "PLVAP", "DES"], ["RUBCNL"], ["MKI67"]]
+model_types = ["resnet18d", "resnet50d"]
+epochs = 40
+
 for genes in gene_lists:
     dir_name_base = "/" + genes[0]
     for gene in genes[1:]:
         dir_name_base += "_" + gene
 
-    #model_types = ["vgg13", "resnet18", "resnet50"]
-    model_types = ["resnet18", "resnet50"]
+
     random_weights_bool = [True, False]
     dropout_bool = [True, False]
     freeze_bool = [True, False]
@@ -48,8 +50,6 @@ for genes in gene_lists:
                     if os.path.exists(dir_name):
                         print(dir_name, "already exists, continue..")
                         continue
-
-
                     os.makedirs(dir_name, exist_ok=True)
 
                     model = general_model(model_type, genes, use_random_weights, use_dropout, 1000)
@@ -63,7 +63,7 @@ for genes in gene_lists:
                     training_multi(model=model,
                                    data_dir='../Training_Data/',
                                    model_save_dir=dir_name,
-                                   epochs=40,
+                                   epochs=epochs,
                                    loss_fn=nn.MSELoss(),
                                    optimizer=optim.AdamW(params, weight_decay=0.005),
                                    learning_rate=learning_rate,

@@ -19,13 +19,14 @@ print(patients_train)
 print(patients_test)
 
 model_dir = "../models/"
-skip = 0
 model_dir_path = []
 # gather new models only
 
 model_list_file_name = "new_models.csv"
-update_model_list = False
-if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
+update_model_list = True
+
+
+def generate_model_list(model_dir):
     for model_type_dir in os.listdir(model_dir):
         sub_path = model_dir + model_type_dir
         if model_type_dir == ".DS_Store" or model_type_dir == "new" or os.path.isfile(sub_path):
@@ -51,52 +52,62 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
                     os.rename(src, dst)
                     if f[f.find("ep_"):] == "ep_29.pt":
                         model_dir_path.append((sub_path + "/", dst))
-
     frame = pd.DataFrame(model_dir_path, columns=["model_dir", "model_path"])
     frame.to_csv(model_dir + model_list_file_name, index=False)
+    return frame
+
+
+if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
+    frame = generate_model_list(model_dir)
 else:
     frame = pd.read_csv(model_dir + model_list_file_name)
 #print(frame.head())
 
-for idx, row in frame.iterrows():
-    results_filename = row["model_dir"] + os.path.basename(row["model_path"][:-3]) + "_results.csv"
-    """    if results_filename.find("resnet50/MKI67_random/") == -1:
-        continue"""
-    print(results_filename)
-    token_name = row["model_dir"] + "generation_token"
-    if os.path.exists(results_filename) and not os.path.exists(token_name):
-        os.remove(results_filename)
-    if os.path.exists(token_name):
-        continue
 
-    open(token_name, "a").close()
-    model = load_model(row["model_dir"], row["model_path"], squelch=True).to(device).eval()
+def generate_results(model_frame, patient_dir, data_dir, out_file_appendix=""):
+    for idx, row in model_frame.iterrows():
+        results_filename = row["model_dir"] + os.path.basename(row["model_path"][:-3]) + out_file_appendix + "_results.csv"
+        """    if results_filename.find("resnet50/MKI67_random/") == -1:
+            continue"""
+        print(results_filename)
+        token_name = row["model_dir"] + "generation_token" + out_file_appendix
+        if os.path.exists(results_filename) and not os.path.exists(token_name):
+            os.remove(results_filename)
+        if os.path.exists(token_name):
+            continue
 
-    columns = ["path"]
-    for gene in model.gene_list:
-        columns.append("labels_" + gene)
-    for gene in model.gene_list:
-        columns.append("out_" + gene)
-    for patient in patients_train:
-        with torch.no_grad():
-            df = pd.DataFrame(columns=columns)
-            loader = get_patient_loader(data_dir_train, patient, model.gene_list)
-            for img, labels, path in loader:
-                out = model(img.unsqueeze(0).to(device))
-                out_row = [path]
-                for label in labels:
-                    out_row.append(label)
-                for out_item in out:
-                    if out_item.shape == torch.Size([1]):
-                        out_row.append(out_item.item())
-                    else:
-                        for t in out_item:
-                            out_row.append(t.item())
-                df.loc[len(df)] = out_row
-            if not os.path.isfile(results_filename):
-                df.to_csv(results_filename, header=columns)
-            else: # else it exists so append without writing the header
-                df.to_csv(results_filename, mode='a', header=False)
+        open(token_name, "a").close()
+        model = load_model(row["model_dir"], row["model_path"], squelch=True).to(device).eval()
+
+        columns = ["path"]
+        for gene in model.gene_list:
+            columns.append("labels_" + gene)
+        for gene in model.gene_list:
+            columns.append("out_" + gene)
+        for patient in patient_dir:
+            with torch.no_grad():
+                df = pd.DataFrame(columns=columns)
+                loader = get_patient_loader(data_dir, patient, model.gene_list)
+                for img, labels, path in loader:
+                    out = model(img.unsqueeze(0).to(device))
+                    out_row = [path]
+                    for label in labels:
+                        out_row.append(label)
+                    for out_item in out:
+                        if out_item.shape == torch.Size([1]):
+                            out_row.append(out_item.item())
+                        else:
+                            for t in out_item:
+                                out_row.append(t.item())
+                    df.loc[len(df)] = out_row
+                if not os.path.isfile(results_filename):
+                    df.to_csv(results_filename, header=columns)
+                else: # else it exists so append without writing the header
+                    df.to_csv(results_filename, mode='a', header=False)
+
+
+#generate_results(frame, patients_train,data_dir_train)
+generate_results(frame, patients_test, data_dir_test, "_val")
 
 
 print("done")

@@ -4,6 +4,7 @@ import torch
 import torchvision
 from torchvision import models
 import json
+import timm
 
 
 class MyNet(nn.Module):
@@ -283,15 +284,48 @@ def get_vgg13_dropout(path=None):
     return vgg13
 
 
+class auto_encoder(nn.Module):
+    def __init__(self, layers, middle_layer_dim, conv=True):
+        super(auto_encoder, self).__init__()
+        self.encoder = []
+        self.decoder = []
+        outer_layer_dim = 2^layers * middle_layer_dim
+        self.encoder.append(nn.Conv2d(1, outer_layer_dim, 3, stride=2, padding=1))
+        self.encoder.append(nn.ReLU(True))
+        for i in range(layers)[1:]:
+            self.encoder.append(nn.Conv2d(outer_layer_dim, outer_layer_dim, 3, stride=2, padding=1))
+            self.encoder.append(nn.ReLU(True))
+
+
+
+        self.middle_layer_dim = middle_layer_dim
+
+    def forward(self, x):
+        if self.ae:
+            x = self.ae(x)
+        x = self.pretrained(x)
+        out = []
+        for gene in self.gene_list:
+            out.append(getattr(self, gene)(x))
+        return torch.cat(out, dim=1)
+
+    def save(self, json_path):
+        with open(json_path, "w") as f:
+            json_dict = {"model_type": self.model_type, "random_weights": self.random_weights, 'gene_list': self.gene_list,
+                         "dropout": self.dropout, "pretrained_output_dim": self.pretrained_out_dim}
+            json.dump(json_dict, f)
+
+
 def get_ae():
     return None
+
 
 
 class general_model(nn.Module):
     def __init__(self, model_type, gene_list, random_weights=False, dropout=True, pretrained_out_dim=1000):
         super(general_model, self).__init__()
-        if random_weights == True:
-            weights=None
+        if random_weights:
+            weights = None
         else:
             weights='IMAGENET1K_V1'
         if model_type == "vgg13":
@@ -300,6 +334,10 @@ class general_model(nn.Module):
             self.pretrained = models.resnet18(weights=weights)
         elif model_type == "resnet50":
             self.pretrained = models.resnet50(weights=weights)
+        elif model_type == "resnet50d":
+            self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
+        elif model_type == "resnet18d":
+            self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
         else:
             print("model type", model_type, "not implemented")
             exit(1)
