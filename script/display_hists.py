@@ -59,7 +59,7 @@ plt.axis('off')
 plt.show()"""
 
 
-def plot_hist_comparison(img_paths, width=4, subplot_size=10, gene=None):
+def plot_hist_comparison(img_paths, width=4, subplot_size=10, gene=None, appendix=""):
 
     height = int((len(img_paths)) / width + 0.999)
     f, ax = plt.subplots(height,width, figsize=(50,50), dpi=300)
@@ -80,9 +80,9 @@ def plot_hist_comparison(img_paths, width=4, subplot_size=10, gene=None):
             ax[x, y].axis('off')
     plt.subplots_adjust(wspace=0, hspace=0)
     if gene:
-        plt.savefig("../" + gene + "_hists.png")
+        plt.savefig("../" + gene + appendix + "_hists.png")
     else:
-        plt.savefig("../hists.png")
+        plt.savefig("../hists" + appendix + ".png")
 
     plt.clf()
 
@@ -91,25 +91,33 @@ path = "../models/resnet50/VWF_random_freeze/scatter.png"
 #array = [path, path, path, path,path]
 #plot_hist_comparison(array)
 genes = []
-image_paths = []
+image_paths_train = []
+image_paths_val = []
+
 for _, row in frame.iterrows():
     model_dir = row["model_dir"]
     model_path = row["model_path"]
     model = load_model(model_dir, model_path, squelch=True)
     for gene in model.gene_list:
-        file_name = model_dir + "/" + gene + "_scatter.png"
+        file_name_train = model_dir + "/" + gene + "_train_scatter.png"
+        file_name_val = model_dir + "/" + gene + "_val_scatter.png"
+
+
         try:
             gene_idx = genes.index(gene)
         except ValueError:
             gene_idx = -1
         if gene_idx < 0:
             genes.append(gene)
-            image_paths.append([file_name])
+            image_paths_train.append([file_name_train])
+            image_paths_val.append([file_name_val])
         else:
-            image_paths[gene_idx].append(file_name)
+            image_paths_train[gene_idx].append(file_name_train)
+            image_paths_val[gene_idx].append(file_name_val)
 
 for i in range(len(genes)):
-    plot_hist_comparison(image_paths[i], gene=genes[i])
+    plot_hist_comparison(image_paths_train[i], gene=genes[i], appendix="_train")
+    plot_hist_comparison(image_paths_val[i], gene=genes[i], appendix="_val")
 
 
 

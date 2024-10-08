@@ -127,11 +127,23 @@ def get_patient_loader(data_dir, patient, genes=None):
     return loaded_train_dataset
 
 
-def get_data_loaders(data_dir, batch_size, genes, train_samples=None, val_samples=None):
-    if True:
-        train_samples = ["p007", "p014", "p016", "p020", "p025"]
-        val_samples = ["p009", "p013"]  # 8 21 26 page 42
-    elif train_samples is None or val_samples is None:
+def get_train_samples():
+    return ["p007", "p014", "p016", "p020", "p025"]
+
+
+def get_val_samples():
+    return ["p009", "p013"]
+
+
+def get_test_samples():
+    return ["p008", "p021", "p026"]
+
+
+def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True):
+    if use_default_samples:
+        train_samples = get_train_samples()
+        val_samples = get_val_samples()
+    else:
         print("setting train and val samples automatically")
         patients = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
         train_sample_count = int(0.5 + len(patients) * 0.8)  # 80% of dataset is train, +0.5 means we round

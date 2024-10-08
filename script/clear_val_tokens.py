@@ -50,43 +50,13 @@ else:
     frame = pd.read_csv(model_dir + model_list_file_name)
 
 for idx, row in frame.iterrows():
-    results_filename = row["model_dir"] + "/" + os.path.basename(row["model_path"][:-3]) + "_results.csv"
-    if os.path.exists(results_filename):
-        print("removing", results_filename)
-        os.remove(results_filename)
 
-    results_filename_train = row["model_dir"] + "/" + os.path.basename(row["model_path"][:-3]) + "_train_results.csv"
-    if os.path.exists(results_filename_train):
-        print("removing", results_filename_train)
-        os.remove(results_filename_train)
-
-    results_filename_val = row["model_dir"] + "/" + os.path.basename(row["model_path"][:-3]) + "_val_results.csv"
-    if os.path.exists(results_filename_val):
-        print("removing", results_filename_val)
-        os.remove(results_filename_val)
-
-    results_filename_test = row["model_dir"] + "/" + os.path.basename(row["model_path"][:-3]) + "_test_results.csv"
-    if os.path.exists(results_filename_test):
-        print("removing", results_filename_test)
-        os.remove(results_filename_test)
-
-    token_name = row["model_dir"] + "generation_token"
+    token_name = row["model_dir"] + "generation_token_val"
     if os.path.exists(token_name):
         print("removing", token_name)
         os.remove(token_name)
-    model = load_model(row["model_dir"], row["model_path"], squelch=True).to(device).eval()
-    scatter_name = row["model_dir"] + "scatter.png"
-    if os.path.exists(scatter_name):
-        print("removing", scatter_name)
-        os.remove(scatter_name)
-    hist_name = row["model_dir"] + "hist_token"
-    if os.path.exists(hist_name):
-        print("removing", hist_name)
-        os.remove(hist_name)
-    for gene in model.gene_list:
-        scatter_name = row["model_dir"] + gene + "_scatter.png"
-        if os.path.exists(scatter_name):
-            print("removing", scatter_name)
-            os.remove(scatter_name)
-
+    results_filename = row["model_dir"] + "ep_29_val_results.csv"
+    if os.path.exists(results_filename):
+        print("removing", results_filename)
+        os.remove(results_filename)
 
