@@ -1,6 +1,6 @@
 import torch
 import os
-
+import faulthandler; faulthandler.enable()
 import torchmetrics
 
 import pandas as pd
@@ -31,6 +31,7 @@ update_model_list = True
 
 def generate_model_list(model_dir):
     for model_type_dir in os.listdir(model_dir):
+        print(model_type_dir)
         sub_path = model_dir + model_type_dir
         if model_type_dir == ".DS_Store" or model_type_dir == "new" or os.path.isfile(sub_path):
             continue
@@ -72,8 +73,6 @@ def generate_results(model_frame, patients, data_dir, out_file_appendix=""):
         """    if results_filename.find("resnet50/MKI67_random/") == -1:
             continue"""
         print(results_filename)
-        print(patients)
-        print(data_dir)
 
         token_name = row["model_dir"] + "generation_token" + out_file_appendix
         if os.path.exists(results_filename) and not os.path.exists(token_name):
@@ -92,7 +91,7 @@ def generate_results(model_frame, patients, data_dir, out_file_appendix=""):
 
         for patient in patients:
             columns = columns_base.copy()
-            columns.append(patient)
+            columns.append("patient")
 
             with torch.no_grad():
                 df = pd.DataFrame(columns=columns)
@@ -117,7 +116,7 @@ def generate_results(model_frame, patients, data_dir, out_file_appendix=""):
                     df.to_csv(results_filename, mode='a', header=False)
 
 
-#generate_results(frame, patients_train, data_dir_train, "_train")
+generate_results(frame, patients_train, data_dir_train, "_train")
 generate_results(frame, patients_val, data_dir_train, "_val")
 #generate_results(frame, patients_test, data_dir_test, "_test")
 

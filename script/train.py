@@ -185,7 +185,7 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
     # Defining gradient function
     with open(model_save_dir + "/settings.json", "w") as file:
         json_dict = {'model_type': model.model_type, 'random_weights': model.random_weights,
-                     'dropout': model.dropout, 'pretrained_out_dim': str(model.pretrained_out_dim),
+                     'dropout': model.dropout, 'drop_out_rate': model.dropout_value, 'pretrained_out_dim': str(model.pretrained_out_dim),
                      'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'genes': genes,
                      'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device,
                      'freeze_pretrained': freeze_pretrained}

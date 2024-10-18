@@ -3,6 +3,7 @@ import pandas as pd
 import scipy
 from PIL import Image
 
+
 def plot_data_mapped(data_dir, patient, category="diff"):
     base_path = data_dir + patient + "/Preprocessed_STDataset/"
     merge = pd.read_csv(base_path + "merge.csv")

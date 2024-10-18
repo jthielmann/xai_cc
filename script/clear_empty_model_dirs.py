@@ -39,5 +39,13 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
             #print(files)
             if "ep_9.pt" not in files and "settings.json" in files:
                 print("rm -rf", sub_path)
-                #os.rmdir(sub_path)
-
+                os.rmdir(sub_path)
+                continue
+            token_name = "generation_token_train"
+            if "ep_29_train_results.csv" not in files and token_name in files:
+                print("removing", sub_path + "/" + token_name)
+                os.remove(sub_path + "/" + token_name)
+            token_name = "generation_token_val"
+            if "ep_29_val_results.csv" not in files and token_name in files:
+                print("removing", sub_path + "/" + token_name)
+                os.remove(sub_path + "/" + token_name)

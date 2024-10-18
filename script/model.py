@@ -316,13 +316,26 @@ class auto_encoder(nn.Module):
             json.dump(json_dict, f)
 
 
+"""class ae_res18(nn.Module):
+    def __init__(self):
+        super(self.__class__, self).__init__()
+        self.encoder = models.resnet18()
+        self.decoder = []
+        for name, param in self.encoder.named_parameters():
+            print(name, param.shape)
+            self.decoder.append(param)
+        print(len(self.decoder))
+
+ae_res18()
+exit(0)"""
+
+
 def get_ae():
     return None
 
 
-
 class general_model(nn.Module):
-    def __init__(self, model_type, gene_list, random_weights=False, dropout=True, pretrained_out_dim=1000):
+    def __init__(self, model_type, gene_list, random_weights=False, dropout=False, dropout_value=0.5, pretrained_out_dim=1000):
         super(general_model, self).__init__()
         if random_weights:
             weights = None
@@ -343,7 +356,7 @@ class general_model(nn.Module):
             exit(1)
         for gene in gene_list:
             if dropout:
-                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout()))
+                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, 200), nn.Dropout(dropout_value), nn.ReLU(), nn.Linear(200, 1), nn.Dropout(dropout_value)))
             else:
                 setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, 200),nn.ReLU(), nn.Linear(200, 1)))
 
@@ -353,6 +366,7 @@ class general_model(nn.Module):
         self.dropout = dropout
         self.pretrained_out_dim = pretrained_out_dim
         self.ae = get_ae()
+        self.dropout_value = dropout_value
 
     def forward(self, x):
         if self.ae:
@@ -382,9 +396,13 @@ def load_model(model_dir, model_name, json_name="settings.json", log_json=False,
             gene_list = [d["gene"]]
         random_weights = d["random_weights"]
         dropout = d["dropout"]
+        if "dropout_value" in d:
+            dropout_value = d["dropout_value"]
+        else:
+            dropout_value = 0.5
         pretrained_out_dim = int(d["pretrained_out_dim"])
 
-    model = general_model(model_type, gene_list, random_weights, dropout, pretrained_out_dim)
+    model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value,pretrained_out_dim=pretrained_out_dim)
     if squelch:
         model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
     else:
