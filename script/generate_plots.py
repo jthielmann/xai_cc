@@ -213,14 +213,16 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
     frame = update_model_list(model_dir, model_list_file_name)
 else:
     frame = pd.read_csv(model_dir + model_list_file_name)
-
+"""
 generate_tile_maps(data_dir_train, patients_train, zip(frame["model_dir"].tolist(), frame["model_path"].tolist()), "ep_29_train_results.csv")
 generate_tile_maps(data_dir_train, patients_val, zip(frame["model_dir"].tolist(), frame["model_path"].tolist()), "ep_29_val_results.csv")
 exit(0)
-
+"""
 
 
 genes, image_paths_train, image_paths_val = gather_genes_and_paths(frame)
+exit(0)
+
 
 for i in range(len(genes)):
     plot_hist_comparison(image_paths_train[i], gene=genes[i], appendix="_train")
