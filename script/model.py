@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch.nn.functional
 import torch
 import torchvision
+from pandas.core.dtypes.common import ensure_object
 from torchvision import models
 import json
 import timm
@@ -284,50 +285,253 @@ def get_vgg13_dropout(path=None):
     return vgg13
 
 
-class auto_encoder(nn.Module):
-    def __init__(self, layers, middle_layer_dim, conv=True):
-        super(auto_encoder, self).__init__()
-        self.encoder = []
-        self.decoder = []
-        outer_layer_dim = 2^layers * middle_layer_dim
-        self.encoder.append(nn.Conv2d(1, outer_layer_dim, 3, stride=2, padding=1))
-        self.encoder.append(nn.ReLU(True))
-        for i in range(layers)[1:]:
-            self.encoder.append(nn.Conv2d(outer_layer_dim, outer_layer_dim, 3, stride=2, padding=1))
-            self.encoder.append(nn.ReLU(True))
+import torch
+import torch.nn as nn
 
-
-
-        self.middle_layer_dim = middle_layer_dim
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride = 1, downsample = None):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Sequential(
+                        nn.Conv2d(in_channels, out_channels, kernel_size = 3, stride = stride, padding = 1),
+                        nn.BatchNorm2d(out_channels),
+                        nn.ReLU())
+        self.conv2 = nn.Sequential(
+                        nn.Conv2d(out_channels, out_channels, kernel_size = 3, stride = 1, padding = 1),
+                        nn.BatchNorm2d(out_channels))
+        self.downsample = downsample
+        self.relu = nn.ReLU()
+        self.out_channels = out_channels
 
     def forward(self, x):
-        if self.ae:
-            x = self.ae(x)
-        x = self.pretrained(x)
-        out = []
-        for gene in self.gene_list:
-            out.append(getattr(self, gene)(x))
-        return torch.cat(out, dim=1)
+        residual = x
+        out = self.conv1(x)
+        out = self.conv2(out)
+        if self.downsample:
+            residual = self.downsample(x)
+        out += residual
+        out = self.relu(out)
+        return out
 
-    def save(self, json_path):
-        with open(json_path, "w") as f:
-            json_dict = {"model_type": self.model_type, "random_weights": self.random_weights, 'gene_list': self.gene_list,
-                         "dropout": self.dropout, "pretrained_output_dim": self.pretrained_out_dim}
-            json.dump(json_dict, f)
+"""
+class ResidualBlock_upsample(nn.Module):
+    def __init__(self, in_channels, out_channels, stride = 1, upsample = None):
+        super(ResidualBlock_upsample, self).__init__()
+        self.conv1 = nn.Sequential(
+                        nn.ConvTranspose2d(in_channels, out_channels, kernel_size = 3, stride = stride, padding = 0),
+                        nn.BatchNorm2d(out_channels),
+                        nn.ReLU())
+        self.conv2 = nn.Sequential(
+                        nn.ConvTranspose2d(out_channels, out_channels, kernel_size = 3, stride = 1, padding = 0),
+                        nn.BatchNorm2d(out_channels))
+        self.upsample = upsample
+        self.relu = nn.ReLU()
+        self.out_channels = out_channels
+
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.conv2(out)
+        print("residual shape before:", residual.shape)
+        if self.upsample:
+            residual = self.upsample(x)
+        print("residual shape after:", residual.shape)
+        print("out shape after:", out.shape)
+        out += residual
+        out = self.relu(out)
+        return out
+"""
+
+class ResNet(nn.Module):
+    def __init__(self, block_down, block_up, layers):
+        super(ResNet, self).__init__()
+        self.inplanes = 64
+        encoder = []
+        encoder.append(nn.Sequential(
+                        nn.Conv2d(3, 64, kernel_size = 7, stride = 2, padding = 3),
+                        nn.BatchNorm2d(64),
+                        nn.ReLU()))
+        encoder.append(nn.MaxPool2d(kernel_size = 3, stride = 2, padding = 1))
+        encoder.append(self._make_layer_down(block_down, 64, layers[0], stride = 1))
+        encoder.append(self._make_layer_down(block_down, 128, layers[1], stride = 2))
+        encoder.append(self._make_layer_down(block_down, 256, layers[2], stride = 2))
+        encoder.append(self._make_layer_down(block_down, 512, layers[3], stride = 2))
+        encoder.append(nn.AvgPool2d(7, stride=1))
+        self.encoder = nn.Sequential(*encoder)
+        decoder = []
+        decoder.append(nn.Upsample(size=(7,7)))
+        decoder.append(self._make_layer_up(block_up, 512, layers[0], stride = 2))
+
+        self.decoder = nn.Sequential(*decoder)
+
+    def _make_layer(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes:
+
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=stride),
+                nn.BatchNorm2d(planes),
+            )
+
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, downsample))
+        self.inplanes = planes
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes))
+
+        return nn.Sequential(*layers)
+
+    """
+    def _make_layer_up(self, block, planes, blocks, stride=1):
+        upsample = None
+        if stride != 1 or self.inplanes != planes:
+
+            upsample = nn.Sequential(
+                nn.ConvTranspose2d(self.inplanes, planes, kernel_size=5, stride=stride),
+                nn.BatchNorm2d(planes),
+            )
+
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, upsample))
+        self.inplanes = planes
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes))
+
+        return nn.Sequential(*layers)
+    """
+    def forward(self, x):
+        encoder_shapes = []
+        for l in self.encoder:
+            x = l(x)
+            encoder_shapes.append(x.shape)
+        print(encoder_shapes)
+        # 1, 512, 1, 1 to 1, 512
+        #x = x.view(x.size(0), -1)
+        decoder_shapes = []
+
+        decoder_shapes.append(x.shape)
+        for l in self.decoder:
+            x = l(x)
+            decoder_shapes.append(x.shape)
+        print(len(decoder_shapes))
+        for i in range(len(decoder_shapes)):
+            print("decoder shape", i, decoder_shapes[i])
+            print("encoder shape", i, encoder_shapes[-(i+1)])
+        x = self.decoder(x)
+
+        return x
 
 
-"""class ae_res18(nn.Module):
-    def __init__(self):
-        super(self.__class__, self).__init__()
-        self.encoder = models.resnet18()
-        self.decoder = []
-        for name, param in self.encoder.named_parameters():
-            print(name, param.shape)
-            self.decoder.append(param)
-        print(len(self.decoder))
+r = ResNet(ResidualBlock,[2, 2, 2, 2])
+input = torch.rand(1, 3, 224, 224)
+out = r(input)
+exit(0)
+def get_ResNet18():
+    return ResNet(ResidualBlock, [2, 2, 2, 2])
 
-ae_res18()
-exit(0)"""
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class UpsampleBlock(nn.Module):
+    def __init__(self, in_planes, out_planes, stride=1, upsample=False):
+        super(UpsampleBlock, self).__init__()
+        self.conv1 = nn.ConvTranspose2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, output_padding=(stride - 1), bias=False)
+        self.bn1 = nn.BatchNorm2d(out_planes)
+        self.conv2 = nn.ConvTranspose2d(out_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_planes)
+
+        self.upsample = None
+        if upsample or stride != 1 or in_planes != out_planes:
+            # When upsampling, adjust the input dimensions to match the output dimensions.
+            self.upsample = nn.Sequential(
+                nn.ConvTranspose2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, output_padding=(stride - 1), bias=False),
+                nn.BatchNorm2d(out_planes)
+            )
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = F.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.upsample is not None:
+            identity = self.upsample(identity)
+
+        out += identity
+        out = F.relu(out)
+
+        return out
+
+class ResNetUpsample(nn.Module):
+    def __init__(self, block, layers, num_classes=3):
+        super(ResNetUpsample, self).__init__()
+
+        # Start with n, 512, 1, 1 input
+        self.in_planes = 512
+
+        # Build four layers similar to ResNet
+        self.layer1 = self._make_layer(block, 256, layers[0], stride=2, upsample=True)  # Upsample to 7x7
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, upsample=True)  # Upsample to 14x14
+        self.layer3 = self._make_layer(block, 64, layers[2], stride=2, upsample=True)   # Upsample to 28x28
+        self.layer4 = self._make_layer(block, 32, layers[3], stride=2, upsample=True)   # Upsample to 56x56
+
+        # Final layer to upsample to 224x224 and reduce to 3 channels
+        self.upsample_final = nn.ConvTranspose2d(32, 3, kernel_size=4, stride=4, padding=0, output_padding=0, bias=False)
+
+    def _make_layer(self, block, planes, blocks, stride=1, upsample=False):
+        layers = []
+        layers.append(block(self.in_planes, planes, stride, upsample=upsample))
+        self.in_planes = planes
+        for _ in range(1, blocks):
+            layers.append(block(planes, planes))
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        # Input: n, 512, 1, 1
+        x = self.layer1(x)  # Upsample to n, 256, 7, 7
+        x = self.layer2(x)  # Upsample to n, 128, 14, 14
+        x = self.layer3(x)  # Upsample to n, 64, 28, 28
+        x = self.layer4(x)  # Upsample to n, 32, 56, 56
+
+        # Final upsample to n, 3, 224, 224
+        x = self.upsample_final(x)
+
+        return x
+
+def resnet18_upsample(num_classes=3):
+    return ResNetUpsample(UpsampleBlock, [2, 2, 2, 2], num_classes)
+
+# Example usage:
+model = resnet18_upsample(num_classes=3)
+input_tensor = torch.randn(1, 512, 1, 1)  # Batch size of 1 with 512x1x1 input
+output = model(input_tensor)
+print(output.shape)  # Expected shape: (1, 3, 224, 224)
+
+
+
+
+#-----------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+class resnet(nn.Module):
+    def __init__(self, pretrained=models.resnet18(weights='DEFAULT')):
+        super(resnet, self).__init__()
+
+
+    def forward(self, x):
+        return self.gene1(self.pretrained(x))
+
+
 
 
 def get_ae():
@@ -365,7 +569,6 @@ class general_model(nn.Module):
         self.random_weights = random_weights
         self.dropout = dropout
         self.pretrained_out_dim = pretrained_out_dim
-        self.ae = get_ae()
         self.dropout_value = dropout_value
 
     def forward(self, x):

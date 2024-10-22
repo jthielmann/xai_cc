@@ -10,7 +10,6 @@ import json
 from data_loader import get_patient_loader, get_test_samples, get_val_samples, get_train_samples
 import matplotlib.pyplot as plt
 
-
 def update_model_list(model_dir, model_list_file_name = "new_models.csv"):
     for model_type_dir in os.listdir(model_dir):
         sub_path = model_dir + model_type_dir
@@ -118,6 +117,7 @@ def gather_genes_and_paths(frame):
         model_dir = row["model_dir"]
         model_path = row["model_path"]
         model = load_model(model_dir, model_path, squelch=True)
+        print(model_dir)
         for gene in model.gene_list:
             file_name_train = model_dir + "/" + gene + "_train_scatter.png"
             file_name_val = model_dir + "/" + gene + "_val_scatter.png"
@@ -176,20 +176,33 @@ def generate_tile_maps(data_dir, patients, model_info, results_filename):
                 plotting_data = None
                 file_name = out_put_dir + "/" + gene + "_" + patient + "_results_with_coords.csv"
                 if os.path.exists(file_name):
-                    continue
-                for _, coord_row in coords.iterrows():
-                    tilename = coord_row["tile"]
-                    results_row = results.loc[results['tile'] == tilename]
-                    if results_row.empty:
-                        continue
-                    data = [tilename, results_row["out_" + gene], results_row["labels_" + gene], coord_row["x"], coord_row["y"]]
-                    row_dict = dict((column_names[i], data[i]) for i in range(len(column_names)))
-                    if plotting_data is None:
-                        plotting_data = pd.DataFrame(row_dict, columns=column_names)
-                    else:
-                        plotting_data = pd.concat([plotting_data, pd.DataFrame(row_dict)], ignore_index=True)
+                    plotting_data = pd.read_csv(file_name)
+                else:
+                    for _, coord_row in coords.iterrows():
+                        tilename = coord_row["tile"]
+                        results_row = results.loc[results['tile'] == tilename]
+                        if results_row.empty:
+                            continue
+                        data = [tilename, results_row["out_" + gene], results_row["labels_" + gene], coord_row["x"], coord_row["y"]]
+                        row_dict = dict((column_names[i], data[i]) for i in range(len(column_names)))
+                        if plotting_data is None:
+                            plotting_data = pd.DataFrame(row_dict, columns=column_names)
+                        else:
+                            plotting_data = pd.concat([plotting_data, pd.DataFrame(row_dict)], ignore_index=True)
 
-                plotting_data.to_csv(file_name)
+                    plotting_data.to_csv(file_name)
+
+                print(gene, patient, model_dir)
+                print(plotting_data.columns)
+                plotting_data["diff"] = plotting_data["label"] - plotting_data["out"]
+                plt.scatter(plotting_data['x'], plotting_data['y'], c=plotting_data["diff"], cmap='viridis')
+                plt.colorbar(label='labels')
+                plt.xlabel('X')
+                plt.ylabel('Y')
+                plt.title(model_dir + "\ndiff for patient " + patient + " for gene " + gene)
+                plt.savefig(out_put_dir + "/" + gene + "_" + patient + "_diff.png")
+                plt.clf()
+
 
 
 data_dir_train = "../Training_Data/"
@@ -213,16 +226,14 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
     frame = update_model_list(model_dir, model_list_file_name)
 else:
     frame = pd.read_csv(model_dir + model_list_file_name)
-"""
+
 generate_tile_maps(data_dir_train, patients_train, zip(frame["model_dir"].tolist(), frame["model_path"].tolist()), "ep_29_train_results.csv")
 generate_tile_maps(data_dir_train, patients_val, zip(frame["model_dir"].tolist(), frame["model_path"].tolist()), "ep_29_val_results.csv")
 exit(0)
-"""
+
 
 
 genes, image_paths_train, image_paths_val = gather_genes_and_paths(frame)
-exit(0)
-
 
 for i in range(len(genes)):
     plot_hist_comparison(image_paths_train[i], gene=genes[i], appendix="_train")
@@ -232,7 +243,7 @@ for i in range(len(genes)):
 generate_hists(frame, "_train")
 generate_hists(frame, "_val")
 
-generate_heatmaps()
+generate_maps()
 generate_heatmaps()
 
 
