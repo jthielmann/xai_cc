@@ -6,6 +6,7 @@ from pandas.core.dtypes.common import ensure_object
 from torchvision import models
 import json
 import timm
+import torch.nn.functional as F
 
 
 class MyNet(nn.Module):
@@ -285,9 +286,6 @@ def get_vgg13_dropout(path=None):
     return vgg13
 
 
-import torch
-import torch.nn as nn
-
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride = 1, downsample = None):
         super(ResidualBlock, self).__init__()
@@ -312,37 +310,9 @@ class ResidualBlock(nn.Module):
         out = self.relu(out)
         return out
 
-"""
-class ResidualBlock_upsample(nn.Module):
-    def __init__(self, in_channels, out_channels, stride = 1, upsample = None):
-        super(ResidualBlock_upsample, self).__init__()
-        self.conv1 = nn.Sequential(
-                        nn.ConvTranspose2d(in_channels, out_channels, kernel_size = 3, stride = stride, padding = 0),
-                        nn.BatchNorm2d(out_channels),
-                        nn.ReLU())
-        self.conv2 = nn.Sequential(
-                        nn.ConvTranspose2d(out_channels, out_channels, kernel_size = 3, stride = 1, padding = 0),
-                        nn.BatchNorm2d(out_channels))
-        self.upsample = upsample
-        self.relu = nn.ReLU()
-        self.out_channels = out_channels
-
-    def forward(self, x):
-        residual = x
-        out = self.conv1(x)
-        out = self.conv2(out)
-        print("residual shape before:", residual.shape)
-        if self.upsample:
-            residual = self.upsample(x)
-        print("residual shape after:", residual.shape)
-        print("out shape after:", out.shape)
-        out += residual
-        out = self.relu(out)
-        return out
-"""
 
 class ResNet(nn.Module):
-    def __init__(self, block_down, block_up, layers):
+    def __init__(self, block_down, layers):
         super(ResNet, self).__init__()
         self.inplanes = 64
         encoder = []
@@ -351,17 +321,12 @@ class ResNet(nn.Module):
                         nn.BatchNorm2d(64),
                         nn.ReLU()))
         encoder.append(nn.MaxPool2d(kernel_size = 3, stride = 2, padding = 1))
-        encoder.append(self._make_layer_down(block_down, 64, layers[0], stride = 1))
-        encoder.append(self._make_layer_down(block_down, 128, layers[1], stride = 2))
-        encoder.append(self._make_layer_down(block_down, 256, layers[2], stride = 2))
-        encoder.append(self._make_layer_down(block_down, 512, layers[3], stride = 2))
+        encoder.append(self._make_layer(block_down, 64, layers[0], stride = 1))
+        encoder.append(self._make_layer(block_down, 128, layers[1], stride = 2))
+        encoder.append(self._make_layer(block_down, 256, layers[2], stride = 2))
+        encoder.append(self._make_layer(block_down, 512, layers[3], stride = 2))
         encoder.append(nn.AvgPool2d(7, stride=1))
         self.encoder = nn.Sequential(*encoder)
-        decoder = []
-        decoder.append(nn.Upsample(size=(7,7)))
-        decoder.append(self._make_layer_up(block_up, 512, layers[0], stride = 2))
-
-        self.decoder = nn.Sequential(*decoder)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -380,58 +345,10 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    """
-    def _make_layer_up(self, block, planes, blocks, stride=1):
-        upsample = None
-        if stride != 1 or self.inplanes != planes:
-
-            upsample = nn.Sequential(
-                nn.ConvTranspose2d(self.inplanes, planes, kernel_size=5, stride=stride),
-                nn.BatchNorm2d(planes),
-            )
-
-        layers = []
-        layers.append(block(self.inplanes, planes, stride, upsample))
-        self.inplanes = planes
-        for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
-
-        return nn.Sequential(*layers)
-    """
     def forward(self, x):
-        encoder_shapes = []
-        for l in self.encoder:
-            x = l(x)
-            encoder_shapes.append(x.shape)
-        print(encoder_shapes)
-        # 1, 512, 1, 1 to 1, 512
-        #x = x.view(x.size(0), -1)
-        decoder_shapes = []
-
-        decoder_shapes.append(x.shape)
-        for l in self.decoder:
-            x = l(x)
-            decoder_shapes.append(x.shape)
-        print(len(decoder_shapes))
-        for i in range(len(decoder_shapes)):
-            print("decoder shape", i, decoder_shapes[i])
-            print("encoder shape", i, encoder_shapes[-(i+1)])
-        x = self.decoder(x)
-
+        x = self.encoder(x)
         return x
 
-
-r = ResNet(ResidualBlock,[2, 2, 2, 2])
-input = torch.rand(1, 3, 224, 224)
-out = r(input)
-exit(0)
-def get_ResNet18():
-    return ResNet(ResidualBlock, [2, 2, 2, 2])
-
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 class UpsampleBlock(nn.Module):
     def __init__(self, in_planes, out_planes, stride=1, upsample=False):
@@ -466,6 +383,7 @@ class UpsampleBlock(nn.Module):
         out = F.relu(out)
 
         return out
+
 
 class ResNetUpsample(nn.Module):
     def __init__(self, block, layers, num_classes=3):
@@ -503,39 +421,97 @@ class ResNetUpsample(nn.Module):
 
         return x
 
+
 def resnet18_upsample(num_classes=3):
     return ResNetUpsample(UpsampleBlock, [2, 2, 2, 2], num_classes)
 
-# Example usage:
-model = resnet18_upsample(num_classes=3)
-input_tensor = torch.randn(1, 512, 1, 1)  # Batch size of 1 with 512x1x1 input
-output = model(input_tensor)
-print(output.shape)  # Expected shape: (1, 3, 224, 224)
 
-
-
-
-#-----------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
-
-class resnet(nn.Module):
-    def __init__(self, pretrained=models.resnet18(weights='DEFAULT')):
-        super(resnet, self).__init__()
-
+class ResidualBlock_up(nn.Module):
+    def __init__(self, in_channels):
+        super(ResidualBlock_up, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(in_channels)
+        self.conv2 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(in_channels)
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        residual = x
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += residual
+        return F.relu(out)
 
 
+class Decoder(nn.Module):
+    def __init__(self):
+        super(Decoder, self).__init__()
+
+        # Initial input is (n, 512, 1, 1)
+        self.initial_conv = nn.Upsample(
+            size=(7, 7))  # nn.ConvTranspose2d(512, 512, kernel_size=4, stride=1, padding=0)  # (n, 512, 4, 4)
+
+        # Residual Block 1 (512, 4, 4)
+        self.res_block1 = ResidualBlock_up(512)
+        self.up1 = nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1)  # (n, 256, 8, 8)
+
+        # Residual Block 2 (256, 8, 8)
+        self.res_block2 = ResidualBlock_up(256)
+        self.up2 = nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1)  # (n, 128, 16, 16)
+
+        # Residual Block 3 (128, 16, 16)
+        self.res_block3 = ResidualBlock_up(128)
+        self.up3 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1)  # (n, 64, 32, 32)
+
+        # Residual Block 4 (64, 32, 32)
+        self.res_block4 = ResidualBlock_up(64)
+        self.up4 = nn.ConvTranspose2d(64, 64, kernel_size=4, stride=2, padding=1)  # (n, 32, 64, 64)
+
+        # Residual Block 5 (32, 64, 64)
+        self.res_block5 = ResidualBlock_up(64)
+        self.up5 = nn.ConvTranspose2d(64, 64, kernel_size=4, stride=2, padding=1)  # (n, 16, 128, 128)
+
+        # Final upsampling and output (n, 16, 128, 128) -> (n, 3, 224, 224)
+        self.final_conv = nn.ConvTranspose2d(64, 3, kernel_size=3, stride=1, padding=1)  # (n, 3, 224, 224)
+
+    def forward(self, x):
+        # Initial expansion
+        x = F.relu(self.initial_conv(x))
+
+        # Series of residual blocks with upsampling
+        x = self.res_block1(x)
+        x = F.relu(self.up1(x))
+
+        x = self.res_block2(x)
+        x = F.relu(self.up2(x))
+
+        x = self.res_block3(x)
+        x = F.relu(self.up3(x))
+
+        x = self.res_block4(x)
+        x = F.relu(self.up4(x))
+
+        x = self.res_block5(x)
+        x = F.relu(self.up5(x))
+
+        # Final upsampling and output
+        x = torch.sigmoid(self.final_conv(x))  # Apply sigmoid to normalize the output to [0, 1]
+        return x
 
 
-def get_ae():
-    return None
+class Resnet_ae(nn.Module):
+    def __init__(self):
+        super(Resnet_ae, self).__init__()
+        self.encoder = ResNet(ResidualBlock, [2, 2, 2, 2])
+        self.decoder = Decoder()
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+
+def get_Resnet_ae():
+    return Resnet_ae()
 
 
 class general_model(nn.Module):

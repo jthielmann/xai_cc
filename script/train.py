@@ -1,25 +1,14 @@
 import os
-import cv2
 import random
 
 import numpy as np
-import torch
-import torch.nn as nn
 import torch.nn.functional
-import torch.optim as optim
 from scipy import stats
-from torch.utils.data import DataLoader
-from pathlib import Path
-from datetime import datetime
 import pandas as pd
-import anndata as ad
-from torchvision import transforms, models
-from torch.utils.data import Dataset, DataLoader
-from PIL import Image
 from data_loader import get_data_loaders
 import json
-# debug
-from inspect import currentframe, getframeinfo
+from model import get_Resnet_ae
+
 
 DEFAULT_RANDOM_SEED = 42
 
@@ -242,4 +231,60 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
 
     save_name = (model_save_dir + "/train_history.csv")
     history_df.to_csv(save_name, index=False)
+
+
+import torch
+import torch.optim as optim
+import torch.nn as nn
+
+
+# Define a simple training loop function
+def train_decoder(model, criterion, optimizer, device, genes=None):
+    if genes is None:
+        genes = ["RUBCNL"]
+    model.train()  # Set the model to training mode
+    train_loader, val_loader = get_data_loaders("../Training_Data/", 64, genes)
+    for epoch in range(40):
+        running_loss = 0.0
+
+        for i, data in enumerate(train_loader, 0):
+            # Assume data is a tuple of (input_tensor, target_tensor)
+            inputs, _, path = data
+            inputs = inputs.to(device)
+
+            # Zero the parameter gradients
+            optimizer.zero_grad()
+
+            # Forward pass
+            outputs = model(inputs)
+
+            # Compute loss
+            loss = criterion(outputs, inputs)
+
+            # Backward pass and optimize
+            loss.backward()
+            optimizer.step()
+
+            # Accumulate the loss
+            running_loss += loss.item()
+
+            # Print statistics every 100 mini-batches
+            if i % 100 == 99:
+                print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.4f}')
+                running_loss = 0.0
+
+    print('Finished Training')
+
+
+# Initialize the decoder, loss function, and optimizer
+device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+device = torch.device("cpu")
+ae = get_Resnet_ae().to(device)
+
+# Loss function and optimizer
+criterion = nn.MSELoss()  # Assuming we're using mean squared error for image generation
+optimizer = optim.Adam(ae.parameters(), lr=0.001)
+
+# Train the decoder for 10 epochs
+train_decoder(ae, criterion, optimizer, device)
 
