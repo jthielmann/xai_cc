@@ -273,7 +273,10 @@ def train_decoder(model, criterion, optimizer, device, genes=None):
                 print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.4f}')
                 running_loss = 0.0
 
+        model.save("../models/ae_double_resnet18/ep_" + str(epoch) + ".pt")
+
     print('Finished Training')
+
 
 
 # Initialize the decoder, loss function, and optimizer
