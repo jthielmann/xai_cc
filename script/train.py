@@ -281,7 +281,7 @@ def train_decoder(model, criterion, optimizer, device, genes=None):
 
 # Initialize the decoder, loss function, and optimizer
 device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-device = torch.device("cpu")
+#device = torch.device("cpu")
 ae = get_Resnet_ae().to(device)
 
 # Loss function and optimizer
