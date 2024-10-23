@@ -244,6 +244,7 @@ def train_decoder(model, criterion, optimizer, device, genes=None):
         genes = ["RUBCNL"]
     model.train()  # Set the model to training mode
     train_loader, val_loader = get_data_loaders("../Training_Data/", 64, genes)
+    print("training start")
     for epoch in range(40):
         running_loss = 0.0
 
