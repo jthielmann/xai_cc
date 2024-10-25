@@ -242,9 +242,13 @@ def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
     if optimizer is None:
         optimizer = optim.Adam(ae.parameters(), lr=0.001)
     train_loader, val_loader = get_data_loaders("../Training_Data/", 64, genes)
+<<<<<<< HEAD
     best_val_loss = float('inf')
     logfile = dir_name + "/log.txt"
     open(logfile, "a").close()
+=======
+    print("training start")
+>>>>>>> dcd8467c28b0995247ccfa2dfc1f5633f1b186a7
     for epoch in range(40):
         running_loss = 0.0
         ae.train()
@@ -274,6 +278,7 @@ def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
                 print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.4f}')
                 running_loss = 0.0
 
+<<<<<<< HEAD
         running_loss_val = 0.0
         ae.eval()
         for i, data in enumerate(val_loader, 0):
@@ -300,3 +305,23 @@ def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
 
         open(logfile, "a").write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n').close()
     print('Finished Training')
+=======
+        torch.save(model.state_dict(), "../models/ae_double_resnet18/ep_" + str(epoch) + ".pt")
+
+    print('Finished Training')
+
+
+
+# Initialize the decoder, loss function, and optimizer
+device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+#device = torch.device("cpu")
+ae = get_Resnet_ae().to(device)
+
+# Loss function and optimizer
+criterion = nn.MSELoss()  # Assuming we're using mean squared error for image generation
+optimizer = optim.Adam(ae.parameters(), lr=0.001)
+
+# Train the decoder for 10 epochs
+train_decoder(ae, criterion, optimizer, device)
+
+>>>>>>> dcd8467c28b0995247ccfa2dfc1f5633f1b186a7
