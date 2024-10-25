@@ -7,8 +7,9 @@ from scipy import stats
 import pandas as pd
 from data_loader import get_data_loaders
 import json
-from model import get_Resnet_ae
-
+import torch
+import torch.optim as optim
+import torch.nn as nn
 
 DEFAULT_RANDOM_SEED = 42
 
@@ -233,20 +234,20 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
     history_df.to_csv(save_name, index=False)
 
 
-import torch
-import torch.optim as optim
-import torch.nn as nn
-
-
-# Define a simple training loop function
-def train_decoder(model, criterion, optimizer, device, genes=None):
+def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     if genes is None:
         genes = ["RUBCNL"]
-    model.train()  # Set the model to training mode
+    if optimizer is None:
+        optimizer = optim.Adam(ae.parameters(), lr=0.001)
     train_loader, val_loader = get_data_loaders("../Training_Data/", 64, genes)
+    best_val_loss = float('inf')
+    logfile = dir_name + "/log.txt"
+    open(logfile, "a").close()
     for epoch in range(40):
         running_loss = 0.0
-
+        ae.train()
         for i, data in enumerate(train_loader, 0):
             # Assume data is a tuple of (input_tensor, target_tensor)
             inputs, _, path = data
@@ -256,7 +257,7 @@ def train_decoder(model, criterion, optimizer, device, genes=None):
             optimizer.zero_grad()
 
             # Forward pass
-            outputs = model(inputs)
+            outputs = ae(inputs)
 
             # Compute loss
             loss = criterion(outputs, inputs)
@@ -273,18 +274,29 @@ def train_decoder(model, criterion, optimizer, device, genes=None):
                 print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.4f}')
                 running_loss = 0.0
 
+        running_loss_val = 0.0
+        ae.eval()
+        for i, data in enumerate(val_loader, 0):
+            # Assume data is a tuple of (input_tensor, target_tensor)
+            inputs, _, path = data
+            inputs = inputs.to(device)
+
+            # Forward pass
+            outputs = ae(inputs)
+
+            # Compute loss
+            loss = criterion(outputs, inputs)
+
+            # Accumulate the loss
+            running_loss_val += loss.item()
+
+            # Print statistics every 100 mini-batches
+            if i % 100 == 99:
+                print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss_val / 100:.4f}')
+                running_loss_val = 0.0
+        if epoch > 10 and running_loss_val < best_val_loss:
+            best_val_loss = running_loss_val
+            torch.save(ae.state_dict(), dir_name + "/best_model.pth")
+
+        open(logfile, "a").write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n').close()
     print('Finished Training')
-
-
-# Initialize the decoder, loss function, and optimizer
-device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-device = torch.device("cpu")
-ae = get_Resnet_ae().to(device)
-
-# Loss function and optimizer
-criterion = nn.MSELoss()  # Assuming we're using mean squared error for image generation
-optimizer = optim.Adam(ae.parameters(), lr=0.001)
-
-# Train the decoder for 10 epochs
-train_decoder(ae, criterion, optimizer, device)
-

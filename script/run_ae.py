@@ -1,43 +1,30 @@
-import torch.nn as nn
-from train import training, training_multi
+from script.model import get_Resnet_ae
+from train import train_ae
 
-import torchmetrics
-
-from model import general_model
 import os
-import torch.optim as optim
 
 
+learning_rates = [0.01, 0.001, 0.0001, 0.0005]
 
-learning_rate = 0.0005
+gene_lists = [["RUBCNL"]]
+model_types = ["resnet18"]
+epochs = 200
 
-#gene="MKI67"
-#gene="RUBCNL"
-#gene_lists = [["VWF"]]
-gene_lists = [["FLT1", "VWF", "PECAM1", "PLVAP", "DES"], ["RUBCNL"], ["MKI67"]]
-model_types = ["resnet18d", "resnet50d"]
-epochs = 40
+for gene_list in gene_lists:
+    for model_type in model_types:
+        for lr in learning_rates:
+            dir_name = "AE_" + model_type + "_"
+            for gene in gene_list:
+                dir_name += gene + "_"
+            dir_name += "_lr_" + str(lr)
+            if os.path.exists(dir_name):
+                print(dir_name + " already exists, continuing")
+                continue
+            try:
+                os.makedirs(dir_name, exist_ok=True)
+            except OSError:
+                print("Creation of the directory %s failed" % dir_name)
+            model = get_Resnet_ae()
 
-configs = []
-configs.append(())
+            train_ae(ae=model, dir_name=dir_name,genes=gene_list)
 
-for config in configs:
-    dir_name_base = "/" + genes[0]
-    for gene in genes[1:]:
-        dir_name_base += "_" + gene
-
-
-    random_weights_bool = [True, False]
-    dropout_bool = [True, False]
-    freeze_bool = [True, False]
-
-
-    training_ae(model=model,
-               data_dir='../Training_Data/',
-               model_save_dir=dir_name,
-               epochs=epochs,
-               loss_fn=nn.MSELoss(),
-               optimizer=optim.AdamW(params, weight_decay=0.005),
-               learning_rate=learning_rate,
-               batch_size=128,
-               )
