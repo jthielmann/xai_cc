@@ -235,8 +235,10 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
 
 
 def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
-    device = torch.device(
-        "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    print("device: ", device)
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # MPS not supported for now
+    ae.to(device)
     if genes is None:
         genes = ["RUBCNL"]
     if optimizer is None:
@@ -246,7 +248,7 @@ def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
     logfile = dir_name + "/log.txt"
     open(logfile, "a").close()
     print("training start")
-    for epoch in range(40):
+    for epoch in range(200):
         running_loss = 0.0
         ae.train()
         for i, data in enumerate(train_loader, 0):
@@ -298,8 +300,9 @@ def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
         if epoch > 10 and running_loss_val < best_val_loss:
             best_val_loss = running_loss_val
             torch.save(ae.state_dict(), dir_name + "/best_model.pth")
-
-        open(logfile, "a").write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n').close()
-        torch.save(ae.state_dict(), "../models/ae_double_resnet18/ep_" + str(epoch) + ".pt")
+        f = open(logfile, "a")
+        f.write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
+        f.close()
+        torch.save(ae.state_dict(), "../models/" + dir_name + "/ep_" + str(epoch) + ".pt")
 
     print('Finished Training')

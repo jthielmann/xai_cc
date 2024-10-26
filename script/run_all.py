@@ -17,6 +17,7 @@ learning_rate = 0.0005
 gene_lists = [["RUBCNL"]]
 model_types = ["resnet18"]
 epochs = 40
+data_dir = '../Training_Data/'
 
 for genes in gene_lists:
     dir_name_base = "/" + genes[0]
@@ -63,7 +64,7 @@ for genes in gene_lists:
                         for gene in genes:
                             params.append({"params": getattr(model, gene).parameters(), "lr": learning_rate})
                         training_multi(model=model,
-                                       data_dir='../Training_Data/',
+                                       data_dir=data_dir,
                                        model_save_dir=dir_name,
                                        epochs=epochs,
                                        loss_fn=nn.MSELoss(),

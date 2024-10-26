@@ -134,12 +134,8 @@ for i in range(N_PROTOTYPES):
 
 
 import numpy as np
-import scipy.ndimage
 import torch
-from PIL import ImageFilter, Image, ImageDraw
-from crp.image import get_crop_range, imgify
-from torchvision.transforms.functional import gaussian_blur
-from zennit.core import stabilize
+from crp.image import imgify
 
 
 

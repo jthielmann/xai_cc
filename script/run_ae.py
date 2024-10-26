@@ -1,4 +1,4 @@
-from script.model import get_Resnet_ae
+from model import get_Resnet_ae
 from train import train_ae
 
 import os
@@ -13,10 +13,10 @@ epochs = 200
 for gene_list in gene_lists:
     for model_type in model_types:
         for lr in learning_rates:
-            dir_name = "AE_" + model_type + "_"
+            dir_name = "../models/AE_" + model_type + "_"
             for gene in gene_list:
                 dir_name += gene + "_"
-            dir_name += "_lr_" + str(lr)
+            dir_name += "lr_" + str(lr)
             if os.path.exists(dir_name):
                 print(dir_name + " already exists, continuing")
                 continue

@@ -55,10 +55,10 @@ def calculate_attributions(dataset, device, composite, layer_name, attribution, 
 
 
 def load_attributions(out_path):
-    activations = torch.load(out_path + "/activations.pt")
-    attributions = torch.load(out_path + "/attributions.pt")
-    outputs = torch.load(out_path + "/outputs.pt")
-    indices = torch.load(out_path + "/indices.pt")
+    activations = torch.load(out_path + "/activations.pt", weights_only=False)
+    attributions = torch.load(out_path + "/attributions.pt", weights_only=False)
+    outputs = torch.load(out_path + "/outputs.pt", weights_only=False)
+    indices = torch.load(out_path + "/indices.pt", weights_only=False)
     return activations, attributions, outputs, indices
 
 
