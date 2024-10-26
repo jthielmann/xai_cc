@@ -246,7 +246,7 @@ def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
     logfile = dir_name + "/log.txt"
     open(logfile, "a").close()
     print("training start")
-    for epoch in range(40):
+    for epoch in range(200):
         running_loss = 0.0
         ae.train()
         for i, data in enumerate(train_loader, 0):
