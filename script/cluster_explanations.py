@@ -135,7 +135,7 @@ for i in range(N_PROTOTYPES):
 
 import numpy as np
 import torch
-from crp.image import imgify
+from crp.image import get_crop_range, imgify
 
 
 

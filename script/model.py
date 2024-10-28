@@ -515,8 +515,11 @@ def get_Resnet_ae():
 
 
 class general_model(nn.Module):
-    def __init__(self, model_type, gene_list, random_weights=False, dropout=False, dropout_value=0.5, pretrained_out_dim=1000):
+    def __init__(self, model_type, gene_list, random_weights=False, dropout=False, dropout_value=0.5,
+                 pretrained_path=None, pretrained_out_dim=1000):
         super(general_model, self).__init__()
+        if pretrained_path and random_weights:
+            print("cannot have pretrained_path and random_weights set in general_model")
         if random_weights:
             weights = None
         else:
@@ -531,6 +534,9 @@ class general_model(nn.Module):
             self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
         elif model_type == "resnet18d":
             self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
+        elif model_type == "pretrained_res18":
+            self.pretrained = models.resnet18()
+            self.pretrained.load_state_dict(torch.load(pretrained_path, map_location=torch.device('cpu'), weights_only=False))
         else:
             print("model type", model_type, "not implemented")
             exit(1)
@@ -548,8 +554,6 @@ class general_model(nn.Module):
         self.dropout_value = dropout_value
 
     def forward(self, x):
-        if self.ae:
-            x = self.ae(x)
         x = self.pretrained(x)
         out = []
         for gene in self.gene_list:
