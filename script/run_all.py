@@ -20,7 +20,7 @@ epochs = 40
 random_weights_bool = [False]
 dropout_bool = [False]
 dropout_values = [0]
-freeze_bool = [False]
+freeze_bool = [False, True]
 pretrained_names = ["AE_resnet18_RUBCNL_lr_0.0001",
                     "AE_resnet18_RUBCNL_lr_0.0005",
                     "AE_resnet18_RUBCNL_lr_0.001",
