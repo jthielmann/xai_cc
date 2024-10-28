@@ -514,6 +514,19 @@ def get_Resnet_ae():
     return Resnet_ae()
 
 
+def get_encoder(path):
+    class encoder(nn.Module):
+        def __init__(self, path):
+            super().__init__()
+            ae = get_Resnet_ae()
+            ae.load_state_dict(torch.load(path, map_location=torch.device('cpu'), weights_only=False))
+            self.encoder = copy.deepcopy(ae.encoder)
+
+        def forward(self, x):
+            return self.encoder(x).squeeze()
+    return encoder(path)
+
+
 class general_model(nn.Module):
     def __init__(self, model_type, gene_list, random_weights=False, dropout=False, dropout_value=0.5,
                  pretrained_path=None, pretrained_out_dim=1000):
@@ -535,10 +548,7 @@ class general_model(nn.Module):
         elif model_type == "resnet18d":
             self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
         elif model_type == "pretrained_res18":
-            self.pretrained = models.resnet18()
-            ae = Resnet_ae()
-            ae.load_state_dict(torch.load(pretrained_path, map_location=torch.device('cpu'), weights_only=False))
-            self.pretrained = copy.deepcopy(ae.encoder)
+            self.pretrained = get_encoder(pretrained_path)
         else:
             print("model type", model_type, "not implemented")
             exit(1)

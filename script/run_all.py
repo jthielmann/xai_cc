@@ -62,7 +62,7 @@ for genes in gene_lists:
                             os.makedirs(dir_name, exist_ok=True)
 
                             model = general_model(model_type, genes, use_random_weights, use_dropout, dropout_value,
-                                                  pretrained_path, 1000)
+                                                  pretrained_path, 512)
                             print(dir_name)
                             print(len(dir_name))
 
