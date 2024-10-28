@@ -301,7 +301,7 @@ def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
                 running_loss_val = 0.0
         if epoch > 10 and running_loss_val < best_val_loss:
             best_val_loss = running_loss_val
-            torch.save(ae.state_dict(), dir_name + "/best_model.pth")
+            torch.save(ae.state_dict(), dir_name + "/best_model.pt")
         f = open(logfile, "a")
         f.write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
         f.close()
