@@ -48,8 +48,6 @@ for genes in gene_lists:
                                 dir_name += "_freeze"
                             if use_dropout:
                                 dir_name += "_dropout_" + str(dropout_value)
-                            if pretrained_path:
-                                dir_name += "_" + pretrained_path
                             max_file_length = 255
 
                             dir_name += "/"
@@ -80,4 +78,5 @@ for genes in gene_lists:
                                            genes=genes,
                                            freeze_pretrained=do_freeze_pretrained,
                                            error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
-                                           error_metric_name="MSE")
+                                           error_metric_name="MSE",
+                                           pretrained_path=pretrained_path)

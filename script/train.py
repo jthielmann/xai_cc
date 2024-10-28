@@ -157,8 +157,8 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
 
 
 def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, genes,
-             freeze_pretrained=False, error_metric=
-             lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
+             freeze_pretrained=False, pretrained_path=None,
+             error_metric=lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
              error_metric_name="pearson corr"):
 
     print("genes:", genes)
@@ -178,7 +178,7 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
                      'dropout': model.dropout, 'drop_out_rate': model.dropout_value, 'pretrained_out_dim': str(model.pretrained_out_dim),
                      'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'genes': genes,
                      'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device,
-                     'freeze_pretrained': freeze_pretrained}
+                     'freeze_pretrained': freeze_pretrained, 'pretrained_path': str(pretrained_path)}
         json.dump(json_dict, file)
 
     # Defining training and validation history dictionary
