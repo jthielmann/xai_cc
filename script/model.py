@@ -7,7 +7,7 @@ from torchvision import models
 import json
 import timm
 import torch.nn.functional as F
-
+import copy
 
 class MyNet(nn.Module):
     def __init__(self):
@@ -536,7 +536,9 @@ class general_model(nn.Module):
             self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
         elif model_type == "pretrained_res18":
             self.pretrained = models.resnet18()
-            self.pretrained.load_state_dict(torch.load(pretrained_path, map_location=torch.device('cpu'), weights_only=False))
+            ae = Resnet_ae()
+            ae.load_state_dict(torch.load(pretrained_path, map_location=torch.device('cpu'), weights_only=False))
+            self.pretrained = copy.deepcopy(ae.encoder)
         else:
             print("model type", model_type, "not implemented")
             exit(1)

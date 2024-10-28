@@ -21,10 +21,10 @@ random_weights_bool = [False]
 dropout_bool = [False]
 dropout_values = [0]
 freeze_bool = [False]
-pretrained_paths = ["../models/AE_resnet18_RUBCNL_lr_0.0001/best_model.pt",
-                    "../models/AE_resnet18_RUBCNL_lr_0.0005/best_model.pt",
-                    "../models/AE_resnet18_RUBCNL_lr_0.001/best_model.pt",
-                    "../models/AE_resnet18_RUBCNL_lr_0.01/best_model.pt"]
+pretrained_names = ["AE_resnet18_RUBCNL_lr_0.0001",
+                    "AE_resnet18_RUBCNL_lr_0.0005",
+                    "AE_resnet18_RUBCNL_lr_0.001",
+                    "AE_resnet18_RUBCNL_lr_0.01"]
 
 data_dir = '../Training_Data/'
 
@@ -40,7 +40,8 @@ for genes in gene_lists:
             for use_dropout in dropout_bool:
                 for do_freeze_pretrained in freeze_bool:
                     for dropout_value in dropout_values:
-                        for pretrained_path in pretrained_paths:
+                        for pretrained_name in pretrained_names:
+                            pretrained_path = "../models/" + pretrained_name + "/best_model.pt"
                             dir_name = "../models/" + model_type + dir_name_base
                             if use_random_weights:
                                 dir_name += "_random"
@@ -48,6 +49,8 @@ for genes in gene_lists:
                                 dir_name += "_freeze"
                             if use_dropout:
                                 dir_name += "_dropout_" + str(dropout_value)
+                            if pretrained_name != "":
+                                dir_name += "_" + pretrained_name
                             max_file_length = 255
 
                             dir_name += "/"
