@@ -81,19 +81,3 @@ for genes in gene_lists:
                                            freeze_pretrained=do_freeze_pretrained,
                                            error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
                                            error_metric_name="MSE")
-                        params = []
-                        params.append({"params": model.pretrained.parameters(), "lr": learning_rate})
-                        for gene in genes:
-                            params.append({"params": getattr(model, gene).parameters(), "lr": learning_rate})
-                        training_multi(model=model,
-                                       data_dir=data_dir,
-                                       model_save_dir=dir_name,
-                                       epochs=epochs,
-                                       loss_fn=nn.MSELoss(),
-                                       optimizer=optim.AdamW(params, weight_decay=0.005),
-                                       learning_rate=learning_rate,
-                                       batch_size=128,
-                                       genes=genes,
-                                       freeze_pretrained=do_freeze_pretrained,
-                                       error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
-                                       error_metric_name="MSE")
