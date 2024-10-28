@@ -212,8 +212,8 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
             torch.save(model.state_dict(), model_save)
         if val_corr > valid_corr_max:
             valid_corr_max = val_corr
-        log_text = "AVG T Loss: {:.3f} AVG T {}: {:.3f} AVG V Loss: {:.3f} AVG V {}: {:.3f}".format(
-            train_loss, error_metric_name, train_corr, val_loss, error_metric_name, val_corr)
+        log_text = "AVG T Loss: {:.3f} AVG T {}: {:.3f} AVG V Loss: {:.3f} AVG V {}: {:.3f}, Best V: {.3f}".format(
+            train_loss, error_metric_name, train_corr, val_loss, error_metric_name, val_corr, valid_loss_min)
         print(log_text)
         history['val_loss'].append(val_loss)
         history['val_corr'].append(val_corr)
