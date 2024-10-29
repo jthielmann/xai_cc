@@ -325,7 +325,7 @@ class ResNet(nn.Module):
         encoder.append(self._make_layer(block_down, 128, layers[1], stride = 2))
         encoder.append(self._make_layer(block_down, 256, layers[2], stride = 2))
         encoder.append(self._make_layer(block_down, 512, layers[3], stride = 2))
-        encoder.append(nn.AvgPool2d(7, stride=1))
+        #encoder.append(nn.AvgPool2d(7, stride=1))
         self.encoder = nn.Sequential(*encoder)
 
     def _make_layer(self, block, planes, blocks, stride=1):
@@ -447,8 +447,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         # Initial input is (n, 512, 1, 1)
-        self.initial_conv = nn.Upsample(
-            size=(7, 7))  # nn.ConvTranspose2d(512, 512, kernel_size=4, stride=1, padding=0)  # (n, 512, 4, 4)
+        # self.initial_conv = nn.Upsample(size=(7, 7))  # nn.ConvTranspose2d(512, 512, kernel_size=4, stride=1, padding=0)  # (n, 512, 4, 4)
 
         # Residual Block 1 (512, 4, 4)
         self.res_block1 = ResidualBlock_up(512)
@@ -475,7 +474,7 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         # Initial expansion
-        x = F.relu(self.initial_conv(x))
+        #x = F.relu(self.initial_conv(x))
 
         # Series of residual blocks with upsampling
         x = self.res_block1(x)
@@ -523,7 +522,7 @@ def get_encoder(path):
             self.encoder = copy.deepcopy(ae.encoder)
 
         def forward(self, x):
-            return self.encoder(x).squeeze()
+            return self.encoder(x).squeeze() #TODO avgpool
     return encoder(path)
 
 

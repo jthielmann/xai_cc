@@ -11,9 +11,6 @@ import torch.optim as optim
 
 learning_rate = 0.0005
 
-#gene="MKI67"
-#gene="RUBCNL"
-#gene_lists = [["VWF"]]
 gene_lists = [["RUBCNL"]]
 model_types = ["pretrained_res18"]
 epochs = 40
