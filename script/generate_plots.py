@@ -171,7 +171,7 @@ def generate_tile_maps(data_dir, patients, model_info, results_filename):
 
         # gather each patient's tile coordinates
         for patient in patients:
-            coords = pd.read_csv(data_dir + "/" + patient + "/Preprocessed_STDataset/spatial_data.csv")
+            coords = pd.read_csv(data_dir + "/" + patient + "/meta_data/spatial_data.csv")
             for gene in model.gene_list:
                 plotting_data = None
                 file_name = out_put_dir + "/" + gene + "_" + patient + "_results_with_coords.csv"

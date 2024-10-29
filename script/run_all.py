@@ -10,36 +10,37 @@ import torch.optim as optim
 
 
 learning_rate = 0.0005
-
+output_dir = "../testing/"
 gene_lists = [["RUBCNL"]]
-model_types = ["pretrained_res18"]
+meta_data_dir_name = "meta_data"
+model_types = ["resnet18", "resnet50"]
 epochs = 40
-random_weights_bool = [False]
+random_weights_bool = [True]
 dropout_bool = [False]
 dropout_values = [0]
-freeze_bool = [False, True]
-pretrained_names = ["AE_resnet18_RUBCNL_lr_0.0001",
+freeze_bool = [False]
+"""pretrained_names = ["AE_resnet18_RUBCNL_lr_0.0001",
                     "AE_resnet18_RUBCNL_lr_0.0005",
                     "AE_resnet18_RUBCNL_lr_0.001",
-                    "AE_resnet18_RUBCNL_lr_0.01"]
-
-data_dir = '../Training_Data/'
-
+                    "AE_resnet18_RUBCNL_lr_0.01"]"""
+pretrained_names = [""]
+#data_dir = '../Training_Data/'
+data_dir = "../new_Training_Data/"
 for genes in gene_lists:
     dir_name_base = "/" + genes[0]
     for gene in genes[1:]:
         dir_name_base += "_" + gene
 
     for model_type in model_types:
-        dir_name = "../models/" + model_type + dir_name_base
+        dir_name = output_dir + model_type + dir_name_base
 
         for use_random_weights in random_weights_bool:
             for use_dropout in dropout_bool:
                 for do_freeze_pretrained in freeze_bool:
                     for dropout_value in dropout_values:
                         for pretrained_name in pretrained_names:
-                            pretrained_path = "../models/" + pretrained_name + "/best_model.pt"
-                            dir_name = "../models/" + model_type + dir_name_base
+                            pretrained_path = output_dir + pretrained_name + "/best_model.pt"
+                            dir_name = output_dir + model_type + dir_name_base
                             if use_random_weights:
                                 dir_name += "_random"
                             if do_freeze_pretrained:
@@ -68,7 +69,7 @@ for genes in gene_lists:
                             for gene in genes:
                                 params.append({"params": getattr(model, gene).parameters(), "lr": learning_rate})
                             training_multi(model=model,
-                                           data_dir='../Training_Data/',
+                                           data_dir=data_dir,
                                            model_save_dir=dir_name,
                                            epochs=epochs,
                                            loss_fn=nn.MSELoss(),
@@ -79,4 +80,5 @@ for genes in gene_lists:
                                            freeze_pretrained=do_freeze_pretrained,
                                            error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
                                            error_metric_name="MSE",
-                                           pretrained_path=pretrained_path)
+                                           pretrained_path=pretrained_path,
+                                           meta_data_dir_name=meta_data_dir_name)

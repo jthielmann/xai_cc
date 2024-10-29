@@ -159,7 +159,7 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
 def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, genes,
              freeze_pretrained=False, pretrained_path=None,
              error_metric=lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
-             error_metric_name="pearson corr"):
+             error_metric_name="pearson corr", meta_data_dir_name="meta_data"):
 
     print("genes:", genes)
 

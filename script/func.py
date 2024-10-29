@@ -277,7 +277,7 @@ def get_patient_loader(data_dir, patient=None, gene="RUBCNL"):
     train_st_dataset = pd.DataFrame(columns=columns_of_interest)
 
     # generate training dataframe with all training samples
-    st_dataset = pd.read_csv(data_dir + patient + "/Preprocessed_STDataset/gene_data.csv", index_col=-1)
+    st_dataset = pd.read_csv(data_dir + patient + "/meta_data/gene_data.csv", index_col=-1)
     st_dataset["tile"] = st_dataset.index
     st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(patient) + "/Tiles_156/" + str(x))
 
@@ -302,7 +302,7 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
 
     # generate training dataframe with all training samples
     for i in train_samples:
-        st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv", index_col=-1)
+        st_dataset = pd.read_csv(data_dir + i + "/meta_data/gene_data.csv", index_col=-1)
         #print(st_dataset.head())
         st_dataset["tile"] = st_dataset.index
         #print(st_dataset.head())
@@ -314,7 +314,7 @@ def get_data_loaders(data_dir, batch_size, gene="RUBCNL"):
 
     # generate validation dataframe with all validation samples
     for i in val_samples:
-        st_dataset = pd.read_csv(data_dir + i + "/Preprocessed_STDataset/gene_data.csv")
+        st_dataset = pd.read_csv(data_dir + i + "/meta_data/gene_data.csv")
         st_dataset["tile"] = st_dataset.index
         st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
 

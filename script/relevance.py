@@ -20,7 +20,7 @@ def get_img_target_name(loader, device, tile_no):
 
 
 def get_coords_from_name(data_dir, patient, tile_name):
-    base_path = data_dir+patient+"/Preprocessed_STDataset/"
+    base_path = data_dir+patient+"/meta_data/"
     merge = pd.read_csv(base_path + "merge.csv", index_col=False)
     line = merge.loc[merge['tile'] == tile_name]
     x = line['x'].to_list()[0]
