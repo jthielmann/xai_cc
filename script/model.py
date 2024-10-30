@@ -522,7 +522,12 @@ def get_encoder(path):
             self.encoder = copy.deepcopy(ae.encoder)
 
         def forward(self, x):
-            return self.encoder(x).squeeze() #TODO avgpool
+            x = self.encoder(x)
+            pool = nn.AvgPool2d(7, stride=1)
+            x = pool(x)
+            x = x.squeeze()
+            return x
+
     return encoder(path)
 
 

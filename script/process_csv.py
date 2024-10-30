@@ -28,7 +28,7 @@ def process_spatial_data(patients, data_dir):
             data_dir + patient + "/meta_data/Raw_Spatial_Matrix_156_" + patient + ".csv")  # adapt to sample
         spatial_matrix['tile'] = spatial_matrix['tile'].apply(lambda x: "{}{}".format(x, ".tiff"))
         spatial_matrix['tile'] = spatial_matrix['tile'].apply(
-            lambda x: "{}{}".format(data_dir + patient + "/Tiles_156/", x[57:]))  # adapt to sample
+            lambda x: "{}{}".format(data_dir + patient + "/tiles/", x[57:]))  # adapt to sample
         spatial_matrix['path'] = spatial_matrix['tile']
         spatial_matrix['tile'] = spatial_matrix['tile'].apply(lambda x: os.path.basename(x))
         spatial_matrix.to_csv(filename, index=False)

@@ -115,7 +115,7 @@ def get_patient_loader(data_dir, patient, genes=None):
     # generate training dataframe with all training samples
     st_dataset = pd.read_csv(data_dir + patient + "/meta_data/gene_data.csv", index_col=-1)
     st_dataset["tile"] = st_dataset.index
-    st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(patient) + "/Tiles_156/" + str(x))
+    st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(patient) + "/tiles/" + str(x))
 
     if train_st_dataset.empty:
         train_st_dataset = st_dataset[columns_of_interest]
@@ -146,6 +146,13 @@ def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True):
     else:
         print("setting train and val samples automatically")
         patients = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
+        pop_ids = []
+        for i in range(len(patients)):
+            if patients[i].startswith("."):
+                pop_ids.append(i)
+        pop_ids.sort(reverse=True)
+        for i in pop_ids:
+            patients.pop(i)
         train_sample_count = int(0.5 + len(patients) * 0.8)  # 80% of dataset is train, +0.5 means we round
         train_samples = patients[0:train_sample_count]
         val_samples   = patients[train_sample_count:]
@@ -164,7 +171,7 @@ def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True):
     for i in train_samples:
         st_dataset = pd.read_csv(data_dir + i + "/meta_data/gene_data.csv", index_col=-1)
         st_dataset["tile"] = st_dataset.index
-        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
+        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
         if train_st_dataset.empty:
             train_st_dataset = st_dataset[columns_of_interest]
         else:
@@ -174,7 +181,7 @@ def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True):
     for i in val_samples:
         st_dataset = pd.read_csv(data_dir + i + "/meta_data/gene_data.csv", index_col=-1)
         st_dataset["tile"] = st_dataset.index
-        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
+        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
 
         if valid_st_dataset.empty:
             valid_st_dataset = st_dataset[columns_of_interest]
@@ -248,7 +255,7 @@ def get_dataset_for_plotting(data_dir, gene="RUBCNL", samples=None):
     for i in samples:
         st_dataset = pd.read_csv(data_dir + "/" + i + "/meta_data/gene_data.csv", index_col=-1)
         st_dataset["tile"] = st_dataset.index
-        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
+        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
         if dataset.empty:
             dataset = st_dataset[columns_of_interest]
         else:
@@ -273,7 +280,7 @@ def get_dataset_for_plotting(data_dir, gene="RUBCNL", samples=None):
     for i in samples:
         st_dataset = pd.read_csv(data_dir + "/" + i + "/meta_data/gene_data.csv", index_col=-1)
         st_dataset["tile"] = st_dataset.index
-        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/Tiles_156/" + str(x))
+        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
         if dataset.empty:
             dataset = st_dataset[columns_of_interest]
         else:

@@ -66,7 +66,7 @@ dataset = CRP_Dataset(get_dataset(data_dir))
 
 models = get_remote_models_and_path()
 img_paths = []
-img_paths.append("../Test_Data/p026/Tiles_156/p026_11_60.tiff")
+img_paths.append("../Test_Data/p026/tiles/p026_11_60.tiff")
 
 loader = TileLoader()
 for path in img_paths:

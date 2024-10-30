@@ -159,7 +159,7 @@ def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learni
 def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, genes,
              freeze_pretrained=False, pretrained_path=None,
              error_metric=lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
-             error_metric_name="pearson corr", meta_data_dir_name="meta_data"):
+             error_metric_name="pearson corr", meta_data_dir_name="meta_data", use_default_samples=True):
 
     print("genes:", genes)
 
@@ -186,7 +186,7 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
 
     valid_loss_min = np.Inf
     valid_corr_max = np.NINF
-    train_loader, val_loader = get_data_loaders(data_dir, batch_size, genes)
+    train_loader, val_loader = get_data_loaders(data_dir, batch_size, genes, use_default_samples=use_default_samples)
 
     # Iterate through epochs
     for epoch in range(epochs):
@@ -212,7 +212,7 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
             torch.save(model.state_dict(), model_save)
         if val_corr > valid_corr_max:
             valid_corr_max = val_corr
-        log_text = "AVG T Loss: {:.3f} AVG T {}: {:.3f} AVG V Loss: {:.3f} AVG V {}: {:.3f}, Best V: {.3f}".format(
+        log_text = "AVG T Loss: {:.3f} AVG T {}: {:.3f} AVG V Loss: {:.3f} AVG V {}: {:.3f}, Best V: {:.3f}".format(
             train_loss, error_metric_name, train_corr, val_loss, error_metric_name, val_corr, valid_loss_min)
         print(log_text)
         history['val_loss'].append(val_loss)
