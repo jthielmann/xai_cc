@@ -518,7 +518,8 @@ def get_encoder(path):
         def __init__(self, path):
             super().__init__()
             ae = get_Resnet_ae()
-            ae.load_state_dict(torch.load(path, map_location=torch.device('cpu'), weights_only=False))
+            if path:
+                ae.load_state_dict(torch.load(path, map_location=torch.device('cpu'), weights_only=False))
             self.encoder = copy.deepcopy(ae.encoder)
 
         def forward(self, x):
@@ -574,6 +575,8 @@ class general_model(nn.Module):
         out = []
         for gene in self.gene_list:
             out.append(getattr(self, gene)(x))
+        if len(out) == 1:
+            return out
         return torch.cat(out, dim=1)
 
     def save(self, json_path):
@@ -595,7 +598,7 @@ def load_model(model_dir, model_name, json_name="settings.json", log_json=False,
             gene_list = [d["gene"]]
         random_weights = d["random_weights"]
         dropout = d["dropout"]
-        if "dropout_value" in d:
+        if "dropout_value" in d and dropout:
             dropout_value = d["dropout_value"]
         else:
             dropout_value = 0.5

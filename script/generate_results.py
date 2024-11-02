@@ -50,12 +50,8 @@ def generate_model_list(model_dir):
 
             files = os.listdir(sub_path)
             for f in files:
-                if f[-3:] == ".pt" and f.find("ep_") != -1:
-                    src = sub_path + "/" + f
-                    dst = sub_path + "/" + f[f.find("ep_"):]
-                    os.rename(src, dst)
-                    if f[f.find("ep_"):] == "ep_29.pt":
-                        model_dir_path.append((sub_path + "/", dst))
+                if os.path.basename(f) == "best_model.pt":
+                    model_dir_path.append((sub_path + "/", sub_path + "/" + f))
     frame = pd.DataFrame(model_dir_path, columns=["model_dir", "model_path"])
     frame.to_csv(model_dir + model_list_file_name, index=False)
     return frame

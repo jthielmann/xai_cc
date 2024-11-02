@@ -47,8 +47,8 @@ attribution = CondAttribution(model)
 
 composite, layer_type, layer_name = get_composite_layertype_layername(model)
 
-print(layer_name)
-print(layer_type)
+print("target layer:", layer_name)
+print("target layer type:", layer_type)
 layer_map = {layer_name: ChannelConcept()}
 
 out_path = "../crp_out/tmp"
@@ -71,12 +71,12 @@ outputs = []
 if not already_calculated or not os.path.exists(out_path + "/activations.pt"):
     print("calculating concept attributions and activations over the dataset")
     activations, attributions, outputs, indices = calculate_attributions(dataset, device, composite, layer_name, out_path, cc)
+    print("calculation finished")
 else:
     print("loading concept attributions and activations over the dataset")
     activations, attributions, outputs, indices = load_attributions(out_path)
 
 
-print("calculation finished")
 # all indices are 0 because we only have one output
 attr = attributions[outputs.argmax(1) == 0]
 act = activations[outputs.argmax(1) == 0]
@@ -108,10 +108,11 @@ for i, X in enumerate([X_attr, X_act]):
     axes[i].legend()
 plt.tight_layout()
 """
-
+print("calculating prototypes")
 prototypes = get_prototypes(attr, embedding_attr, act, embedding_act)
 proto_attr = prototypes[0]
 
+print("calculating distances")
 distances = np.linalg.norm(attr[:, None, :].detach().cpu() - proto_attr, axis=2)
 prototype_samples = np.argsort(distances, axis=0)[:8]
 prototype_samples = indices[prototype_samples]

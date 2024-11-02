@@ -19,7 +19,7 @@ model_dir_path = []
 # gather new models only
 
 model_list_file_name = "new_models.csv"
-update_model_list = False
+update_model_list = True
 if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
     for model_type_dir in os.listdir(model_dir):
         sub_path = model_dir + model_type_dir
@@ -39,12 +39,8 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
 
             files = os.listdir(sub_path)
             for f in files:
-                if f[-3:] == ".pt" and f.find("ep_") != -1:
-                    src = sub_path + "/" + f
-                    dst = sub_path + "/" + f[f.find("ep_"):]
-                    os.rename(src, dst)
-                    if f[f.find("ep_"):] == "ep_29.pt":
-                        model_dir_path.append((sub_path + "/", dst))
+                if f.find("best_model.pt") != -1:
+                    model_dir_path.append((sub_path + "/", sub_path + "/" + os.path.basename(f)))
 
     frame = pd.DataFrame(model_dir_path, columns=["model_dir", "model_path"])
     frame.to_csv(model_dir + model_list_file_name, index=False)
@@ -80,14 +76,12 @@ def plot_hist_comparison(img_paths, width=4, subplot_size=10, gene=None, appendi
             ax[x, y].axis('off')
     plt.subplots_adjust(wspace=0, hspace=0)
     if gene:
-        plt.savefig("../" + gene + appendix + "_hists.png")
+        plt.savefig("../hists/" + gene + appendix + "_hists.png")
     else:
-        plt.savefig("../hists" + appendix + ".png")
+        plt.savefig("../hists/" + appendix + ".png")
 
     plt.clf()
 
-
-path = "../models/resnet50/VWF_random_freeze/scatter.png"
 #array = [path, path, path, path,path]
 #plot_hist_comparison(array)
 genes = []

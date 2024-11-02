@@ -5,7 +5,7 @@ import numpy as np
 import torch.nn.functional
 from scipy import stats
 import pandas as pd
-from data_loader import get_data_loaders
+from data_loader import get_data_loaders, get_dataset_ae
 import json
 import torch
 import torch.optim as optim
@@ -236,18 +236,16 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
     history_df.to_csv(save_name, index=False)
 
 
-def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
+def train_ae(ae, out_dir_name, criterion=nn.MSELoss(), optimizer=None, training_data_dir="../Training_Data/"):
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print("device: ", device)
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # MPS not supported for now
     ae.to(device)
-    if genes is None:
-        genes = ["RUBCNL"]
     if optimizer is None:
         optimizer = optim.Adam(ae.parameters(), lr=0.001)
-    train_loader, val_loader = get_data_loaders("../Training_Data/", 64, genes)
+    train_loader, val_loader = get_dataset_ae(training_data_dir, "../Training_Data/", file_type="tif")
     best_val_loss = float('inf')
-    logfile = dir_name + "/log.txt"
+    logfile = out_dir_name + "/log.txt"
     open(logfile, "a").close()
     print("training start")
     for epoch in range(200):
@@ -301,10 +299,10 @@ def train_ae(ae, dir_name, genes=None, criterion=nn.MSELoss(), optimizer=None):
                 running_loss_val = 0.0
         if epoch > 10 and running_loss_val < best_val_loss:
             best_val_loss = running_loss_val
-            torch.save(ae.state_dict(), dir_name + "/best_model.pt")
+            torch.save(ae.state_dict(), out_dir_name + "/best_model.pt")
         f = open(logfile, "a")
         f.write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
         f.close()
-        torch.save(ae.state_dict(), "../models/" + dir_name + "/ep_" + str(epoch) + ".pt")
+        torch.save(ae.state_dict(), "../models/" + out_dir_name + "/ep_" + str(epoch) + ".pt")
 
     print('Finished Training')

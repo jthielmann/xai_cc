@@ -267,27 +267,77 @@ def get_dataset_for_plotting(data_dir, gene="RUBCNL", samples=None):
 
     return PlottingDataset(dataset)
 
+
+class ae_dataset(torch.utils.data.Dataset):
+    def __init__(self, data, transforms=None):
+        if data is None:
+            raise ValueError("ae_dataset __init__: no images provided")
+        self.transforms = lambda x: x if transforms is None else transforms
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        return self.transforms(self.data[index][0]), self.data[index][1]
+
+
 # has the labels set to 0 because that makes it easier to work with the frameworks written for classification
 # the idea is that they filter the attribution by the chosen class, but as we only have one output we always choose y=0
-def get_dataset_for_plotting(data_dir, gene="RUBCNL", samples=None):
-    if samples is None:
-        samples = ["p007", "p014", "p016", "p020", "p025"]
+def get_dataset_ae(data_dir, val_data_dir=None, file_type="tif"):
+    print("setting train and val samples automatically")
+    patients = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
+    pop_ids = []
+    # remove hidden files
+    for i in range(len(patients)):
+        if patients[i].startswith("."):
+            pop_ids.append(i)
+    pop_ids.sort(reverse=True)
+    for i in pop_ids:
+        patients.pop(i)
 
-    columns_of_interest = ["tile", gene]
-    dataset = pd.DataFrame(columns=columns_of_interest)
+    if val_data_dir is not None:
+        train_sample_count = int(0.5 + len(patients) * 0.8)  # 80% of dataset is train, +0.5 means we round
+    else:
+        train_sample_count = len(patients)
+    patients_train = patients[0:train_sample_count]
+    if val_data_dir is None:
+        patients_val = patients[train_sample_count:]
+    else:
+        patients_val = [os.path.basename(f) for f in os.scandir(val_data_dir) if f.is_dir()]
+        pop_ids = []
+        # remove hidden files
+        for i in range(len(patients_val)):
+            if patients_val[i].startswith("."):
+                pop_ids.append(i)
+        pop_ids.sort(reverse=True)
+        for i in pop_ids:
+            patients_val.pop(i)
+    print("train_samples: ")
+    print(patients_train)
+    print("val_samples: ")
+    print(patients_val)
+    columns=["tile, path"]
 
+    dataset = []
     # generate training dataframe with all training samples
-    for i in samples:
-        st_dataset = pd.read_csv(data_dir + "/" + i + "/meta_data/gene_data.csv", index_col=-1)
-        st_dataset["tile"] = st_dataset.index
-        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
-        if dataset.empty:
-            dataset = st_dataset[columns_of_interest]
-        else:
-            # concat
-            dataset = pd.concat([dataset, st_dataset[columns_of_interest]])
+    for i in patients_train:
+        patient_path = data_dir + "/" + i + "/tiles/"
+        for img in os.listdir(patient_path):
+            if not img.endswith("." + file_type):
+                continue
+            dataset.append((Image.open(patient_path + img).convert("RGB"), data_dir + "/" + i + "/tiles/" + img))
+    dataset_train = ae_dataset(dataset)
 
+    dataset = []
+    # generate training dataframe with all training samples
+    for i in patients_val:
+        patient_path = data_dir + "/" + i + "/tiles/"
+        for img in os.listdir(patient_path):
+            if not img.endswith("." + file_type):
+                continue
+            dataset.append((Image.open(patient_path + img).convert("RGB"), data_dir + "/" + i + "/tiles/" + img))
+    dataset_val = ae_dataset(dataset)
     # reset index of dataframes
-    dataset.reset_index(drop=True, inplace=True)
 
-    return PlottingDataset(dataset)
+    return dataset_train, dataset_val
