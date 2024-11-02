@@ -2,7 +2,7 @@ from model import get_Resnet_ae
 from train import train_ae
 
 import os
-from random import randbytes
+from random import random
 
 learning_rates = [0.01, 0.001, 0.0001, 0.0005]
 
@@ -10,7 +10,7 @@ model_types = ["resnet18"]
 epochs = 200
 training_data_dir="../NCT-CRC/"
 
-out_dir = "../testing " + str(randbytes(1)) + "/"
+out_dir = "../testing " + str(random()) + "/"
 
 for model_type in model_types:
     for lr in learning_rates:
