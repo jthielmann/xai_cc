@@ -253,14 +253,14 @@ def train_ae(ae, out_dir_name, criterion=nn.MSELoss(), optimizer=None, training_
         ae.train()
         for i, data in enumerate(train_loader, 0):
             # Assume data is a tuple of (input_tensor, target_tensor)
-            inputs, _, path = data
+            inputs, path = data
             inputs = inputs.to(device)
 
             # Zero the parameter gradients
             optimizer.zero_grad()
 
             # Forward pass
-            outputs = ae(inputs)
+            outputs = ae(inputs.unsqueeze(0))
 
             # Compute loss
             loss = criterion(outputs, inputs)

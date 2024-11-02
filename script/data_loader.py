@@ -319,6 +319,8 @@ def get_dataset_ae(data_dir, val_data_dir=None, file_type="tif"):
     print(patients_val)
     columns=["tile, path"]
 
+    transform = transforms.ToTensor()
+
     dataset = []
     # generate training dataframe with all training samples
     for i in patients_train:
@@ -326,17 +328,18 @@ def get_dataset_ae(data_dir, val_data_dir=None, file_type="tif"):
         for img in os.listdir(patient_path):
             if not img.endswith("." + file_type):
                 continue
-            dataset.append((Image.open(patient_path + img).convert("RGB"), data_dir + "/" + i + "/tiles/" + img))
+            dataset.append((transform(Image.open(patient_path + img).convert("RGB")), data_dir + "/" + i + "/tiles/" + img))
     dataset_train = ae_dataset(dataset)
 
     dataset = []
     # generate training dataframe with all training samples
+    file_type = "tiff"
     for i in patients_val:
-        patient_path = data_dir + "/" + i + "/tiles/"
+        patient_path = val_data_dir + "/" + i + "/tiles/"
         for img in os.listdir(patient_path):
             if not img.endswith("." + file_type):
                 continue
-            dataset.append((Image.open(patient_path + img).convert("RGB"), data_dir + "/" + i + "/tiles/" + img))
+            dataset.append((transform(Image.open(patient_path + img).convert("RGB")), data_dir + "/" + i + "/tiles/" + img))
     dataset_val = ae_dataset(dataset)
     # reset index of dataframes
 
