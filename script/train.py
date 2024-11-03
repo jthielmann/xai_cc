@@ -281,8 +281,9 @@ def train_ae(ae, out_dir_name, criterion=nn.MSELoss(), optimizer=None, training_
         ae.eval()
         for i, data in enumerate(val_loader, 0):
             # Assume data is a tuple of (input_tensor, target_tensor)
-            inputs, _, path = data
+            inputs, path = data
             inputs = inputs.to(device)
+            inputs = inputs.unsqueeze(0)
 
             # Forward pass
             outputs = ae(inputs)

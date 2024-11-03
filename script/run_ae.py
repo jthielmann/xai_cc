@@ -10,7 +10,7 @@ model_types = ["resnet18"]
 epochs = 200
 training_data_dir="../NCT-CRC/"
 
-out_dir = "../testing " + str(random()) + "/"
+out_dir = "../models/"
 
 for model_type in model_types:
     for lr in learning_rates:
