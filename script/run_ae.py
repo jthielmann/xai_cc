@@ -18,6 +18,7 @@ for model_type in model_types:
         dir_name += "lr_" + str(lr)
         if training_data_dir.find("NCT-CRC") != -1:
             dir_name += "_NCT-CRC"
+        dir_name += "_SparsityLoss"
         if os.path.exists(dir_name):
             print(dir_name + " already exists, continuing")
             continue
@@ -26,8 +27,6 @@ for model_type in model_types:
         except OSError:
             print("Creation of the directory %s failed" % dir_name)
         model = get_Resnet_ae()
-        """for name, layer in model.named_modules():
-            print(name, layer)"""
-
         layer_name = "encoder.encoder.5.1.conv2.1"
-        train_ae(ae=model, out_dir_name=dir_name, training_data_dir=training_data_dir, criterion=[nn.MSELoss(), SparsityLoss(layer_name, model)], epochs=epochs, lr=lr)
+        criterion = [nn.MSELoss(), SparsityLoss(layer_name, model)]
+        train_ae(ae=model, out_dir_name=dir_name, training_data_dir=training_data_dir, criterion=criterion, epochs=epochs, lr=lr)
