@@ -5,7 +5,7 @@ import numpy as np
 import torch.nn.functional
 from scipy import stats
 import pandas as pd
-from data_loader import get_data_loaders, get_dataset_ae
+from data_loader import get_data_loaders, get_dataset_ae, get_dataset_ae_single
 import json
 import torch
 import torch.optim as optim
@@ -236,22 +236,26 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
     history_df.to_csv(save_name, index=False)
 
 
-def train_ae(ae, out_dir_name, criterion=nn.MSELoss(), optimizer=None, training_data_dir="../Training_Data/"):
+def train_ae(ae, out_dir_name, criterion, optimizer=None, training_data_dir="../Training_Data/", epochs=100, lr=0.001):
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print("device: ", device)
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # MPS not supported for now
     ae.to(device)
     if optimizer is None:
-        optimizer = optim.Adam(ae.parameters(), lr=0.001)
-    train_loader, val_loader = get_dataset_ae(training_data_dir, "../Training_Data/", file_type="tif")
+        optimizer = optim.Adam(ae.parameters(), lr=lr)
+
+    train_loader = get_dataset_ae_single(training_data_dir, file_type="tif")
+    val_loader = get_dataset_ae_single("../Training_Data/", file_type="tiff")
     best_val_loss = float('inf')
     logfile = out_dir_name + "/log.txt"
     open(logfile, "a").close()
     print("training start")
-    for epoch in range(200):
+    for epoch in range(epochs):
         running_loss = 0.0
         ae.train()
+
         for i, data in enumerate(train_loader, 0):
+
             # Assume data is a tuple of (input_tensor, target_tensor)
             inputs, path = data
             inputs = inputs.to(device)
@@ -263,7 +267,9 @@ def train_ae(ae, out_dir_name, criterion=nn.MSELoss(), optimizer=None, training_
             outputs = ae(inputs)
 
             # Compute loss
-            loss = criterion(outputs, inputs)
+            loss = torch.tensor(0.0).to(device)
+            for l in criterion:
+                loss += l(outputs, inputs)
 
             # Backward pass and optimize
             loss.backward()
@@ -272,35 +278,26 @@ def train_ae(ae, out_dir_name, criterion=nn.MSELoss(), optimizer=None, training_
             # Accumulate the loss
             running_loss += loss.item()
 
-            # Print statistics every 100 mini-batches
-            if i % 100 == 99:
-                print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.4f}')
-                running_loss = 0.0
-
         running_loss_val = 0.0
         ae.eval()
+        #print("validation start")
         for i, data in enumerate(val_loader, 0):
             # Assume data is a tuple of (input_tensor, target_tensor)
             inputs, path = data
             inputs = inputs.to(device)
             inputs = inputs.unsqueeze(0)
 
-            # Forward pass
             outputs = ae(inputs)
 
-            # Compute loss
-            loss = criterion(outputs, inputs)
+            loss = torch.tensor(0.0).to(device)
+            for l in criterion:
+                loss += l(outputs, inputs)
 
-            # Accumulate the loss
             running_loss_val += loss.item()
-
-            # Print statistics every 100 mini-batches
-            if i % 100 == 99:
-                print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss_val / 100:.4f}')
-                running_loss_val = 0.0
         if epoch > 10 and running_loss_val < best_val_loss:
             best_val_loss = running_loss_val
             torch.save(ae.state_dict(), out_dir_name + "/best_model.pt")
+        torch.save(ae.state_dict(), out_dir_name + "/latest.pt")
         f = open(logfile, "a")
         f.write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
         f.close()

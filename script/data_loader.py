@@ -269,10 +269,10 @@ def get_dataset_for_plotting(data_dir, gene="RUBCNL", samples=None):
 
 
 class ae_dataset(torch.utils.data.Dataset):
-    def __init__(self, data, transforms=None):
+    def __init__(self, data, transforms_= transforms.Compose([transforms.Resize((224, 224))])):
         if data is None:
             raise ValueError("ae_dataset __init__: no images provided")
-        self.transforms = lambda x: x if transforms is None else transforms
+        self.transforms = transforms_
         self.data = data
 
     def __len__(self):
@@ -344,3 +344,99 @@ def get_dataset_ae(data_dir, val_data_dir=None, file_type="tif"):
     # reset index of dataframes
 
     return dataset_train, dataset_val
+
+
+def get_dataset_ae_single(data_dir, file_type="tif"):
+    patients = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
+    pop_ids = []
+
+    # remove hidden files
+    for i in range(len(patients)):
+        if patients[i].startswith("."):
+            pop_ids.append(i)
+    # reversed so that we dont reduce the length of the list when we remove an element
+    pop_ids.sort(reverse=True)
+    for i in pop_ids:
+        patients.pop(i)
+
+    train_sample_count = len(patients)
+    patients_train = patients[0:train_sample_count]
+
+    transform = transforms.ToTensor()
+    dataset = []
+    # generate training dataframe with all training samples
+    for i in patients_train:
+        patient_path = data_dir + "/" + i + "/tiles/"
+        for img in os.listdir(patient_path):
+            if not img.endswith("." + file_type):
+                continue
+            dataset.append((transform(Image.open(patient_path + img).convert("RGB")), data_dir + "/" + i + "/tiles/" + img))
+    dataset_loaded = ae_dataset(dataset)
+    return dataset_loaded
+
+
+def get_dataset_ae_split(data_dir, split=0.8, file_type="tif"):
+    print("setting train and val samples automatically")
+    patients = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
+    pop_ids = []
+    # remove hidden files
+    for i in range(len(patients)):
+        if patients[i].startswith("."):
+            pop_ids.append(i)
+    pop_ids.sort(reverse=True)
+    for i in pop_ids:
+        patients.pop(i)
+
+    if split != 0.0:
+        train_sample_count = int(0.5 + len(patients) * split)  # 80% of dataset is train, +0.5 means we round
+    else:
+        train_sample_count = len(patients)
+    patients_train = patients[0:train_sample_count]
+
+    if split is None:
+        patients_val = patients[train_sample_count:]
+    else:
+        patients_val = [os.path.basename(f) for f in os.scandir(val_data_dir) if f.is_dir()]
+        pop_ids = []
+        # remove hidden files
+        for i in range(len(patients_val)):
+            if patients_val[i].startswith("."):
+                pop_ids.append(i)
+        pop_ids.sort(reverse=True)
+        for i in pop_ids:
+            patients_val.pop(i)
+    print("train_samples: ")
+    print(patients_train)
+    print("val_samples: ")
+    print(patients_val)
+    columns = ["tile, path"]
+
+    transform = transforms.ToTensor()
+
+    dataset = []
+    # generate training dataframe with all training samples
+    for i in patients_train:
+        patient_path = data_dir + "/" + i + "/tiles/"
+        for img in os.listdir(patient_path):
+            if not img.endswith("." + file_type):
+                continue
+            dataset.append(
+                (transform(Image.open(patient_path + img).convert("RGB")), data_dir + "/" + i + "/tiles/" + img))
+    dataset_train = ae_dataset(dataset)
+
+    dataset = []
+    # generate training dataframe with all training samples
+    file_type = "tiff"
+    for i in patients_val:
+        patient_path = val_data_dir + "/" + i + "/tiles/"
+        for img in os.listdir(patient_path):
+            if not img.endswith("." + file_type):
+                continue
+            dataset.append(
+                (transform(Image.open(patient_path + img).convert("RGB")), data_dir + "/" + i + "/tiles/" + img))
+    dataset_val = ae_dataset(dataset)
+    # reset index of dataframes
+
+    return dataset_train, dataset_val
+
+
