@@ -8,10 +8,10 @@ from model import general_model
 import os
 import torch.optim as optim
 from data_loader import get_data_loaders
-from loss_functions import SparsityLoss, CompositeLoss
+from loss_functions import SparsityLoss, CompositeLoss, CompositeLoss
 import pandas as pd
 
-learning_rate = 0.0005
+learning_rate = 0.001
 output_dir = "../models/"
 meta_data_dir = "/meta_data/"
 #data_dir = "../new_Training_Data/N20/"
@@ -91,7 +91,7 @@ for genes in gene_lists:
                                        data_dir=data_dir,
                                        model_save_dir=dir_name,
                                        epochs=epochs,
-                                       loss_fn=nn.MSELoss(),
+                                       loss_fn=loss_fn,
                                        optimizer=optim.AdamW(params, weight_decay=0.005),
                                        learning_rate=learning_rate,
                                        batch_size=128,

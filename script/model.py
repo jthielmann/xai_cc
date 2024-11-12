@@ -576,7 +576,7 @@ class general_model(nn.Module):
         for gene in self.gene_list:
             out.append(getattr(self, gene)(x))
         if len(out) == 1:
-            return torch.tensor(out[0])
+            return out[0].clone().detach().requires_grad_(True)
         return torch.cat(out, dim=1)
 
     def save(self, json_path):

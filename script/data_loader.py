@@ -1,6 +1,7 @@
 import os
 import random
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional
@@ -9,9 +10,12 @@ import pandas as pd
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
+from custom_transforms import Occlude
+
 
 # debug
 from inspect import currentframe, getframeinfo
+
 
 DEFAULT_RANDOM_SEED = 42
 
@@ -30,7 +34,7 @@ def seed_torch(seed=DEFAULT_RANDOM_SEED):
 
 
 def seed_everything(seed=DEFAULT_RANDOM_SEED):
-    seed_basic(seed)
+    #seed_basic(seed)
     seed_torch(seed)
 
 
@@ -346,7 +350,7 @@ def get_dataset_ae(data_dir, val_data_dir=None, file_type="tif"):
     return dataset_train, dataset_val
 
 
-def get_dataset_ae_single(data_dir, file_type="tif"):
+def get_dataset_ae_single(data_dir, file_type="tif", squelch=True):
     patients = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
     pop_ids = []
 
@@ -366,6 +370,8 @@ def get_dataset_ae_single(data_dir, file_type="tif"):
     dataset = []
     # generate training dataframe with all training samples
     for i in patients_train:
+        if not squelch:
+            print(i)
         patient_path = data_dir + "/" + i + "/tiles/"
         for img in os.listdir(patient_path):
             if not img.endswith("." + file_type):
@@ -440,3 +446,84 @@ def get_dataset_ae_split(data_dir, split=0.8, file_type="tif"):
     return dataset_train, dataset_val
 
 
+class CustomImageDataset(Dataset):
+    def __init__(self, data_dir, genes=None, transforms=None, file_endings=None):
+        if file_endings is None:
+            file_endings = ["tif", "tiff"]
+        """
+        Args:
+            root_dir (string): Directory with all the images organized into class folders.
+            transform (callable, optional): Optional transform to be applied on an image.
+        """
+        self.root_dir = data_dir
+        self.transforms = transforms
+        patients = os.listdir(data_dir)
+        pop_ids = []
+        for p in patients:
+            if p.startswith("."):
+                pop_ids.append(patients.index(p))
+        pop_ids.sort(reverse=True)
+        for i in pop_ids:
+            patients.pop(i)
+        self.patients = patients
+
+        self.imgs = []
+        self.labels = []
+        self.tilenames = []
+        for idx, patient in enumerate(self.patients):
+            patient_path = data_dir + "/" + patient
+            if not os.path.isdir(patient_path):
+                continue
+            if genes:
+                gene_data = pd.read_csv(patient_path + "/meta_data/gene_data.csv")
+
+            for img_file in os.listdir(patient_path + "/tiles/"):
+                if not img_file.endswith(".tif") and not img_file.endswith(".tiff"):
+                    continue
+                img_path = patient_path + "/tiles/" + img_file
+                for ending in file_endings:
+                    if img_file.find(ending) == -1:
+                        continue
+                if img_file.startswith("."):
+                    continue
+                labels = []
+                if genes:
+                    row = gene_data[gene_data["tile"] == os.path.basename(img_path)]
+                    if row.empty:
+                        continue
+                    for gene in genes:
+                        labels.append(row[gene].values[0])
+                self.labels.append(labels)
+                self.imgs.append(Image.open(img_path).convert("RGB"))
+                self.tilenames.append(img_path)
+
+    def __len__(self):
+        return len(self.imgs)
+
+    def __getitem__(self, idx):
+        img = self.imgs[idx]
+        if self.transforms:
+            img = self.transforms(img)
+        if len(self.labels) != 0:
+            label = self.labels[idx]
+            return img, label
+        return img
+
+
+def get_occlusion_dataset(data_dir, mean=None, std=None, occluder=None, file_endings=None):
+    if not mean:
+        mean = [0.7406, 0.5331, 0.7059]
+    if not std:
+        std = [0.1651, 0.2174, 0.1574]
+    if not occluder:
+        occluder = Occlude(20, 20, 0)
+    dataset = CustomImageDataset(data_dir, transforms=transforms.Compose([transforms.Resize((224, 224)),
+                                                                                 transforms.ToTensor(),
+                                                                                 transforms.Normalize(mean, std),
+                                                                                 occluder]), file_endings=file_endings)
+    return dataset
+
+
+def get_data_loader_occlusion(data_dir, batch_size, mean=None, std=None, occluder=None, file_endings=None):
+    dataset = get_occlusion_dataset(data_dir, mean, std, occluder, file_endings=file_endings)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True)
