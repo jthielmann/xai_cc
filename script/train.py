@@ -302,7 +302,7 @@ def train_ae(ae, out_dir_name, criterion, optimizer=None, training_data_dir="../
     print('Finished Training')
 
 
-def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="../Training_Data/", epochs=100, lr=0.001, ):
+def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="../Training_Data/", epochs=100, lr=0.001, batch_size=64):
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print("device: ", device)
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # MPS not supported for now
@@ -310,11 +310,17 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
     if optimizer is None:
         optimizer = optim.Adam(ae.parameters(), lr=lr)
 
-    train_loader = get_data_loader_occlusion(training_data_dir, batch_size=64, file_endings=["tif", "tiff"])
-    val_loader = get_data_loader_occlusion("../Training_Data/", batch_size=64, file_endings=["tif", "tiff"])
+    train_loader = get_data_loader_occlusion(training_data_dir, batch_size=batch_size, file_endings=["tif", "tiff"])
+    val_loader = get_data_loader_occlusion("../Training_Data/", batch_size=batch_size, file_endings=["tif", "tiff"])
     best_val_loss = float('inf')
     logfile = out_dir_name + "/log.txt"
     open(logfile, "a").close()
+
+    with open(out_dir_name + "/settings.json", "w") as file:
+        json_dict = {'model_type': ae.model_type, 'criterion': str(criterion), 'batch_size': batch_size,
+                     'epochs': epochs, 'optimizer': str(optimizer), 'device': device}
+        json.dump(json_dict, file)
+
     print("training start")
     for epoch in range(epochs):
         running_loss = 0.0
