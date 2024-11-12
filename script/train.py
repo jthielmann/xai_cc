@@ -317,7 +317,7 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
     open(logfile, "a").close()
 
     with open(out_dir_name + "/settings.json", "w") as file:
-        json_dict = {'model_type': ae.model_type, 'criterion': str(criterion), 'batch_size': batch_size,
+        json_dict = {'model_type': ae.__class__.__name__, 'criterion': str(criterion), 'batch_size': batch_size,
                      'epochs': epochs, 'optimizer': str(optimizer), 'device': device}
         json.dump(json_dict, file)
 
