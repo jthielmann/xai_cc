@@ -515,15 +515,13 @@ def get_occlusion_dataset(data_dir, mean=None, std=None, occluder=None, file_end
         mean = [0.7406, 0.5331, 0.7059]
     if not std:
         std = [0.1651, 0.2174, 0.1574]
-    if not occluder:
-        occluder = Occlude(20, 20, 0)
     dataset = CustomImageDataset(data_dir, transforms=transforms.Compose([transforms.Resize((224, 224)),
                                                                                  transforms.ToTensor(),
-                                                                                 transforms.Normalize(mean, std),
-                                                                                 occluder]), file_endings=file_endings)
+                                                                                 transforms.Normalize(mean, std)]), file_endings=file_endings)
     return dataset
 
 
 def get_data_loader_occlusion(data_dir, batch_size, mean=None, std=None, occluder=None, file_endings=None):
     dataset = get_occlusion_dataset(data_dir, mean, std, occluder, file_endings=file_endings)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    return loader

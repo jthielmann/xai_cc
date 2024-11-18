@@ -23,6 +23,11 @@ def get_composite_layertype_layername(model):
         layer_type = model.pretrained.classifier[-1].__class__
         print(model.pretrained.classifier[-1])
         layer_name = get_layer_names(model, [nn.Linear])[-3]
+    elif type(model.pretrained).__name__ == "encoder":
+        return None, None, None
+        composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
+        layer_type = model.pretrained.encoder.encoder[-1][-1].conv2[0].__class__
+        layer_name = get_layer_names(model, [layer_type])[-1]
     else:
         composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
         layer_type = model.pretrained.layer1[0].__class__

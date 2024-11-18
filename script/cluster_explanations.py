@@ -21,20 +21,64 @@ from torchvision.utils import make_grid
 import zennit.image as zimage
 from crp.image import imgify
 import pandas as pd
+import json
 
 from cluster_functions import (vis_opaque_img_border, get_umaps, calculate_attributions, load_attributions,
                                get_composite_layertype_layername, get_prototypes)
 
+
+import pickle
+def save_object(obj, filename):
+    with open(filename, 'wb') as outp:  # Overwrites any existing file.
+        pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
+
+
+
 device = "cpu"
 model_dir = "../models/"
 # gather new models only
-
+model_dir_path = []
 model_list_file_name = "new_models.csv"
+update_model_list = True
+if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
+    for model_type_dir in os.listdir(model_dir):
+        sub_path = model_dir + model_type_dir
+        if model_type_dir == ".DS_Store" or model_type_dir == "new" or os.path.isfile(sub_path):
+            continue
+        for model_leaf_dir in os.listdir(sub_path):
+            sub_path = model_dir + model_type_dir + "/" + model_leaf_dir
+            if model_type_dir == ".DS_Store" or os.path.isfile(sub_path):
+                continue
+
+            with open(sub_path + "/settings.json") as settings_json:
+                d = json.load(settings_json)
+                model_type = d["model_type"]
+
+                if "genes" not in d:
+                    continue
+
+            files = os.listdir(sub_path)
+            for f in files:
+                if f.find("best_model.pt") != -1:
+                    model_dir_path.append((sub_path + "/", sub_path + "/" + os.path.basename(f)))
+
+    frame = pd.DataFrame(model_dir_path, columns=["model_dir", "model_path"])
+    frame.to_csv(model_dir + model_list_file_name, index=False)
+else:
+    frame = pd.read_csv(model_dir + model_list_file_name)
+
+
 frame = pd.read_csv(model_dir + model_list_file_name)
-row = frame.iloc[0]
-model = load_model(row["model_dir"], row["model_path"], squelch=True).to(device)
+model = None
+i = 0
+while True:
+    row = frame.iloc[i]
+    model = load_model(row["model_dir"], row["model_path"], squelch=True).to(device)
+    composite, layer_type, layer_name = get_composite_layertype_layername(model)
+    if composite is None:
+        continue
+    break
 model_path = model.model_path
-#model, model_path = get_remote_models_and_path(model_id=0)
 print("model used:", model_path)
 model.eval()
 #device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -44,8 +88,6 @@ data_dir = "../Training_Data/"
 dataset = get_dataset_for_plotting(data_dir)
 
 attribution = CondAttribution(model)
-
-composite, layer_type, layer_name = get_composite_layertype_layername(model)
 
 print("target layer:", layer_name)
 print("target layer type:", layer_type)
@@ -108,10 +150,22 @@ for i, X in enumerate([X_attr, X_act]):
     axes[i].legend()
 plt.tight_layout()
 """
-print("calculating prototypes")
-prototypes = get_prototypes(attr, embedding_attr, act, embedding_act)
-proto_attr = prototypes[0]
+if not os.path.exists(out_path + "/prototypes/"):
+    print("calculating prototypes")
+    os.mkdir(out_path + "/prototypes/")
+    prototypes = get_prototypes(attr, embedding_attr, act, embedding_act)
 
+    for i in range(len(prototypes)):
+        np.save(out_path + "/prototypes/" + str(i), prototypes[i])
+else:
+    print("loading prototypes")
+    prototypes = []
+    files = os.listdir(out_path + "/prototypes/")
+    for f in files:
+        if f.endswith(".npy"):
+            prototypes.append(np.load(out_path + "/prototypes/" + f))
+proto_attr = prototypes[0]
+#exit(0)
 print("calculating distances")
 distances = np.linalg.norm(attr[:, None, :].detach().cpu() - proto_attr, axis=2)
 prototype_samples = np.argsort(distances, axis=0)[:8]
@@ -122,8 +176,13 @@ fig, axs = plt.subplots(1, 8, figsize=(6, 8), dpi=200, facecolor='white')
 
 N_PROTOTYPES = 8
 for i in range(N_PROTOTYPES):
-    grid = make_grid(
-        [dataset[prototype_samples[j][i]][0] for j in range(8)],
+    imgs_proto = []
+    for j in range(8):
+        sett = dataset[prototype_samples[j][i]]
+        img = sett[0]
+        imgs_proto.append(img)
+
+    grid = make_grid(imgs_proto,
         nrow=1,
         padding=0)
     grid = np.array(zimage.imgify(grid.detach().cpu()))
@@ -132,7 +191,7 @@ for i in range(N_PROTOTYPES):
     axs[i].set_xticks([])
     axs[i].set_yticks([])
     axs[i].set_title(f"{i}")
-
+plt.show()
 
 import numpy as np
 import torch

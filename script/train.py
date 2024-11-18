@@ -10,6 +10,7 @@ import json
 import torch
 import torch.optim as optim
 import torch.nn as nn
+from custom_transforms import Occlude
 
 DEFAULT_RANDOM_SEED = 42
 
@@ -81,79 +82,6 @@ def valid_epoch(model, device, dataloader, criterion, error_metric):
             batch_corr_val += corr
 
     return valid_loss, batch_corr_val
-
-
-def training(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, gene,
-             freeze_pretrained=False, error_metric=
-             lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
-             error_metric_name="pearson corr"):
-
-    training_log = model_save_dir + "/log.txt"
-    open(training_log, "a").close()
-
-    device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-    print("device: ", device)
-    print("gene:", gene)
-    model.to(device)
-
-    # Defining gradient function
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-    with open(model_save_dir + "/settings.json", "w") as file:
-        json_dict = {'model_type': str(model.__class__.__name__), 'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'gene': gene,
-                   'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device, 'freeze_pretrained': freeze_pretrained}
-        json.dump(json_dict, file)
-
-    # Defining training and validation history dictionary
-    history = {'train_loss': [], 'train_corr': [], 'val_loss': [], 'val_corr': []}
-
-    valid_loss_min = np.Inf
-    valid_corr_max = np.NINF
-    train_loader, val_loader = get_data_loaders(data_dir, batch_size, gene)
-
-    # Iterate through epochs
-    for epoch in range(epochs):
-        print('Epoch {} / {}:'.format(epoch + 1, epochs))
-
-        epoch_to_print = "Epoch {} / {}:".format(epoch + 1, epochs)
-        with open(training_log, "a") as f:
-            f.write(epoch_to_print + "\n")
-
-        # Load data into Dataloader
-        print("train")
-        training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer,
-                                                   freeze_pretrained, error_metric)
-        train_loss = (training_loss / len(train_loader.dataset)) * 1000
-        train_corr = training_corr / len(train_loader)
-        print("valid")
-        valid_loss, valid_corr = valid_epoch(model, device, val_loader, loss_fn, error_metric)
-        val_loss = (valid_loss / len(val_loader.dataset)) * 1000
-        val_corr = valid_corr / len(val_loader)
-        if val_loss < valid_loss_min:
-            valid_loss_min = val_loss
-        if val_corr > valid_corr_max:
-            valid_corr_max = val_corr
-        log_text = "AVG T Loss: {:.3f} AVG T {}: {:.3f} AVG V Loss: {:.3f} AVG V {}: {:.3f}".format(
-            train_loss, error_metric_name, train_corr, val_loss, error_metric_name, val_corr)
-        print(log_text)
-        history['val_loss'].append(val_loss)
-        history['val_corr'].append(val_corr)
-
-        history['train_loss'].append(train_loss)
-        history['train_corr'].append(train_corr)
-        if (epoch + 1) % 10 == 0:
-            model_save = model_save_dir + str(model.__class__.__name__) + "_ep_" + str(epoch) + ".pt"
-            torch.save(model.state_dict(), model_save)
-
-        # Save training log into text file
-        with open(training_log, "a") as f:
-            f.write(log_text)
-            f.write("\n")
-
-        scheduler.step()
-    history_df = pd.DataFrame.from_dict(history, orient="columns")
-
-    save_name = (model_save_dir + "/train_history.csv")
-    history_df.to_csv(save_name, index=False)
 
 
 def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, genes,
@@ -302,11 +230,89 @@ def train_ae(ae, out_dir_name, criterion, optimizer=None, training_data_dir="../
     print('Finished Training')
 
 
-def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="../Training_Data/", epochs=100, lr=0.001, batch_size=64):
+def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="../Training_Data/", epochs=100, lr=0.001, batch_size=64, debug=False):
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print("device: ", device)
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # MPS not supported for now
     ae.to(device)
+    if optimizer is None:
+        optimizer = optim.Adam(ae.parameters(), lr=lr)
+    occluder = Occlude(32, 32, patch_vary_width=0, patch_min_width=10, use_batch=True)
+    train_loader = get_data_loader_occlusion(training_data_dir, batch_size=batch_size, file_endings=["tif", "tiff"])
+    val_loader = get_data_loader_occlusion("../Training_Data/", batch_size=batch_size, file_endings=["tif", "tiff"])
+    best_val_loss = float('inf')
+    logfile = out_dir_name + "/log.txt"
+    if not debug:
+        open(logfile, "a").close()
+
+        with open(out_dir_name + "/settings.json", "w") as file:
+            json_dict = {'model_type': ae.__class__.__name__, 'criterion': str(criterion), 'batch_size': batch_size,
+                     'epochs': epochs, 'optimizer': str(optimizer), 'device': str(device)}
+            json.dump(json_dict, file)
+
+    print("training start")
+    for epoch in range(epochs):
+        running_loss = 0.0
+        ae.train()
+
+        for i, data in enumerate(train_loader, 0):
+
+            # labels is the unoccluded image
+            labels, path = data
+            labels = labels.to(device)
+
+            inputs = train_loader.occluder(labels)
+            # Zero the parameter gradients
+            optimizer.zero_grad()
+
+            # Forward pass
+            outputs = ae(inputs)
+
+            # Compute loss
+            loss = criterion(outputs, labels)
+
+            # Backward pass and optimize
+            loss.backward()
+            optimizer.step()
+
+            # Accumulate the loss
+            running_loss += loss.item()
+
+        running_loss_val = 0.0
+        ae.eval()
+        #print("validation start")
+        for i, data in enumerate(val_loader, 0):
+            # Assume data is a tuple of (input_tensor, target_tensor)
+            labels, path = data
+            labels = labels.to(device)
+
+            inputs = train_loader.occluder(labels)
+            outputs = ae(inputs)
+
+            loss = criterion(outputs, inputs)
+
+            running_loss_val += loss.item()
+        if epoch > 10 and running_loss_val < best_val_loss:
+            best_val_loss = running_loss_val
+            torch.save(ae.state_dict(), out_dir_name + "/best_model.pt")
+        if not debug:
+            torch.save(ae.state_dict(), out_dir_name + "/latest.pt")
+            f = open(logfile, "a")
+            f.write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
+            f.close()
+            torch.save(ae.state_dict(), "../models/" + out_dir_name + "/ep_" + str(epoch) + ".pt")
+        print(best_val_loss)
+        exit(0)
+    print('Finished Training')
+
+
+
+def train_dino(teacher, student, out_dir_name, criterion, optimizer=None, training_data_dir="../Training_Data/", epochs=100, lr=0.001, batch_size=64, debug=False):
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    print("device: ", device)
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # MPS not supported for now
+    teacher.to(device)
+    student.to(device)
     if optimizer is None:
         optimizer = optim.Adam(ae.parameters(), lr=lr)
 
@@ -314,12 +320,13 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
     val_loader = get_data_loader_occlusion("../Training_Data/", batch_size=batch_size, file_endings=["tif", "tiff"])
     best_val_loss = float('inf')
     logfile = out_dir_name + "/log.txt"
-    open(logfile, "a").close()
+    if not debug:
+        open(logfile, "a").close()
 
-    with open(out_dir_name + "/settings.json", "w") as file:
-        json_dict = {'model_type': ae.__class__.__name__, 'criterion': str(criterion), 'batch_size': batch_size,
-                     'epochs': epochs, 'optimizer': str(optimizer), 'device': device}
-        json.dump(json_dict, file)
+        with open(out_dir_name + "/settings.json", "w") as file:
+            json_dict = {'model_type': ae.__class__.__name__, 'criterion': str(criterion), 'batch_size': batch_size,
+                     'epochs': epochs, 'optimizer': str(optimizer), 'device': str(device)}
+            json.dump(json_dict, file)
 
     print("training start")
     for epoch in range(epochs):
@@ -331,7 +338,6 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
             # Assume data is a tuple of (input_tensor, target_tensor)
             inputs, path = data
             inputs = inputs.to(device)
-            inputs = inputs.unsqueeze(0)
             # Zero the parameter gradients
             optimizer.zero_grad()
 
@@ -355,7 +361,6 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
             # Assume data is a tuple of (input_tensor, target_tensor)
             inputs, path = data
             inputs = inputs.to(device)
-            inputs = inputs.unsqueeze(0)
 
             outputs = ae(inputs)
 
@@ -365,11 +370,11 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
         if epoch > 10 and running_loss_val < best_val_loss:
             best_val_loss = running_loss_val
             torch.save(ae.state_dict(), out_dir_name + "/best_model.pt")
-        torch.save(ae.state_dict(), out_dir_name + "/latest.pt")
-        f = open(logfile, "a")
-        f.write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
-        f.close()
-        torch.save(ae.state_dict(), "../models/" + out_dir_name + "/ep_" + str(epoch) + ".pt")
+        if not debug:
+            torch.save(ae.state_dict(), out_dir_name + "/latest.pt")
+            f = open(logfile, "a")
+            f.write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
+            f.close()
+            torch.save(ae.state_dict(), "../models/" + out_dir_name + "/ep_" + str(epoch) + ".pt")
 
     print('Finished Training')
-

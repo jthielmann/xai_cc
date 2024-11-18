@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class SparsityLoss(nn.Module):
     def __init__(self, layername, model):
@@ -19,28 +20,6 @@ class SparsityLoss(nn.Module):
 
 
 class CompositeLoss(nn.Module):
-    def __init__(self, losses, weights=None):
-        super().__init__()
-        self.losses = losses
-        # Use Parameter for weights if they need to be optimized; otherwise set requires_grad=True on tensors
-        if weights is not None:
-            self.weights = nn.ParameterList(
-                [nn.Parameter(w) if isinstance(w, torch.Tensor) else nn.Parameter(torch.tensor(w))
-                 for w in weights])
-        else:
-            self.weights = [torch.tensor(1 / len(losses)) for _ in losses]
-
-        # Check that the number of weights matches the number of losses
-        if len(self.weights) != len(self.losses):
-            raise ValueError("CompositeLoss: Number of weights must match number of losses")
-
-    def forward(self, out, label):
-        # Accumulate the weighted loss terms
-        loss = sum(self.losses[i](out, label) * self.weights[i] for i in range(len(self.losses)))
-        return loss
-
-
-class CompositeLoss(nn.Module):
     def __init__(self, losses, weights = None):
         super().__init__()
         self.losses = losses
@@ -53,7 +32,17 @@ class CompositeLoss(nn.Module):
             raise ValueError("CompositeLoss: Number of weights must match number of losses")
 
     def forward(self, out, label):
-        return torch.sum(torch.tensor([self.losses[i](out, label)*self.weights[i] for i in range(len(self.losses))]))
+        losses = []
+        for idx, loss_fn in enumerate(self.losses):
+            loss = loss_fn(out, label)
+            loss = torch.mul(loss, self.weights[idx])
+            losses.append(loss)
+        losses = torch.stack(losses)
+        result = torch.sum(losses)
+        return result
 
 
-
+def dino_loss(student_output, teacher_output, temperature):
+    teacher_out = F.softmax(teacher_output / temperature, dim=-1).detach()
+    student_out = F.log_softmax(student_output / temperature, dim=-1)
+    return -torch.mean(torch.sum(teacher_out * student_out, dim=-1))

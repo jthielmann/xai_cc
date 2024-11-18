@@ -11,8 +11,8 @@ epochs = 100
 training_data_dir="../NCT-CRC/"
 
 out_dir = "../models/"
-use_sparsity_loss = [True, False]
-
+use_sparsity_loss = [True]
+debug = True
 
 for model_type in model_types:
     for lr in learning_rates:
@@ -23,11 +23,12 @@ for model_type in model_types:
                 dir_name += "_NCT-CRC"
             if sparsity:
                 dir_name += "_SparsityLoss"
-            if os.path.exists(dir_name):
+            if os.path.exists(dir_name) and not debug:
                 print(dir_name + " already exists, continuing")
                 continue
             try:
-                os.makedirs(dir_name, exist_ok=True)
+                if not debug:
+                    os.makedirs(dir_name, exist_ok=True)
             except OSError:
                 print("Creation of the directory %s failed" % dir_name)
             print(dir_name)

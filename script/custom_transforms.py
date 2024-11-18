@@ -9,11 +9,12 @@ def patch_coords(image_size, patch_size_x, patch_size_y):
 
 # to be used as a transform in a torchvision.transforms.Compose
 class Occlude(object):
-    def __init__(self, patch_size_x, patch_size_y, patch_vary_width=0, patch_min_width=10):
+    def __init__(self, patch_size_x, patch_size_y, patch_vary_width=0, patch_min_width=10, use_batch=True):
         self.patch_size_x = patch_size_x
         self.patch_size_y = patch_size_y
         self.patch_vary_width = patch_vary_width
         self.patch_min_width = patch_min_width
+        self.use_batch = use_batch
 
     def __call__(self, sample: torch.tensor):
         h, w = sample.size()[-2:]
@@ -25,6 +26,9 @@ class Occlude(object):
             patch_size_x = min(self.patch_min_width, patch_size_x)
             patch_size_y = min(self.patch_min_width, patch_size_y)
         x, y = patch_coords((h, w), patch_size_x, patch_size_y)
-        sample[:, x:x + patch_size_x, y:y + patch_size_y] = 0
+        if self.use_batch:
+            sample[:, :, x:x + patch_size_x, y:y + patch_size_y] = 0
+        else:
+            sample[:, x:x + patch_size_x, y:y + patch_size_y] = 0
 
         return sample

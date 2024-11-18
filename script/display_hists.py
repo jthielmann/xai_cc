@@ -46,7 +46,7 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
     frame.to_csv(model_dir + model_list_file_name, index=False)
 else:
     frame = pd.read_csv(model_dir + model_list_file_name)
-
+exit(0)
 """row = frame.iloc[0]
 img = plt.imread(row["model_dir"] + "/scatter.png")
 imgplot = plt.imshow(img)
