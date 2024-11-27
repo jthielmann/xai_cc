@@ -143,7 +143,7 @@ def get_test_samples():
     return ["p008", "p021", "p026"]
 
 
-def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True):
+def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True, meta_data_dir="/meta_data/"):
     if use_default_samples:
         train_samples = get_train_samples()
         val_samples = get_val_samples()
@@ -173,7 +173,7 @@ def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True):
 
     # generate training dataframe with all training samples
     for i in train_samples:
-        st_dataset = pd.read_csv(data_dir + i + "/meta_data/gene_data.csv", index_col=-1)
+        st_dataset = pd.read_csv(data_dir + i + meta_data_dir + "/gene_data.csv", index_col=-1)
         st_dataset["tile"] = st_dataset.index
         st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
         if train_st_dataset.empty:
@@ -183,7 +183,7 @@ def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True):
 
     # generate validation dataframe with all validation samples
     for i in val_samples:
-        st_dataset = pd.read_csv(data_dir + i + "/meta_data/gene_data.csv", index_col=-1)
+        st_dataset = pd.read_csv(data_dir + i + meta_data_dir + "/gene_data.csv", index_col=-1)
         st_dataset["tile"] = st_dataset.index
         st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
 
@@ -510,7 +510,7 @@ class CustomImageDataset(Dataset):
         return img
 
 
-def get_occlusion_dataset(data_dir, mean=None, std=None, occluder=None, file_endings=None):
+def get_occlusion_dataset(data_dir, mean=None, std=None, file_endings=None):
     if not mean:
         mean = [0.7406, 0.5331, 0.7059]
     if not std:
@@ -521,7 +521,7 @@ def get_occlusion_dataset(data_dir, mean=None, std=None, occluder=None, file_end
     return dataset
 
 
-def get_data_loader_occlusion(data_dir, batch_size, mean=None, std=None, occluder=None, file_endings=None):
-    dataset = get_occlusion_dataset(data_dir, mean, std, occluder, file_endings=file_endings)
+def get_data_loader_occlusion(data_dir, batch_size, mean=None, std=None, file_endings=None):
+    dataset = get_occlusion_dataset(data_dir, mean, std, file_endings=file_endings)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return loader

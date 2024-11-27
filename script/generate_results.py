@@ -29,7 +29,7 @@ model_list_file_name = "new_models.csv"
 update_model_list = True
 
 
-def generate_model_list(model_dir):
+def generate_model_list(model_dir, must_contain=None):
     for model_type_dir in os.listdir(model_dir):
         print(model_type_dir)
         sub_path = model_dir + model_type_dir
@@ -39,7 +39,10 @@ def generate_model_list(model_dir):
             sub_path = model_dir + model_type_dir + "/" + model_leaf_dir
             if model_type_dir == ".DS_Store" or os.path.isfile(sub_path):
                 continue
-
+            if must_contain is not None and sub_path.find(must_contain) == -1:
+                continue
+            if not os.path.exists(sub_path + "/settings.json"):
+                continue
             with open(sub_path + "/settings.json") as settings_json:
                 d = json.load(settings_json)
                 model_type = d["model_type"]
@@ -56,14 +59,14 @@ def generate_model_list(model_dir):
     frame.to_csv(model_dir + model_list_file_name, index=False)
     return frame
 
-
+must_contain = "dino"
 if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
-    frame = generate_model_list(model_dir)
+    frame = generate_model_list(model_dir, must_contain=must_contain)
 else:
     frame = pd.read_csv(model_dir + model_list_file_name)
 
 
-def generate_results(model_frame, patients, data_dir, out_file_appendix=""):
+def generate_results(model_frame, patients, data_dir, out_file_appendix="", calculate_anyway=False):
     for idx, row in model_frame.iterrows():
         results_filename = row["model_dir"] + os.path.basename(row["model_path"][:-3]) + out_file_appendix + "_results.csv"
         """    if results_filename.find("resnet50/MKI67_random/") == -1:
@@ -73,7 +76,7 @@ def generate_results(model_frame, patients, data_dir, out_file_appendix=""):
         token_name = row["model_dir"] + "generation_token" + out_file_appendix
         if os.path.exists(results_filename) and not os.path.exists(token_name):
             os.remove(results_filename)
-        if os.path.exists(token_name):
+        if os.path.exists(token_name) and not calculate_anyway:
             continue
 
         open(token_name, "a").close()
@@ -101,7 +104,10 @@ def generate_results(model_frame, patients, data_dir, out_file_appendix=""):
                         if out_item.shape == torch.Size([1]):
                             out_row.append(out_item.item())
                         else:
+                            print(out_item.shape)
+                            print(out_item)
                             for t in out_item:
+                                print()
                                 out_row.append(t.item())
                     out_row.append(patient)
                     #print(columns_base, columns, out_row)
@@ -112,8 +118,9 @@ def generate_results(model_frame, patients, data_dir, out_file_appendix=""):
                     df.to_csv(results_filename, mode='a', header=False)
 
 
-generate_results(frame, patients_train, data_dir_train, "_train")
-generate_results(frame, patients_val, data_dir_train, "_val")
+calculate_anyway = True
+generate_results(frame, patients_train, data_dir_train, "_train", calculate_anyway=calculate_anyway)
+generate_results(frame, patients_val, data_dir_train, "_val", calculate_anyway=calculate_anyway)
 #generate_results(frame, patients_test, data_dir_test, "_test")
 
 

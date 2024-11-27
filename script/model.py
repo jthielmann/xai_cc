@@ -534,7 +534,7 @@ def get_encoder(path):
 
 class general_model(nn.Module):
     def __init__(self, model_type, gene_list, random_weights=False, dropout=False, dropout_value=0.5,
-                 pretrained_path=None, pretrained_out_dim=1000):
+                 pretrained_path=None, pretrained_out_dim=1000, middel_layer_features=200):
         super(general_model, self).__init__()
         if pretrained_path and random_weights:
             print("cannot have pretrained_path and random_weights set in general_model")
@@ -554,14 +554,16 @@ class general_model(nn.Module):
             self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
         elif model_type == "pretrained_res18":
             self.pretrained = get_encoder(pretrained_path)
+        elif model_type == "resnet50dino":
+            self.pretrained = torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
         else:
             print("model type", model_type, "not implemented")
             exit(1)
         for gene in gene_list:
             if dropout:
-                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, 200), nn.Dropout(dropout_value), nn.ReLU(), nn.Linear(200, 1), nn.Dropout(dropout_value)))
+                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, middel_layer_features), nn.Dropout(dropout_value), nn.ReLU(), nn.Linear(middel_layer_features, 1), nn.Dropout(dropout_value)))
             else:
-                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, 200),nn.ReLU(), nn.Linear(200, 1)))
+                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, middel_layer_features),nn.ReLU(), nn.Linear(middel_layer_features, 1)))
 
         self.gene_list = gene_list
         self.model_type = model_type
@@ -603,8 +605,11 @@ def load_model(model_dir, model_name, json_name="settings.json", log_json=False,
         else:
             dropout_value = 0.5
         pretrained_out_dim = int(d["pretrained_out_dim"])
-
-    model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value,pretrained_out_dim=pretrained_out_dim)
+        if "middel_layer_features" in d:
+            middel_layer_features = d["middel_layer_features"]
+        else:
+            middel_layer_features = 200
+    model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
     if squelch:
         model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
     else:

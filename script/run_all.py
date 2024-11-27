@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from train import training, training_multi
+from train import training_multi
 
 import torchmetrics
 
@@ -15,35 +15,42 @@ learning_rate = 0.001
 output_dir = "../models/"
 meta_data_dir = "/meta_data/"
 #data_dir = "../new_Training_Data/N20/"
-data_dir = '../Training_Data/'
+data_dir = '../data/CRC-N19/'
 
-gene_lists = [["RUBCNL"]]
-# gene_lists = [["COL1A1"], ["S100A6"], ["FABP1"], ["LCN2"], ["BMP4"]]
+#gene_lists = [["RUBCNL"]]
+#, "MYH11"
+gene_lists = [["COL3A1","DCN","THY1"], ["ENG", "PECAM1"], ["TAGLN", "ACTA2", "RGS5"], ["TAGLN", "ACTA2", "SYNPO2", "CNN1", "DES"], ["SOX10", "S100B", "PLP1"]]
 check_if_gene_in_dataset = True
 if check_if_gene_in_dataset:
     patients_dir = data_dir
     patients = [patient for patient in os.listdir(patients_dir) if os.path.isdir(patients_dir + "/" + patient)]
     df = pd.read_csv(data_dir + patients[0]+ "/" + meta_data_dir + "/gene_data.csv")
+    print(df.columns)
     ids_to_remove = []
     for gene_list in gene_lists:
         for gene in gene_list:
             if gene not in df.columns:
                 print(gene, "not in dataset")
+                exit(1)
+            else:
+                print(gene, "in dataset")
+                continue
                 for i in range(len(gene_lists)):
                     if gene in gene_lists[i]:
                         ids_to_remove.append(i)
     ids_to_remove.sort(reverse=True)
     for i in ids_to_remove:
         gene_lists.remove(gene_lists[i])
+print(gene_lists)
 
-model_types = ["resnet18", "resnet50"]
+model_types = ["resnet18"]
 epochs = 40
 random_weights_bool = [True]
 dropout_bool = [False]
 dropout_values = [0]
 freeze_bool = [False]
-use_default_samples = True
-appendix = "_CompositeLoss"
+use_default_samples = False
+appendix = ""
 
 for genes in gene_lists:
     dir_name_base = "/" + genes[0]
@@ -76,8 +83,7 @@ for genes in gene_lists:
                             continue
                         os.makedirs(dir_name, exist_ok=True)
 
-                        model = general_model(model_type, genes, use_random_weights, use_dropout, dropout_value,
-                                              pretrained_path, 1000)
+                        model = general_model(model_type, genes, random_weights=use_random_weights, dropout=use_dropout, dropout_value=dropout_value, pretrained_path=pretrained_path, pretrained_out_dim=1000)
                         print(dir_name)
                         print(len(dir_name))
 
@@ -85,7 +91,7 @@ for genes in gene_lists:
                         params.append({"params": model.pretrained.parameters(), "lr": learning_rate})
                         for gene in genes:
                             params.append({"params": getattr(model, gene).parameters(), "lr": learning_rate})
-                        losses = [nn.MSELoss(), SparsityLoss("pretrained.layer4.1", model)]
+                        losses = [nn.MSELoss()]
                         loss_fn = CompositeLoss(losses)
                         training_multi(model=model,
                                        data_dir=data_dir,

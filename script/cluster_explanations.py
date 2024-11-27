@@ -49,7 +49,8 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
             sub_path = model_dir + model_type_dir + "/" + model_leaf_dir
             if model_type_dir == ".DS_Store" or os.path.isfile(sub_path):
                 continue
-
+            if not os.path.exists(sub_path + "/settings.json"):
+                continue
             with open(sub_path + "/settings.json") as settings_json:
                 d = json.load(settings_json)
                 model_type = d["model_type"]
@@ -93,7 +94,7 @@ print("target layer:", layer_name)
 print("target layer type:", layer_type)
 layer_map = {layer_name: ChannelConcept()}
 
-out_path = "../crp_out/tmp"
+out_path = "../crp_out/"
 already_calculated = os.path.exists(out_path)
 preprocessing = T.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])  # from dataloader
 #preprocessing = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # from tutorial

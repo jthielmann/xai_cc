@@ -87,12 +87,12 @@ def valid_epoch(model, device, dataloader, criterion, error_metric):
 def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, genes,
              freeze_pretrained=False, pretrained_path=None,
              error_metric=lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
-             error_metric_name="pearson corr", meta_data_dir_name="meta_data", use_default_samples=True):
+             error_metric_name="pearson corr", meta_data_dir_name="meta_data", use_default_samples=True, debug=False):
 
     print("genes:", genes)
-
-    training_log = model_save_dir + "/log.txt"
-    open(training_log, "a").close()
+    if not debug:
+        training_log = model_save_dir + "/log.txt"
+        open(training_log, "a").close()
 
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     model.to(device)
@@ -101,13 +101,14 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
     # Defining gradient function
-    with open(model_save_dir + "/settings.json", "w") as file:
-        json_dict = {'model_type': model.model_type, 'random_weights': model.random_weights,
-                     'dropout': model.dropout, 'drop_out_rate': model.dropout_value, 'pretrained_out_dim': str(model.pretrained_out_dim),
-                     'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'genes': genes,
-                     'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device,
-                     'freeze_pretrained': freeze_pretrained, 'pretrained_path': str(pretrained_path)}
-        json.dump(json_dict, file)
+    if not debug:
+        with open(model_save_dir + "/settings.json", "w") as file:
+            json_dict = {'model_type': model.model_type, 'random_weights': model.random_weights,
+                         'dropout': model.dropout, 'drop_out_rate': model.dropout_value, 'pretrained_out_dim': str(model.pretrained_out_dim),
+                         'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'genes': genes,
+                         'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device,
+                         'freeze_pretrained': freeze_pretrained, 'pretrained_path': str(pretrained_path)}
+            json.dump(json_dict, file)
 
     # Defining training and validation history dictionary
     history = {'train_loss': [], 'train_corr': [], 'val_loss': [], 'val_corr': []}
@@ -121,8 +122,9 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
         print('Epoch {} / {}:'.format(epoch + 1, epochs))
 
         epoch_to_print = "Epoch {} / {}:".format(epoch + 1, epochs)
-        with open(training_log, "a") as f:
-            f.write(epoch_to_print + "\n")
+        if not debug:
+            with open(training_log, "a") as f:
+                f.write(epoch_to_print + "\n")
 
         # Load data into Dataloader
         print("train")
@@ -137,11 +139,13 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
         if val_loss < valid_loss_min:
             valid_loss_min = val_loss
             model_save = model_save_dir + "/best_model.pt"
-            torch.save(model.state_dict(), model_save)
+            if not debug:
+                torch.save(model.state_dict(), model_save)
         if val_corr > valid_corr_max:
             valid_corr_max = val_corr
         log_text = "AVG T Loss: {:.3f} AVG T {}: {:.3f} AVG V Loss: {:.3f} AVG V {}: {:.3f}, Best V: {:.3f}".format(
             train_loss, error_metric_name, train_corr, val_loss, error_metric_name, val_corr, valid_loss_min)
+
         print(log_text)
         history['val_loss'].append(val_loss)
         history['val_corr'].append(val_corr)
@@ -149,20 +153,26 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
         history['train_loss'].append(train_loss)
         history['train_corr'].append(train_corr)
         if (epoch + 1) % 10 == 0:
-            model_save = model_save_dir + "/ep_" + str(epoch) + ".pt"
-            torch.save(model.state_dict(), model_save)
+            print("---------------------------------------------------")
+            print(model_save_dir)
+            if not debug:
+                model_save = model_save_dir + "/ep_" + str(epoch) + ".pt"
+                torch.save(model.state_dict(), model_save)
 
         # Save training log into text file
-        with open(training_log, "a") as f:
-            f.write(log_text)
-            f.write("\n")
+        if not debug:
+            with open(training_log, "a") as f:
+                f.write(log_text)
+                f.write("\n")
 
         scheduler.step()
     history_df = pd.DataFrame.from_dict(history, orient="columns")
 
     save_name = (model_save_dir + "/train_history.csv")
     history_df.to_csv(save_name, index=False)
-
+    if not debug:
+        model_save = model_save_dir + "/latest.pt"
+        torch.save(model.state_dict(), model_save)
 
 def train_ae(ae, out_dir_name, criterion, optimizer=None, training_data_dir="../Training_Data/", epochs=100, lr=0.001, ):
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -237,7 +247,7 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
     ae.to(device)
     if optimizer is None:
         optimizer = optim.Adam(ae.parameters(), lr=lr)
-    occluder = Occlude(32, 32, patch_vary_width=0, patch_min_width=10, use_batch=True)
+    occluder = Occlude(20, 20, patch_vary_width=0, patch_min_width=10, use_batch=True)
     train_loader = get_data_loader_occlusion(training_data_dir, batch_size=batch_size, file_endings=["tif", "tiff"])
     val_loader = get_data_loader_occlusion("../Training_Data/", batch_size=batch_size, file_endings=["tif", "tiff"])
     best_val_loss = float('inf')
@@ -254,14 +264,13 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
     for epoch in range(epochs):
         running_loss = 0.0
         ae.train()
-
         for i, data in enumerate(train_loader, 0):
 
             # labels is the unoccluded image
             labels, path = data
             labels = labels.to(device)
 
-            inputs = train_loader.occluder(labels)
+            inputs = occluder(labels)
             # Zero the parameter gradients
             optimizer.zero_grad()
 
@@ -281,28 +290,30 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
         running_loss_val = 0.0
         ae.eval()
         #print("validation start")
+
         for i, data in enumerate(val_loader, 0):
             # Assume data is a tuple of (input_tensor, target_tensor)
             labels, path = data
             labels = labels.to(device)
 
-            inputs = train_loader.occluder(labels)
+            inputs = occluder(labels)
             outputs = ae(inputs)
 
             loss = criterion(outputs, inputs)
 
-            running_loss_val += loss.item()
-        if epoch > 10 and running_loss_val < best_val_loss:
+            running_loss_val += loss.item() / len(val_loader)
+
+        if running_loss_val < best_val_loss:
             best_val_loss = running_loss_val
             torch.save(ae.state_dict(), out_dir_name + "/best_model.pt")
         if not debug:
             torch.save(ae.state_dict(), out_dir_name + "/latest.pt")
             f = open(logfile, "a")
-            f.write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
+            f.write(f'Epoch {epoch} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
             f.close()
-            torch.save(ae.state_dict(), "../models/" + out_dir_name + "/ep_" + str(epoch) + ".pt")
-        print(best_val_loss)
-        exit(0)
+            #torch.save(ae.state_dict(), "../models/" + out_dir_name + "/ep_" + str(epoch) + ".pt")
+        print("epoch", epoch, "best_val_loss", best_val_loss, "running_loss_val", running_loss_val)
+
     print('Finished Training')
 
 

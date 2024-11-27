@@ -12,7 +12,7 @@ training_data_dir="../NCT-CRC/"
 
 out_dir = "../models/"
 use_sparsity_loss = [True]
-debug = True
+debug = False
 
 for model_type in model_types:
     for lr in learning_rates:
@@ -39,4 +39,4 @@ for model_type in model_types:
             else:
                 losses = [nn.MSELoss()]
             loss_fn = CompositeLoss(losses)
-            train_ae2(ae=model, out_dir_name=dir_name, training_data_dir=training_data_dir, criterion=loss_fn, epochs=epochs, lr=lr)
+            train_ae2(ae=model, out_dir_name=dir_name, training_data_dir=training_data_dir, criterion=loss_fn, epochs=epochs, lr=lr, debug=debug)
