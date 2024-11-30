@@ -143,10 +143,13 @@ def get_test_samples():
     return ["p008", "p021", "p026"]
 
 
-def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True, meta_data_dir="/meta_data/"):
+def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True, meta_data_dir="/meta_data/", samples=None):
     if use_default_samples:
         train_samples = get_train_samples()
         val_samples = get_val_samples()
+    elif samples:
+        train_samples = samples[0]
+        val_samples = samples[1]
     else:
         print("setting train and val samples automatically")
         patients = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
@@ -211,6 +214,10 @@ def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True, meta
     valid_data = Subset(loaded_valid_dataset, transform=train_transforms)
     train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(dataset=valid_data, batch_size=batch_size, shuffle=False)
+
+    print("train_samples", train_samples)
+    print("val_samples", val_samples)
+
     return train_loader, val_loader
 
 
@@ -248,18 +255,23 @@ class PlottingDataset(torch.utils.data.Dataset):
 
 # has the labels set to 0 because that makes it easier to work with the frameworks written for classification
 # the idea is that they filter the attribution by the chosen class, but as we only have one output we always choose y=0
-def get_dataset_for_plotting(data_dir, gene="RUBCNL", samples=None):
+def get_dataset_for_plotting(data_dir, genes=None, samples=None):
     if samples is None:
-        samples = ["p007", "p014", "p016", "p020", "p025"]
+        samples = []
+        for subdir in os.listdir(data_dir):
+            if os.path.isdir(data_dir + "/" + subdir):
+                samples.append(subdir)
 
-    columns_of_interest = ["tile", gene]
+    columns_of_interest = ["tile"]
+    for gene in genes:
+        columns_of_interest.append(gene)
     dataset = pd.DataFrame(columns=columns_of_interest)
 
     # generate training dataframe with all training samples
     for i in samples:
         st_dataset = pd.read_csv(data_dir + "/" + i + "/meta_data/gene_data.csv", index_col=-1)
         st_dataset["tile"] = st_dataset.index
-        st_dataset['tile'] = st_dataset['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
+        st_dataset["tile"] = st_dataset["tile"].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
         if dataset.empty:
             dataset = st_dataset[columns_of_interest]
         else:

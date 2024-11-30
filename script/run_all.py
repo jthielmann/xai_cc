@@ -35,9 +35,6 @@ if check_if_gene_in_dataset:
             else:
                 print(gene, "in dataset")
                 continue
-                for i in range(len(gene_lists)):
-                    if gene in gene_lists[i]:
-                        ids_to_remove.append(i)
     ids_to_remove.sort(reverse=True)
     for i in ids_to_remove:
         gene_lists.remove(gene_lists[i])
@@ -46,10 +43,12 @@ print(gene_lists)
 model_types = ["resnet18"]
 epochs = 40
 random_weights_bool = [True]
-dropout_bool = [False]
-dropout_values = [0]
 freeze_bool = [False]
+
 use_default_samples = False
+samples = [["TENX92","TENX91","TENX90","TENX89","TENX70","TENX49", "ZEN49", "ZEN48", "ZEN47", "ZEN46", "ZEN45", "ZEN44"],
+           ["TENX29", "ZEN43", "ZEN42", "ZEN40", "ZEN39", "ZEN38", "ZEN36"]]
+
 appendix = ""
 
 for genes in gene_lists:
@@ -59,52 +58,46 @@ for genes in gene_lists:
 
     for model_type in model_types:
         dir_name = output_dir + model_type + dir_name_base
-
         for use_random_weights in random_weights_bool:
-            for use_dropout in dropout_bool:
-                for do_freeze_pretrained in freeze_bool:
-                    for dropout_value in dropout_values:
-                        pretrained_path = output_dir + "/best_model.pt"
-                        dir_name = output_dir + model_type + dir_name_base
-                        if use_random_weights:
-                            dir_name += "_random"
-                        if do_freeze_pretrained:
-                            dir_name += "_freeze"
-                        if use_dropout:
-                            dir_name += "_dropout_" + str(dropout_value)
-                        if appendix:
-                            dir_name += appendix
-                        max_file_length = 255
-                        dir_name += "/"
-                        if len(dir_name) > max_file_length:
-                            print(dir_name, "is longer than max_file_length", max_file_length)
-                        if os.path.exists(dir_name):
-                            print(dir_name, "already exists, continue..")
-                            continue
-                        os.makedirs(dir_name, exist_ok=True)
+            for do_freeze_pretrained in freeze_bool:
+                dir_name = output_dir + model_type + dir_name_base
+                if use_random_weights:
+                    dir_name += "_random"
+                if do_freeze_pretrained:
+                    dir_name += "_freeze"
+                if appendix:
+                    dir_name += appendix
+                max_file_length = 255
+                dir_name += "/"
+                if len(dir_name) > max_file_length:
+                    print(dir_name, "is longer than max_file_length", max_file_length)
+                if os.path.exists(dir_name):
+                    print(dir_name, "already exists, continue..")
+                    continue
+                os.makedirs(dir_name, exist_ok=True)
 
-                        model = general_model(model_type, genes, random_weights=use_random_weights, dropout=use_dropout, dropout_value=dropout_value, pretrained_path=pretrained_path, pretrained_out_dim=1000)
-                        print(dir_name)
-                        print(len(dir_name))
+                model = general_model(model_type, genes, random_weights=use_random_weights, dropout=False, pretrained_out_dim=1000)
+                print(dir_name)
+                print(len(dir_name))
 
-                        params = []
-                        params.append({"params": model.pretrained.parameters(), "lr": learning_rate})
-                        for gene in genes:
-                            params.append({"params": getattr(model, gene).parameters(), "lr": learning_rate})
-                        losses = [nn.MSELoss()]
-                        loss_fn = CompositeLoss(losses)
-                        training_multi(model=model,
-                                       data_dir=data_dir,
-                                       model_save_dir=dir_name,
-                                       epochs=epochs,
-                                       loss_fn=loss_fn,
-                                       optimizer=optim.AdamW(params, weight_decay=0.005),
-                                       learning_rate=learning_rate,
-                                       batch_size=128,
-                                       genes=genes,
-                                       freeze_pretrained=do_freeze_pretrained,
-                                       error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
-                                       error_metric_name="MSE",
-                                       pretrained_path=pretrained_path,
-                                       meta_data_dir_name=meta_data_dir,
-                                       use_default_samples=use_default_samples)
+                params = []
+                params.append({"params": model.pretrained.parameters(), "lr": learning_rate})
+                for gene in genes:
+                    params.append({"params": getattr(model, gene).parameters(), "lr": learning_rate})
+                losses = [nn.MSELoss()]
+                loss_fn = CompositeLoss(losses)
+                training_multi(model=model,
+                               data_dir=data_dir,
+                               model_save_dir=dir_name,
+                               epochs=epochs,
+                               loss_fn=loss_fn,
+                               optimizer=optim.AdamW(params, weight_decay=0.005),
+                               learning_rate=learning_rate,
+                               batch_size=128,
+                               genes=genes,
+                               freeze_pretrained=do_freeze_pretrained,
+                               error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
+                               error_metric_name="MSE",
+                               meta_data_dir_name=meta_data_dir,
+                               use_default_samples=use_default_samples,
+                               samples=samples)

@@ -538,6 +538,7 @@ class general_model(nn.Module):
         super(general_model, self).__init__()
         if pretrained_path and random_weights:
             print("cannot have pretrained_path and random_weights set in general_model")
+            exit(1)
         if random_weights:
             weights = None
         else:
@@ -578,7 +579,7 @@ class general_model(nn.Module):
         for gene in self.gene_list:
             out.append(getattr(self, gene)(x))
         if len(out) == 1:
-            return out[0].clone().detach().requires_grad_(True)
+            return out[0]
         return torch.cat(out, dim=1)
 
     def save(self, json_path):
@@ -589,7 +590,7 @@ class general_model(nn.Module):
 
 
 def load_model(model_dir, model_name, json_name="settings.json", log_json=False, squelch=False):
-    with open(model_dir + json_name) as f:
+    with open(model_dir + "/" + json_name) as f:
         d = json.load(f)
         if log_json:
             print(d)
@@ -609,11 +610,16 @@ def load_model(model_dir, model_name, json_name="settings.json", log_json=False,
             middel_layer_features = d["middel_layer_features"]
         else:
             middel_layer_features = 200
-    model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
-    if squelch:
-        model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
-    else:
-        print(model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False)))
+    try:
+        model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
+        res = model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
+    except RuntimeError:
+        middel_layer_features = 512
+        model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
+        res = model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
+
+    if not squelch:
+        print(res)
     model.model_path = model_name
     return model
 

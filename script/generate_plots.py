@@ -19,10 +19,10 @@ def update_model_list(model_dir, model_list_file_name = "new_models.csv"):
             sub_path = model_dir + model_type_dir + "/" + model_leaf_dir
             if model_type_dir == ".DS_Store" or os.path.isfile(sub_path):
                 continue
-
+            if not os.path.exists(sub_path + "/settings.json"):
+                continue
             with open(sub_path + "/settings.json") as settings_json:
                 d = json.load(settings_json)
-                model_type = d["model_type"]
 
                 # skip old models
                 if "genes" not in d:
@@ -30,12 +30,9 @@ def update_model_list(model_dir, model_list_file_name = "new_models.csv"):
 
             files = os.listdir(sub_path)
             for f in files:
-                if f[-3:] == ".pt" and f.find("ep_") != -1:
-                    src = sub_path + "/" + f
-                    dst = sub_path + "/" + f[f.find("ep_"):]
-                    os.rename(src, dst)
-                    if f[f.find("ep_"):] == "ep_29.pt":
-                        model_dir_path.append((sub_path + "/", dst))
+                model_name = "best_model.pt"
+                if f.find(model_name) != -1:
+                    model_dir_path.append((sub_path + "/", sub_path + "/" + model_name))
 
     frame = pd.DataFrame(model_dir_path, columns=["model_dir", "model_path"])
     frame.to_csv(model_dir + model_list_file_name, index=False)
@@ -137,19 +134,6 @@ def gather_genes_and_paths(frame):
     return genes, image_paths_train, image_paths_val
 
 
-
-def tile_map(plotting_data):
-    merge = pd.read_csv(base_path + "merge.csv")
-    merge["diff"] = merge["labels"] - merge["output"]
-    merge.to_csv(base_path + "merge.csv")
-    plt.scatter(merge['x'], merge['y'], c=merge[category], cmap='viridis')
-    plt.colorbar(label='labels')
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.title(category + " for patient " + patient)
-    plt.show()
-
-
 def generate_tile_maps(data_dir, patients, model_info, results_filename):
     column_names = ["tile", "out", "label", "x", "y"]
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -157,9 +141,13 @@ def generate_tile_maps(data_dir, patients, model_info, results_filename):
     # we load each model and their results csv
     for model_dir, model_path in model_info:
         print(model_dir)
+        if not os.path.exists(model_path):
+            continue
         model = load_model(model_dir, model_path, squelch=True).to(device)
         # gather results
         results_path = model_dir + "/" + results_filename
+        if not os.path.exists(results_path):
+            continue
         results = pd.read_csv(results_path, index_col=0)
         # can come with path only, we also fix it here for later occasions
         if "tile" not in results.columns:
@@ -193,7 +181,6 @@ def generate_tile_maps(data_dir, patients, model_info, results_filename):
                     plotting_data.to_csv(file_name)
 
                 print(gene, patient, model_dir)
-                print(plotting_data.columns)
                 plotting_data["diff"] = plotting_data["label"] - plotting_data["out"]
                 plt.scatter(plotting_data['x'], plotting_data['y'], c=plotting_data["diff"], cmap='viridis')
                 plt.colorbar(label='labels')
@@ -205,8 +192,8 @@ def generate_tile_maps(data_dir, patients, model_info, results_filename):
 
 
 
-data_dir_train = "../Training_Data/"
-data_dir_test = "../Test_Data/"
+data_dir_train = "../data/jonas/Training_Data/"
+data_dir_test = "../data/jonas/Test_Data/"
 patients_train = get_train_samples()
 patients_val = get_val_samples()
 print(patients_train)
@@ -227,11 +214,9 @@ if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
 else:
     frame = pd.read_csv(model_dir + model_list_file_name)
 
-generate_tile_maps(data_dir_train, patients_train, zip(frame["model_dir"].tolist(), frame["model_path"].tolist()), "ep_29_train_results.csv")
-generate_tile_maps(data_dir_train, patients_val, zip(frame["model_dir"].tolist(), frame["model_path"].tolist()), "ep_29_val_results.csv")
+generate_tile_maps(data_dir_train, patients_train, zip(frame["model_dir"].tolist(), frame["model_path"].tolist()), "best_model_train_results.csv")
+generate_tile_maps(data_dir_train, patients_val, zip(frame["model_dir"].tolist(), frame["model_path"].tolist()), "best_model_val_results.csv")
 exit(0)
-
-
 
 genes, image_paths_train, image_paths_val = gather_genes_and_paths(frame)
 

@@ -87,7 +87,8 @@ def valid_epoch(model, device, dataloader, criterion, error_metric):
 def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, genes,
              freeze_pretrained=False, pretrained_path=None,
              error_metric=lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
-             error_metric_name="pearson corr", meta_data_dir_name="meta_data", use_default_samples=True, debug=False):
+             error_metric_name="pearson corr", meta_data_dir_name="meta_data", use_default_samples=True, debug=False,
+             samples=None):
 
     print("genes:", genes)
     if not debug:
@@ -115,7 +116,7 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
 
     valid_loss_min = np.Inf
     valid_corr_max = np.NINF
-    train_loader, val_loader = get_data_loaders(data_dir, batch_size, genes, use_default_samples=use_default_samples)
+    train_loader, val_loader = get_data_loaders(data_dir, batch_size, genes, use_default_samples=use_default_samples, samples=samples)
 
     # Iterate through epochs
     for epoch in range(epochs):
