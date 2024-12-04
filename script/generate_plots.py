@@ -141,7 +141,7 @@ def generate_tile_maps(data_dir, patients, model_info, results_filename):
     # we load each model and their results csv
     for model_dir, model_path in model_info:
         print(model_dir)
-        if not os.path.exists(model_path):
+        if not os.path.exists(model_path) or model_path.find("dino") == -1:
             continue
         model = load_model(model_dir, model_path, squelch=True).to(device)
         # gather results

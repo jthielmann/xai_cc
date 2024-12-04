@@ -1,23 +1,31 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from crp.attribution import CondAttribution
-from crp.concepts import ChannelConcept
+from pcx_utils.render import vis_opaque_img_border
 from crp.visualization import FeatureVisualization
-import torchvision.transforms as T
 import os
 
-from data_loader import get_dataset_for_plotting
-from model import load_model
-from torchvision.utils import make_grid
-import zennit.image as zimage
-from crp.image import imgify
-import pandas as pd
-import json
-from cluster_functions import (vis_opaque_img_border, get_umaps, calculate_attributions, load_attributions,
-                               get_composite_layertype_layername, get_prototypes)
 import torch
 
-device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
+from data_loader import get_dataset_for_plotting
+from torchvision.utils import make_grid
+import zennit.image as zimage
+import pandas as pd
+import json
+from cluster_functions import (get_umaps, calculate_attributions, load_attributions, get_prototypes)
+from model import load_model
+from cluster_functions import get_composite_layertype_layername
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from crp.attribution import CondAttribution
+
+from crp.concepts import ChannelConcept
+
+from crp.image import imgify
+
+import torchvision
+
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
 model_dir = "../models/"
 model_list_file_name = "new_models.csv"
 model_dir_path = []
@@ -86,32 +94,54 @@ from_list = False
 for idx, row in frame.iterrows():
     model_dir = row["model_dir"]
     model_path = row["model_path"]
+    if model_path.find("dino") == -1:
+        continue
     model = load_model(model_dir, model_path, squelch=True).to(device)
     composite, layer_type, layer_name = get_composite_layertype_layername(model)
     model_path = model.model_path
+
     print("--------------------------------------------------")
     print("model used:", model_path)
     model.eval()
-    #device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print("device:", device)
     model = model.to(device)
+
     data_dir = "../data/jonas/Training_Data/"
     data_dir2 = "../data/CRC-N19/"
+
     try:
-        dataset = get_dataset_for_plotting(data_dir, model.gene_list)
-    except RuntimeError:
-        dataset = get_dataset_for_plotting(data_dir2, model.gene_list)
+        genes = model.gene_list
+    except AttributeError:
+        continue
+
+    base_model_dir = "../models"
+    out_path = "../crp_out/"
+    out_path += model_dir[len(base_model_dir):] + "/"
+    token_name = out_path + "clustering_token"
+    if os.path.exists(token_name):
+        print(token_name, "found, continue..")
+        continue
+
+    os.makedirs(out_path, exist_ok=True)
+    open(token_name, "a").close()
+    print("loading dataset")
+    try:
+        dataset = get_dataset_for_plotting(data_dir, genes=genes, device=device)
+    except KeyError:
+        dataset = get_dataset_for_plotting(data_dir2, genes=genes, device=device)
+
+    print("dataset loaded")
+    #dataset.dataframe = dataset.dataframe.drop(list(range(10, len(dataset))))
 
     attribution = CondAttribution(model)
 
     print("target layer:", layer_name)
     print("target layer type:", layer_type)
     layer_map = {layer_name: ChannelConcept()}
-    base_model_dir = "../models"
-    out_path = "../crp_out/"
-    out_path += model_dir[len(base_model_dir):] + "/"
-    already_calculated = os.path.exists(out_path) and os.path.exists(out_path + "ActMax_sum_normed/") and os.listdir(out_path + "ActMax_sum_normed/")
-    preprocessing = T.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])  # from dataloader
+
+
+    already_calculated = os.path.exists(out_path) and os.path.exists(out_path + "ActMax_sum_normed/") and os.path.isdir(out_path + "ActMax_sum_normed/")
+    #preprocessing = T.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])  # from dataloader
     #preprocessing = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # from tutorial
     fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=None, path=out_path)
     if not already_calculated:
@@ -144,6 +174,15 @@ for idx, row in frame.iterrows():
     embedding_attr, embedding_act, X_attr, X_act = get_umaps(attr, act, row["model_dir"])
     x_attr, y_attr = X_attr[:, 0], X_attr[:, 1]
     x_act, y_act = X_act[:, 0], X_act[:, 1]
+    """from umap import UMAP
+
+    embedding_attr = UMAP(n_neighbors=5, random_state=123, n_jobs=1)
+    X_attr = embedding_attr.fit_transform(attr.detach().cpu().numpy())
+    x_attr, y_attr = X_attr[:, 0], X_attr[:, 1]
+
+    embedding_act = UMAP(n_neighbors=5, random_state=123, n_jobs=1)
+    X_act = embedding_act.fit_transform(act.detach().cpu().numpy())
+    x_act, y_act = X_act[:, 0], X_act[:, 1]"""
     if not os.path.exists(out_path + "/prototypes/"):
         print("calculating prototypes")
         os.mkdir(out_path + "/prototypes/")
@@ -159,7 +198,6 @@ for idx, row in frame.iterrows():
             if f.endswith(".npy"):
                 prototypes.append(np.load(out_path + "/prototypes/" + f))
     proto_attr = prototypes[0]
-    #exit(0)
     print("calculating distances")
     distances = np.linalg.norm(attr[:, None, :].detach().cpu() - proto_attr, axis=2)
     prototype_samples = np.argsort(distances, axis=0)[:8]
@@ -187,15 +225,6 @@ for idx, row in frame.iterrows():
         axs[i].set_title(f"{i}")
     plt.show()
 
-    import numpy as np
-    import torch
-    from crp.image import get_crop_range, imgify
-
-
-
-
-    import torchvision
-
     proto = torch.from_numpy(proto_attr)
     top_concepts = torch.topk(proto, 3).indices.flatten().unique()
     top_concepts = top_concepts[proto[:, top_concepts].amax(0).argsort(descending=True)].tolist()
@@ -205,6 +234,7 @@ for idx, row in frame.iterrows():
     n_refimgs = 12
     ref_imgs = fv.get_max_reference(top_concepts, layer_name, "relevance", (0, 6), composite=composite, rf=True,
                                         plot_fn=vis_opaque_img_border, batch_size=6)
+
 
     fig, axs = plt.subplots(nrows=N_CONCEPTS + 1, ncols=N_PROTOTYPES + 1, figsize=(N_PROTOTYPES + 6, N_CONCEPTS + 6), dpi=150,
                             gridspec_kw={'width_ratios': [6] + [1 for _ in range(N_PROTOTYPES)],

@@ -222,8 +222,7 @@ def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True, meta
 
 
 class PlottingDataset(torch.utils.data.Dataset):
-    def __init__(self, dataframe,
-                 device="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu",
+    def __init__(self, dataframe, device,
                  transforms=transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
@@ -255,7 +254,7 @@ class PlottingDataset(torch.utils.data.Dataset):
 
 # has the labels set to 0 because that makes it easier to work with the frameworks written for classification
 # the idea is that they filter the attribution by the chosen class, but as we only have one output we always choose y=0
-def get_dataset_for_plotting(data_dir, genes=None, samples=None):
+def get_dataset_for_plotting(data_dir, genes, samples=None, device="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"):
     if samples is None:
         samples = []
         for subdir in os.listdir(data_dir):
@@ -281,7 +280,7 @@ def get_dataset_for_plotting(data_dir, genes=None, samples=None):
     # reset index of dataframes
     dataset.reset_index(drop=True, inplace=True)
 
-    return PlottingDataset(dataset)
+    return PlottingDataset(dataset, device=device)
 
 
 class ae_dataset(torch.utils.data.Dataset):

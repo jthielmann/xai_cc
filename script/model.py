@@ -2,7 +2,6 @@ import torch.nn as nn
 import torch.nn.functional
 import torch
 import torchvision
-from pandas.core.dtypes.common import ensure_object
 from torchvision import models
 import json
 import timm
@@ -533,7 +532,7 @@ def get_encoder(path):
 
 
 class general_model(nn.Module):
-    def __init__(self, model_type, gene_list, random_weights=False, dropout=False, dropout_value=0.5,
+    def __init__(self, model_type, gene_list, random_weights=False, dropout=False, dropout_value=None,
                  pretrained_path=None, pretrained_out_dim=1000, middel_layer_features=200):
         super(general_model, self).__init__()
         if pretrained_path and random_weights:
@@ -561,15 +560,12 @@ class general_model(nn.Module):
             print("model type", model_type, "not implemented")
             exit(1)
         for gene in gene_list:
-            if dropout:
-                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, middel_layer_features), nn.Dropout(dropout_value), nn.ReLU(), nn.Linear(middel_layer_features, 1), nn.Dropout(dropout_value)))
-            else:
-                setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, middel_layer_features),nn.ReLU(), nn.Linear(middel_layer_features, 1)))
+            setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, middel_layer_features),nn.ReLU(), nn.Linear(middel_layer_features, 1)))
 
         self.gene_list = gene_list
         self.model_type = model_type
         self.random_weights = random_weights
-        self.dropout = dropout
+        self.dropout = None
         self.pretrained_out_dim = pretrained_out_dim
         self.dropout_value = dropout_value
 

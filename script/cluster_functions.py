@@ -60,10 +60,10 @@ def calculate_attributions(dataset, device, composite, layer_name, attribution, 
 
 
 def load_attributions(out_path):
-    activations = torch.load(out_path + "/activations.pt", weights_only=False)
-    attributions = torch.load(out_path + "/attributions.pt", weights_only=False)
-    outputs = torch.load(out_path + "/outputs.pt", weights_only=False)
-    indices = torch.load(out_path + "/indices.pt", weights_only=False)
+    activations = torch.load(out_path + "/activations.pt", weights_only=False, map_location='cpu')
+    attributions = torch.load(out_path + "/attributions.pt", weights_only=False, map_location='cpu')
+    outputs = torch.load(out_path + "/outputs.pt", weights_only=False, map_location='cpu')
+    indices = torch.load(out_path + "/indices.pt", weights_only=False, map_location='cpu')
     return activations, attributions, outputs, indices
 
 
@@ -183,6 +183,7 @@ def get_prototypes(attr, embedding_attr, act, embedding_act):
     prototypes = []
     for i, (X, emb) in enumerate([(attr, embedding_attr), (act, embedding_act)]):
         gmm = GaussianMixture(n_components=8, random_state=0).fit(X.detach().cpu().numpy())
+        knn
         prototypes.append(gmm.means_)
     return prototypes
 
