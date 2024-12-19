@@ -10,7 +10,7 @@ import zennit.image as zimage
 import pandas as pd
 import json
 from cluster_functions import (get_umaps, calculate_attributions, load_attributions, get_prototypes)
-from model import load_model
+from model import load_model, generate_model_list
 from cluster_functions import get_composite_layertype_layername
 
 import numpy as np
@@ -28,64 +28,13 @@ import torchvision
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model_dir = "../models/"
 model_list_file_name = "new_models.csv"
-model_dir_path = []
-
-def generate_model_list(model_dir, must_contain=None, model_name = None, skip_names=None):
-    for model_type_dir in os.listdir(model_dir):
-
-        sub_path = model_dir + model_type_dir # dirs in "../models/
-        if model_type_dir == ".DS_Store" or model_type_dir == "new" or os.path.isfile(sub_path):
-            #print("skipping redundant:", model_type_dir)
-            continue
-        for model_leaf_dir in os.listdir(sub_path):
-
-            sub_path = model_dir + model_type_dir + "/" + model_leaf_dir # e.g. ../models/resnet18/
-            if model_type_dir == ".DS_Store" or not os.path.isdir(sub_path) or not os.path.exists(sub_path + "/settings.json"):
-                #print("skipping redundant 2:", sub_path)
-                continue
-
-            with open(sub_path + "/settings.json") as settings_json:
-                d = json.load(settings_json)
-
-                # skip old models
-                if "genes" not in d:
-                    #print("skipping", sub_path, "because settings.json does not contain: \"genes\"")
-                    continue
-
-            if skip_names:
-                found_string = False
-                for skip_string in skip_names:
-                    if sub_path.find(skip_string) != -1:
-                        print("skipping", sub_path, "because string does contain:", skip_string)
-                        found_string = True
-                        break
-                if found_string:
-                    continue
-            if must_contain and sub_path.find(must_contain) == -1:
-                print("skipping", sub_path, "because string does not contain:", must_contain)
-                continue
-            if model_name and os.path.exists(sub_path + "/" + model_name):
-                model_dir_path.append((sub_path + "/"))
-                print("adding:", sub_path + "/" + model_name)
-            elif os.path.exists(sub_path + "/best_model.pt"):
-                model_dir_path.append((sub_path + "/", sub_path + "/best_model.pt"))
-                print("adding:", sub_path + "/best_model.pt")
-            elif os.path.exists(sub_path + "/ep_29.pt"):
-                model_dir_path.append((sub_path + "/", sub_path + "/ep_29.pt"))
-                print("adding:", sub_path + "/ep_29.pt")
-            else:
-                print("skipping", sub_path, "because it does not contain a model with a fitting name")
-
-    frame = pd.DataFrame(model_dir_path, columns=["model_dir", "model_path"])
-    frame.to_csv(model_dir + model_list_file_name, index=False)
-    return frame
 
 must_contain = None
 update_model_list = True
 skip_names = ["AE"]
 if not os.path.exists(model_dir + model_list_file_name) or update_model_list:
     print("found these models:")
-    frame = generate_model_list(model_dir, must_contain=must_contain, skip_names=skip_names)
+    frame = generate_model_list(model_dir, must_contain=must_contain, skip_names=skip_names, model_list_file_name=model_list_file_name)
 else:
     frame = pd.read_csv(model_dir + model_list_file_name)
 

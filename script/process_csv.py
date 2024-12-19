@@ -36,19 +36,28 @@ def process_spatial_data(patients, data_dir):
 
 def generate_results(model, device, data_dir, patient, genes, results_filename="results.csv"):
     model.eval()
-    print("generating results...")
+    print("generating results for patient", patient)
     loader = get_patient_loader(data_dir, patient=patient, genes=genes)
-    filename = data_dir + patient + "/meta_data/" + results_filename
-    if os.path.exists(filename):
-        os.remove(filename)
-    columns = ['labels', 'output', 'path', 'tile']
+    filepath = data_dir + patient + "/meta_data/" + results_filename
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    columns = []
+    for gene in genes:
+        columns.append("labels_" + gene)
+
+
+    for gene in genes:
+        columns.append("output_" + gene)
+
+    columns.append("path")
+    columns.append("tile")
     df = pd.DataFrame(columns=columns)
-    df.to_csv(filename, index=False)
+    df.to_csv(filepath, index=False)
     with torch.no_grad():
         for images, labels, name in loader:
             images = images.unsqueeze(0).to(device)
             images = images.float()
-            labels = torch.tensor(labels[0]).to(device)
+            labels = torch.tensor(labels).to(device)
 
             output = model(images)
 
@@ -61,7 +70,8 @@ def generate_results(model, device, data_dir, patient, genes, results_filename="
             res = pd.concat([labels, output, pd.Series(name), pd.Series(os.path.basename(name))], axis=1)
             res.columns = columns
 
-            res.to_csv(filename, index=False, mode='a', header=False)
+            res.to_csv(filepath, index=False, mode='a', header=False)
+    return filepath, columns
 
 
 def merge_data(data_dir, patient, results_filename="results.csv", squelch=True):

@@ -26,7 +26,7 @@ class CompositeLoss(nn.Module):
         if weights:
             self.weights = weights
         else:
-            self.weights = [torch.tensor(1/len(losses)) for _ in losses]
+            self.weights = [torch.tensor(1) for _ in losses]
         if len(self.weights) != len(self.losses):
             print(len(self.weights), len(self.losses), len(losses), len(weights) if weights else "weights is None")
             raise ValueError("CompositeLoss: Number of weights must match number of losses")

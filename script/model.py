@@ -7,11 +7,16 @@ import json
 import timm
 import torch.nn.functional as F
 import copy
+import os
+import pandas as pd
+from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet18, ResNet18_Weights
+from torchvision.models import vgg13,    VGG13_Weights
 
 class MyNet(nn.Module):
     def __init__(self):
         super(MyNet, self).__init__()
-        self.pretrained = models.resnet50(weights="IMAGENET1K_V2")
+        self.pretrained = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         self.my_new_layers = nn.Sequential(nn.Linear(1000, 200),
                                            nn.ReLU(),
                                            nn.BatchNorm1d(200),
@@ -39,7 +44,7 @@ def get_MyNet(path=None):
 class MyNet2(nn.Module):
     def __init__(self):
         super(MyNet2, self).__init__()
-        self.pretrained = models.resnet50(weights="IMAGENET1K_V2")
+        self.pretrained = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
@@ -54,7 +59,7 @@ def get_res50_mynet2(path=None):
 
 
 class Res50Dropout(nn.Module):
-    def __init__(self, pretrained=models.resnet50(weights="IMAGENET1K_V2")):
+    def __init__(self, pretrained=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)):
         super(Res50Dropout, self).__init__()
         self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(),
@@ -92,7 +97,7 @@ class MyNet3(nn.Module):
 
 
 class Res18_1000(nn.Module):
-    def __init__(self, pretrained=models.resnet18(weights="DEFAULT")):
+    def __init__(self, pretrained=resnet18(weights=None)):
         super(Res18_1000, self).__init__()
         self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
@@ -109,7 +114,7 @@ def get_res18_1000(path=None):
 
 
 class Res18(nn.Module):
-    def __init__(self, pretrained=models.resnet18(weights="DEFAULT")):
+    def __init__(self, pretrained=resnet18(weights=None)):
         super(Res18, self).__init__()
         self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
@@ -120,7 +125,7 @@ class Res18(nn.Module):
 
 def load_res18_ciga(path):
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-    model = torchvision.models.__dict__['resnet18'](pretrained=False)
+    model = torchvision.models.__dict__['resnet18'](weights=None)
     state = torch.load(path, map_location=device, weights_only=False)
 
     state_dict = state['state_dict']
@@ -178,7 +183,7 @@ def get_res18_random():
 
 
 class Res50(nn.Module):
-    def __init__(self, pretrained=models.resnet50(weights="IMAGENET1K_V2")):
+    def __init__(self, pretrained=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)):
         super(Res50, self).__init__()
         self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
@@ -188,7 +193,7 @@ class Res50(nn.Module):
 
 
 class Res50_1000(nn.Module):
-    def __init__(self, pretrained=models.resnet50(weights="IMAGENET1K_V2")):
+    def __init__(self, pretrained=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)):
         super(Res50_1000, self).__init__()
         self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
@@ -208,7 +213,7 @@ def get_res50_random():
 
 
 class Res18Dropout(nn.Module):
-    def __init__(self, ciga=models.resnet18(weights='DEFAULT')):
+    def __init__(self, ciga=resnet18(weights=ResNet18_Weights.DEFAULT)):
         super(Res18Dropout, self).__init__()
         self.pretrained = ciga
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
@@ -223,7 +228,7 @@ def init_res18_dropout(path="../models/res18/tenpercent_resnet18.ckpt"):
 
 
 class Res18Dropout_1000(nn.Module):
-    def __init__(self, ciga=models.resnet18(weights='DEFAULT')):
+    def __init__(self, ciga=resnet18(weights=ResNet18_Weights.DEFAULT)):
         super(Res18Dropout_1000, self).__init__()
         self.pretrained = ciga
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
@@ -247,7 +252,7 @@ def get_res18_dropout(path=None):
 
 
 class VGG13(nn.Module):
-    def __init__(self, pretrained=models.vgg13(weights='IMAGENET1K_V1')):
+    def __init__(self, pretrained=models.vgg13(weights=VGG13_Weights.IMAGENET1K_V1)):
         super(VGG13, self).__init__()
         self.pretrained = pretrained
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
@@ -271,7 +276,7 @@ def get_vgg13_random():
 class VGG13_Dropout(nn.Module):
     def __init__(self):
         super(VGG13_Dropout, self).__init__()
-        self.pretrained = models.vgg13(weights='IMAGENET1K_V1')
+        self.pretrained = models.vgg13(weights=VGG13_Weights.IMAGENET1K_V1)
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
 
     def forward(self, x):
@@ -538,15 +543,23 @@ class general_model(nn.Module):
         if pretrained_path and random_weights:
             print("cannot have pretrained_path and random_weights set in general_model")
             exit(1)
-        if random_weights:
-            weights = None
-        else:
-            weights='IMAGENET1K_V1'
         if model_type == "vgg13":
+            if random_weights:
+                weights = None
+            else:
+                weights = VGG13_Weights.IMAGENET1K_V1
             self.pretrained = models.vgg13(weights=weights)
         elif model_type == "resnet18":
+            if random_weights:
+                weights = None
+            else:
+                weights = ResNet18_Weights.IMAGENET1K_V1
             self.pretrained = models.resnet18(weights=weights)
         elif model_type == "resnet50":
+            if random_weights:
+                weights = None
+            else:
+                weights = ResNet50_Weights.IMAGENET1K_V2
             self.pretrained = models.resnet50(weights=weights)
         elif model_type == "resnet50d":
             self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
@@ -606,16 +619,40 @@ def load_model(model_dir, model_name, json_name="settings.json", log_json=False,
             middel_layer_features = d["middel_layer_features"]
         else:
             middel_layer_features = 200
+    success = False
+    model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value,
+                          pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
     try:
-        model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
         res = model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
-    except RuntimeError:
-        middel_layer_features = 512
-        model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
-        res = model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
+        success = True
+        if not squelch:
+            print(res)
+    except RuntimeError as e:
+        pass
 
-    if not squelch:
-        print(res)
+    if not success:
+        try:
+            middel_layer_features = 512
+            model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
+            res = model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
+            success = True
+            if not squelch:
+                print(res)
+        except RuntimeError as e:
+            pass
+    if not success:
+        try:
+            middel_layer_features = 1000
+            model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
+            res = model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
+            success = True
+            if not squelch:
+                print(res)
+        except RuntimeError as e:
+            if not squelch:
+                print(e)
+    if not success:
+        return None
     model.model_path = model_name
     return model
 
@@ -830,3 +867,56 @@ def get_remote_models_and_path_mki67(device="cpu", log_model_name=False, model_i
     else:
         r = raw[model_id]
         return r[1](r[0]).to(device).eval(), r[0]
+
+
+def generate_model_list(model_dir, must_contain=None, model_name = None, skip_names=None, model_list_file_name = "new_models.csv"):
+    model_dir_path = []
+    for model_type_dir in os.listdir(model_dir):
+
+        sub_path = model_dir + model_type_dir # dirs in "../models/
+        if model_type_dir == ".DS_Store" or model_type_dir == "new" or os.path.isfile(sub_path):
+            #print("skipping redundant:", model_type_dir)
+            continue
+        for model_leaf_dir in os.listdir(sub_path):
+
+            sub_path = model_dir + model_type_dir + "/" + model_leaf_dir # e.g. ../models/resnet18/
+            if model_type_dir == ".DS_Store" or not os.path.isdir(sub_path) or not os.path.exists(sub_path + "/settings.json"):
+                #print("skipping redundant 2:", sub_path)
+                continue
+
+            with open(sub_path + "/settings.json") as settings_json:
+                d = json.load(settings_json)
+
+                # skip old models
+                if "genes" not in d:
+                    #print("skipping", sub_path, "because settings.json does not contain: \"genes\"")
+                    continue
+
+            if skip_names:
+                found_string = False
+                for skip_string in skip_names:
+                    if sub_path.find(skip_string) != -1:
+                        print("skipping", sub_path, "because string contains:", skip_string)
+                        found_string = True
+                        break
+                if found_string:
+                    continue
+            if must_contain and sub_path.find(must_contain) == -1:
+                print("skipping", sub_path, "because string does not contain:", must_contain)
+                continue
+            if model_name and os.path.exists(sub_path + "/" + model_name):
+                model_dir_path.append((sub_path + "/"))
+                print("adding:", sub_path + "/" + model_name)
+            elif os.path.exists(sub_path + "/best_model.pt"):
+                model_dir_path.append((sub_path + "/", sub_path + "/best_model.pt"))
+                print("adding:", sub_path + "/best_model.pt")
+            elif os.path.exists(sub_path + "/ep_29.pt"):
+                model_dir_path.append((sub_path + "/", sub_path + "/ep_29.pt"))
+                print("adding:", sub_path + "/ep_29.pt")
+            else:
+                print("skipping", sub_path, "because it does not contain a model with a fitting name")
+
+    frame = pd.DataFrame(model_dir_path, columns=["model_dir", "model_path"])
+    frame.to_csv(model_dir + model_list_file_name, index=False)
+    return frame
+

@@ -1,5 +1,6 @@
 import os
 import random
+from idlelib.pyparse import trans
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -67,12 +68,12 @@ class STDataset(torch.utils.data.Dataset):
         a = Image.open(row["tile"]).convert("RGB")
         # print(x.size)
         for j in gene_names:
-            gene_val = float(row[j])
+            gene_val = torch.tensor(float(row[j]), dtype=torch.float32)
             gene_vals.append(gene_val)
         e = row["tile"]
         # apply normalization transforms as for pretrained colon classifier
         a = self.transforms(a)
-        return a, gene_vals, e
+        return a, torch.stack(gene_vals)
 
 
 class TileLoader:
@@ -141,6 +142,39 @@ def get_val_samples():
 
 def get_test_samples():
     return ["p008", "p021", "p026"]
+
+
+# contains tile path and gene data
+def get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/"):
+    columns_of_interest = ["tile"]
+    for gene in genes:
+        columns_of_interest.append(gene)
+    st_dataset = pd.DataFrame(columns=columns_of_interest)
+    # generate training dataframe with all training samples
+    for i in samples:
+        st_dataset_patient = pd.read_csv(data_dir + "/" + i + "/" + meta_data_dir + "/gene_data.csv", index_col=-1)
+        st_dataset_patient["tile"] = st_dataset_patient.index
+        st_dataset_patient['tile'] = st_dataset_patient['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
+        if st_dataset.empty:
+            st_dataset = st_dataset_patient[columns_of_interest]
+        else:
+            st_dataset = pd.concat([st_dataset, st_dataset_patient[columns_of_interest]])  # concat all samples
+    st_dataset.reset_index(drop=True, inplace=True)
+    return st_dataset
+
+
+
+def get_dataset(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/"):
+    if samples is None:
+        samples = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
+    # contains
+    raw_data = get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/")
+    if transforms is None:
+        st_dataset = STDataset(raw_data)
+    else:
+        st_dataset = STDataset(raw_data, transforms)
+
+    return st_dataset
 
 
 def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True, meta_data_dir="/meta_data/", samples=None):

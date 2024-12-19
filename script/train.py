@@ -104,7 +104,7 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
     # Defining gradient function
     if not debug:
         with open(model_save_dir + "/settings.json", "w") as file:
-            json_dict = {'model_type': model.model_type, 'random_weights': model.random_weights,
+            json_dict = {'model_type': model.model_type, 'data_dir': data_dir, 'random_weights': model.random_weights,
                          'dropout': model.dropout, 'drop_out_rate': model.dropout_value, 'pretrained_out_dim': str(model.pretrained_out_dim),
                          'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'genes': genes,
                          'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device,
@@ -322,71 +322,6 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
 def train_dino(teacher, student, out_dir_name, criterion, optimizer=None, training_data_dir="../Training_Data/", epochs=100, lr=0.001, batch_size=64, debug=False):
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print("device: ", device)
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # MPS not supported for now
     teacher.to(device)
     student.to(device)
-    if optimizer is None:
-        optimizer = optim.Adam(ae.parameters(), lr=lr)
-
-    train_loader = get_data_loader_occlusion(training_data_dir, batch_size=batch_size, file_endings=["tif", "tiff"])
-    val_loader = get_data_loader_occlusion("../Training_Data/", batch_size=batch_size, file_endings=["tif", "tiff"])
-    best_val_loss = float('inf')
-    logfile = out_dir_name + "/log.txt"
-    if not debug:
-        open(logfile, "a").close()
-
-        with open(out_dir_name + "/settings.json", "w") as file:
-            json_dict = {'model_type': ae.__class__.__name__, 'criterion': str(criterion), 'batch_size': batch_size,
-                     'epochs': epochs, 'optimizer': str(optimizer), 'device': str(device)}
-            json.dump(json_dict, file)
-
-    print("training start")
-    for epoch in range(epochs):
-        running_loss = 0.0
-        ae.train()
-
-        for i, data in enumerate(train_loader, 0):
-
-            # Assume data is a tuple of (input_tensor, target_tensor)
-            inputs, path = data
-            inputs = inputs.to(device)
-            # Zero the parameter gradients
-            optimizer.zero_grad()
-
-            # Forward pass
-            outputs = ae(inputs)
-
-            # Compute loss
-            loss = criterion(outputs, inputs)
-
-            # Backward pass and optimize
-            loss.backward()
-            optimizer.step()
-
-            # Accumulate the loss
-            running_loss += loss.item()
-
-        running_loss_val = 0.0
-        ae.eval()
-        #print("validation start")
-        for i, data in enumerate(val_loader, 0):
-            # Assume data is a tuple of (input_tensor, target_tensor)
-            inputs, path = data
-            inputs = inputs.to(device)
-
-            outputs = ae(inputs)
-
-            loss = criterion(outputs, inputs)
-
-            running_loss_val += loss.item()
-        if epoch > 10 and running_loss_val < best_val_loss:
-            best_val_loss = running_loss_val
-            torch.save(ae.state_dict(), out_dir_name + "/best_model.pt")
-        if not debug:
-            torch.save(ae.state_dict(), out_dir_name + "/latest.pt")
-            f = open(logfile, "a")
-            f.write(f'Epoch {epoch + 1} loss: {running_loss:.4f} val loss {running_loss_val:.4f}\n')
-            f.close()
-            torch.save(ae.state_dict(), "../models/" + out_dir_name + "/ep_" + str(epoch) + ".pt")
-
     print('Finished Training')
