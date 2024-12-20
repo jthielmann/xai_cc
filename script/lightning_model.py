@@ -8,11 +8,16 @@ import wandb
 
 # lightning module
 class LightiningNN(L.LightningModule):
-    def __init__(self, genes, encoder, pretrained_out_dim, middel_layer_features, error_metric_name="MSELoss"):
+    def __init__(self, genes, encoder, pretrained_out_dim, middel_layer_features, error_metric_name="MSELoss", freeze_pretrained=False):
         super(LightiningNN, self).__init__()
 
         # model setup
         self.encoder = encoder
+        self.freeze_pretrained = freeze_pretrained
+        if self.freeze_pretrained:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+
         for gene in genes:
             setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, middel_layer_features), nn.ReLU(),
                                               nn.Linear(middel_layer_features, 1)))
