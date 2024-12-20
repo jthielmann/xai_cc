@@ -13,6 +13,7 @@ from torchvision.models import resnet50, ResNet50_Weights
 from torchvision.models import resnet18, ResNet18_Weights
 from torchvision.models import vgg13,    VGG13_Weights
 
+
 class MyNet(nn.Module):
     def __init__(self):
         super(MyNet, self).__init__()
@@ -919,4 +920,3 @@ def generate_model_list(model_dir, must_contain=None, model_name = None, skip_na
     frame = pd.DataFrame(model_dir_path, columns=["model_dir", "model_path"])
     frame.to_csv(model_dir + model_list_file_name, index=False)
     return frame
-
