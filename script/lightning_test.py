@@ -6,11 +6,9 @@ wandb_logger = WandbLogger(project=config["project"])
 from wandb_setup import init_wandb
 init_wandb()
 from lightning_STDataModule import STDataModule
-import torchvision.models as models
 
-trainer = L.Trainer(max_epochs=config["epochs"], logger=wandb_logger)
-data_module = STDataModule(["RUBCNL"], ["p007", "p014", "p016", "p020", "p025"], ["p009", "p013"], None, data_dir="../data/jonas/Training_Data")
+trainer = L.Trainer(max_epochs=config["epochs"], logger=wandb_logger, overfit_batches=0.01)
+data_module = STDataModule(config["genes"], config["train_samples"], config["val_samples"], config["test_samples"], config["data_dir"])
 data_module.setup("fit")
-model = LightiningNN(["RUBCNL"], models.resnet18(weights=models.ResNet18_Weights.DEFAULT), 1000, 64)
+model = config["model"]
 trainer.fit(model=model, datamodule=data_module)
-
