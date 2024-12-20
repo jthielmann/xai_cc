@@ -6,9 +6,6 @@ import torch.nn as nn
 import torchmetrics
 import wandb
 
-from script.config import error_metric_name
-
-
 # lightning module
 class LightiningNN(L.LightningModule):
     def __init__(self, genes, encoder, pretrained_out_dim, middel_layer_features, error_metric_name="MSELoss"):
@@ -28,6 +25,7 @@ class LightiningNN(L.LightningModule):
         #self.loss = CompositeLoss([self.pearson, self.mse, self.SparseLoss])
         self.loss = self.pearson
         self.optimizer = Adam(self.parameters(), lr=0.01)
+        self.error_metric_name = error_metric_name
 
     def forward(self, x):
         x = self.encoder(x)
@@ -40,12 +38,12 @@ class LightiningNN(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss = self.common_step(batch, batch_idx)
-        wandb.log({"training " + config["error_metric_name"]: loss})
+        wandb.log({"training " + self.error_metric_name: loss})
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self.common_step(batch, batch_idx)
-        wandb.log({"validation " + error_metric_name: loss})
+        wandb.log({"validation " + self.error_metric_name: loss})
         return loss
 
     def common_step(self, batch, batch_idx):
