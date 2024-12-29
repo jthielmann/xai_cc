@@ -8,7 +8,7 @@ import wandb
 
 # lightning module
 class LightiningNN(L.LightningModule):
-    def __init__(self, genes, encoder, pretrained_out_dim, middel_layer_features, error_metric_name="MSELoss", freeze_pretrained=False):
+    def __init__(self, genes, encoder, pretrained_out_dim, middel_layer_features, out_path, error_metric_name, freeze_pretrained):
         super(LightiningNN, self).__init__()
 
         # model setup
@@ -25,12 +25,17 @@ class LightiningNN(L.LightningModule):
         self.genes = genes
         # metrics
         self.pearson = torchmetrics.PearsonCorrCoef(num_outputs=len(genes))
-        self.mse = torchmetrics.MeanSquaredError()
-        self.SparseLoss = SparsityLoss("encoder.layer4.1", self)
-        #self.loss = CompositeLoss([self.pearson, self.mse, self.SparseLoss])
-        self.loss = self.pearson
+        self.loss = torch.nn.MSELoss()
         self.optimizer = Adam(self.parameters(), lr=0.01)
         self.error_metric_name = error_metric_name
+        self.current_loss = torch.Tensor([0])
+        self.best_loss = torch.Tensor([float("Inf")])
+        self.out_path = out_path
+        self.pearson_values = []
+        self.y_hats = []
+        self.ys = []
+        self.val_epoch_counter = 0
+        self.best_val_epoch = 0
 
     def forward(self, x):
         x = self.encoder(x)
@@ -42,24 +47,64 @@ class LightiningNN(L.LightningModule):
         return torch.cat(out, dim=1)
 
     def training_step(self, batch, batch_idx):
-        loss = self.common_step(batch, batch_idx)
+        loss, _, _ = self.common_step(batch, batch_idx)
         wandb.log({"training " + self.error_metric_name: loss})
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss = self.common_step(batch, batch_idx)
+        loss, y_hat, y = self.common_step(batch, batch_idx)
         wandb.log({"validation " + self.error_metric_name: loss})
+        self.current_loss += loss
+
+        self.y_hats.append(y_hat)
+        self.ys.append(y)
         return loss
 
     def common_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
         loss = self.loss(y_hat, y)
-        if torch.isnan(loss):
+        if torch.any(loss.isnan()):
             print("loss is nan")
             exit(1)
-        return loss
+        return loss, y_hat, y
 
+    def backward(self, loss: torch.Tensor, *args: torch.Any, **kwargs: torch.Any):
+        loss.backward()
 
     def configure_optimizers(self):
         return self.optimizer
+
+    def on_validation_start(self) -> None:
+        # in the init function self.device is cpu, so we can do it e.g. here
+        self.best_loss = self.best_loss.to(self.device)
+
+    def on_validation_epoch_start(self):
+        self.current_loss = torch.Tensor([0]).to(self.device)
+        self.y_hats = []
+        self.ys = []
+
+    def on_validation_epoch_end(self):
+        if self.current_loss.abs() < self.best_loss.abs():
+            self.best_loss = self.current_loss
+            torch.save(self.state_dict(), self.out_path + "/best_model.pth")
+            self.best_val_epoch = self.val_epoch_counter
+
+        self.y_hats = torch.cat(self.y_hats, dim=0)
+        self.ys = torch.cat(self.ys, dim=0)
+        pearsons = self.pearson(self.y_hats, self.ys)
+        self.pearson_values.append(pearsons)
+        self.val_epoch_counter += 1
+
+    def on_train_epoch_end(self):
+        torch.save(self.state_dict(), self.out_path + "/latest.pth")
+
+    def on_train_end(self):
+        columns = []
+        for gene in self.genes:
+            columns.append(gene + " pearson")
+        table = wandb.Table(columns=columns, data=[torch.stack(self.pearson_values).transpose(0, 1)])
+        wandb.log({"pearson": table})
+
+        wandb.log({"final pearson": self.pearson_values[self.best_val_epoch]})
+

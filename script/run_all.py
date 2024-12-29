@@ -7,7 +7,6 @@ import torchmetrics
 from model import general_model
 import os
 import torch.optim as optim
-from data_loader import get_data_loaders
 from loss_functions import SparsityLoss, CompositeLoss, CompositeLoss
 import pandas as pd
 
@@ -20,7 +19,7 @@ data_dir = '../data/CRC-N19/'
 #gene_lists = [["RUBCNL"]]
 #, "MYH11"
 #gene_lists = [["COL3A1","DCN","THY1"], ["ENG", "PECAM1"], ["TAGLN", "ACTA2", "RGS5"], ["TAGLN", "ACTA2", "SYNPO2", "CNN1", "DES"], ["SOX10", "S100B", "PLP1"]]
-gene_lists = [["RUBCNL"]]
+gene_lists = [["COL3A1","DCN","THY1"]]
 check_if_gene_in_dataset = True
 if check_if_gene_in_dataset:
     patients_dir = data_dir

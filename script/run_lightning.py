@@ -1,65 +1,46 @@
-import os
-from torch import optim, nn, Tensor
-from torchvision.datasets import MNIST
-from torchvision.transforms import ToTensor
 import lightning as L
-import torch
-
-# define any number of nn.Modules (or use your current ones)
-encoder = nn.Sequential(nn.Linear(28 * 28, 64), nn.ReLU(), nn.Linear(64, 3))
-decoder = nn.Sequential(nn.Linear(3, 64), nn.ReLU(), nn.Linear(64, 28 * 28))
-
-
-# define the LightningModule
-class LitAutoEncoder(L.LightningModule):
-    def __init__(self, encoder, decoder):
-        super().__init__()
-        self.encoder = encoder
-        self.decoder = decoder
-
-    def training_step(self, batch, batch_idx):
-        # training_step defines the train loop.
-        # it is independent of forward
-        x, _ = batch
-        x = x.view(x.size(0), -1)
-        z = self.encoder(x)
-        x_hat = self.decoder(z)
-        loss = nn.functional.mse_loss(x_hat, x)
-        # Logging to TensorBoard (if installed) by default
-        self.log("train_loss", loss)
-        return loss
-
-    def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer
-
-
-# init the autoencoder
-autoencoder = LitAutoEncoder(encoder, decoder)
-
-
-# setup data
-dataset = MNIST(os.getcwd(), download=True, transform=ToTensor())
-train_loader = torch.utils.data.DataLoader(dataset)
-
-
 from lightning.pytorch.loggers import WandbLogger
+from config import config
 
-wandb_logger = WandbLogger(project="MNIST")
-# train the model (hint: here are some helpful Trainer arguments for rapid idea iteration)
-trainer = L.Trainer(limit_train_batches=100, max_epochs=1, logger=wandb_logger)
-trainer.fit(model=autoencoder, train_dataloaders=train_loader)
+wandb_logger = WandbLogger(project=config["project"])
+from wandb_setup import init_wandb
+init_wandb()
+from lightning_STDataModule import STDataModule
+from process_csv import generate_results
 
-# load checkpoint
-checkpoint = "./lightning_logs/version_0/checkpoints/epoch=0-step=100.ckpt"
-autoencoder = LitAutoEncoder.load_from_checkpoint(checkpoint, encoder=encoder, decoder=decoder)
+from lightning.pytorch.callbacks import Callback
+from generate_plots import generate_hists
+import wandb
 
-# choose your trained nn.Module
-encoder = autoencoder.encoder
-encoder.eval()
+class MyPrintingCallback(Callback):
+    def on_train_start(self, trainer, pl_module):
+        print("Training is starting")
 
-# embed 4 fake images!
-fake_image_batch = torch.rand(4, 28 * 28, device=autoencoder.device)
-embeddings = encoder(fake_image_batch)
-print("⚡" * 20, "\nPredictions (4 image embeddings):\n", embeddings, "\n", "⚡" * 20)
+    def on_train_end(self, trainer, pl_module):
+        print("Training is ending")
+        # calculate pearson correlation
 
+
+trainer = L.Trainer(max_epochs=config["epochs"], logger=wandb_logger, overfit_batches=0.02, log_every_n_steps=1, callbacks=[MyPrintingCallback()])
+data_module = STDataModule(config["genes"], config["train_samples"], config["val_samples"], config["test_samples"], config["data_dir"], config["batch_size"])
+data_module.setup("fit")
+model = config["model"]
+trainer.fit(model=model, datamodule=data_module)
+
+results_file_name = config["output_dir"] + "/results.csv"
+for patient in config["val_samples"]:
+    generate_results(model, model.device, config["data_dir"], patient, config["genes"], results_file_name)
+
+figure_paths = generate_hists(config["output_dir"], config["output_dir"] + "/best_model.pth", model.device, results_file_name)
+
+figures = []
+for path in figure_paths:
+    figures.append(wandb.Image(path))
+
+
+for i in range(len(config["genes"])):
+    wandb.log({"restults for " + config["genes"][i]: wandb.Image(figure_paths[i])})
+wandb.finish()
+
+
+# clustering

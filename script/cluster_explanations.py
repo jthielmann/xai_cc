@@ -8,7 +8,6 @@ from data_loader import get_dataset_for_plotting
 from torchvision.utils import make_grid
 import zennit.image as zimage
 import pandas as pd
-import json
 from cluster_functions import (get_umaps, calculate_attributions, load_attributions, get_prototypes)
 from model import load_model, generate_model_list
 from cluster_functions import get_composite_layertype_layername
@@ -232,7 +231,3 @@ for idx, row in frame.iterrows():
 
     plt.savefig(out_path + "/result.png")
     plt.show()
-
-
-
-    # top concepts: [1755, 97, 1757, 429, 888, 686, 750]

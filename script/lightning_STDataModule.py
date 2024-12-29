@@ -4,7 +4,7 @@ from torchvision import transforms
 from data_loader import get_dataset
 
 class STDataModule(L.LightningDataModule):
-    def __init__(self, genes, train_samples, val_samples, test_samples, data_dir="../data/jonas/Training_Data/"):
+    def __init__(self, genes, train_samples, val_samples, test_samples, data_dir, batch_size=64):
         super().__init__()
         self.data_dir = data_dir
         self.transforms = transforms.Compose([
@@ -17,6 +17,7 @@ class STDataModule(L.LightningDataModule):
         self.train_samples = train_samples
         self.val_samples = val_samples
         self.test_samples = test_samples
+        self.batch_size = batch_size
 
     def setup(self, stage: str):
         # Assign train/val datasets for use in dataloaders
@@ -30,10 +31,10 @@ class STDataModule(L.LightningDataModule):
 
 
     def train_dataloader(self, batch_size=64):
-        return DataLoader(self.train_dataset, batch_size=batch_size)
+        return DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True)
 
     def val_dataloader(self, batch_size=64):
-        return DataLoader(self.val_dataset, batch_size=batch_size)
+        return DataLoader(self.val_dataset, batch_size=batch_size, shuffle=False)
 
     def test_dataloader(self, batch_size=64):
-        return DataLoader(self.test_dataset, batch_size=batch_size)
+        return DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False)

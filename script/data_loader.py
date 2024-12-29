@@ -54,12 +54,16 @@ class STDataset(torch.utils.data.Dataset):
             transforms.ToTensor(),
             # mean and std of the whole dataset
             transforms.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])
-            ])):
+            ]), device_not_mps=True):
         self.dataframe = dataframe
         self.transforms = transforms
+        self.device_not_mps = device_not_mps
 
     def __len__(self):
         return len(self.dataframe)
+
+    def get_tilename(self, index):
+        return self.dataframe.iloc[index]["tile"]
 
     def __getitem__(self, index):
         gene_names = list(self.dataframe)[1:]
@@ -68,9 +72,11 @@ class STDataset(torch.utils.data.Dataset):
         a = Image.open(row["tile"]).convert("RGB")
         # print(x.size)
         for j in gene_names:
-            gene_val = torch.tensor(float(row[j]), dtype=torch.float32)
+            if self.device_not_mps:
+                gene_val = torch.tensor(float(row[j]))
+            else:
+                gene_val = torch.tensor(float(row[j]), dtype=torch.float32)
             gene_vals.append(gene_val)
-        e = row["tile"]
         # apply normalization transforms as for pretrained colon classifier
         a = self.transforms(a)
         return a, torch.stack(gene_vals)
@@ -97,10 +103,10 @@ class Subset(torch.utils.data.Dataset):
 
     # get image and label tensor from dataset and transform
     def __getitem__(self, index):
-        a, gene_vals, e = self.subset[index]
+        a, gene_vals = self.subset[index]
         if self.transform:
             a = self.transform(a)
-        return a, gene_vals, e
+        return a, gene_vals
 
     # get length of dataset
     def __len__(self):

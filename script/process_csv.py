@@ -34,30 +34,26 @@ def process_spatial_data(patients, data_dir):
         spatial_matrix.to_csv(filename, index=False)
 
 
-def generate_results(model, device, data_dir, patient, genes, results_filename="results.csv"):
+def generate_results(model, device, data_dir, patient, genes, filepath):
     model.eval()
     print("generating results for patient", patient)
     loader = get_patient_loader(data_dir, patient=patient, genes=genes)
-    filepath = data_dir + patient + "/meta_data/" + results_filename
-    if os.path.exists(filepath):
-        os.remove(filepath)
     columns = []
     for gene in genes:
         columns.append("labels_" + gene)
-
 
     for gene in genes:
         columns.append("output_" + gene)
 
     columns.append("path")
     columns.append("tile")
-    df = pd.DataFrame(columns=columns)
-    df.to_csv(filepath, index=False)
+    columns.append("patient")
+
     with torch.no_grad():
-        for images, labels, name in loader:
+        for idx, (images, labels) in enumerate(loader):
             images = images.unsqueeze(0).to(device)
             images = images.float()
-            labels = torch.tensor(labels).to(device)
+            labels = labels.clone().detach().to(device)
 
             output = model(images)
 
@@ -66,8 +62,8 @@ def generate_results(model, device, data_dir, patient, genes, results_filename="
 
             output = pd.DataFrame(output.cpu())
             labels = pd.DataFrame(labels.cpu())
-
-            res = pd.concat([labels, output, pd.Series(name), pd.Series(os.path.basename(name))], axis=1)
+            name = loader.get_tilename(idx)
+            res = pd.concat([labels, output, pd.Series(name), pd.Series(os.path.basename(name)), pd.Series(patient)], axis=1)
             res.columns = columns
 
             res.to_csv(filepath, index=False, mode='a', header=False)

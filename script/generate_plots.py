@@ -39,7 +39,7 @@ def update_model_list(model_dir, model_list_file_name = "new_models.csv"):
     return frame
 
 
-def generate_hists(frame, out_file_appendix=""):
+def generate_hists_loop(frame, out_file_appendix=""):
     for idx, row in frame.iterrows():
         results_filename = row["model_dir"] + os.path.basename(row["model_path"][:-3]) + out_file_appendix + "_results.csv"
         print(results_filename)
@@ -77,6 +77,39 @@ def generate_hists(frame, out_file_appendix=""):
             plt.ylabel('target')
             plt.savefig(row["model_dir"] + "/" + gene + out_file_appendix + "_scatter.png")
             plt.clf()
+
+
+def generate_hists(model_dir, model_path, device, results_filename, out_file_appendix=""):
+    model = load_model(model_dir, model_path, squelch=True).to(device).eval()
+    results_file = pd.read_csv(results_filename)
+
+    patients = results_file[results_file.columns[-1]].unique()
+    print(patients)
+    figure_paths = []
+    for gene in model.gene_list:
+        out_string = "out_" + gene
+        labels_string = "labels_" + gene
+        for patient in patients:
+            patient_df = results_file[results_file[results_file.columns[-1]] == patient]
+            plt.scatter(patient_df[out_string], patient_df[labels_string], label=patient)
+        mse = torchmetrics.MeanSquaredError()
+        out = torch.tensor(results_file[out_string].to_numpy())
+        label = torch.tensor(results_file[labels_string].to_numpy())
+        result = mse(out, label)
+        pearson = round(scipy.stats.pearsonr(out, label)[0], 2)
+
+        plt.text(x=-2, y=3, s="MSE: " + str(round(result.item(), 2)))
+        plt.text(x=-2, y=1, s="pearson: " + str(pearson))
+        plt.plot([-2, 3], [-2, 3], color='red')
+        plt.title(results_filename + "\n" + gene)
+        plt.legend(loc="lower right")
+        plt.xlabel('output')
+        plt.ylabel('target')
+        figure_path = model_dir + "/" + gene + out_file_appendix + "_scatter.png"
+        figure_paths.append(figure_path)
+        plt.savefig(figure_path)
+        plt.clf()
+    return figure_paths
 
 
 def plot_hist_comparison(img_paths, width=4, subplot_size=10, gene=None, appendix=""):
@@ -191,7 +224,7 @@ def generate_tile_maps(data_dir, patients, model_info, results_filename):
                 plt.clf()
 
 
-
+"""
 data_dir_train = "../data/jonas/Training_Data/"
 data_dir_test = "../data/jonas/Test_Data/"
 patients_train = get_train_samples()
@@ -233,3 +266,4 @@ generate_heatmaps()
 
 
 print("done")
+"""
