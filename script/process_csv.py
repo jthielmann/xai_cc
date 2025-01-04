@@ -37,18 +37,22 @@ def process_spatial_data(patients, data_dir):
 def generate_results(model, device, data_dir, patient, genes, filepath):
     model.eval()
     print("generating results for patient", patient)
+    if os.path.exists(filepath):
+        os.remove(filepath)
     loader = get_patient_loader(data_dir, patient=patient, genes=genes)
     columns = []
+
     for gene in genes:
         columns.append("labels_" + gene)
 
     for gene in genes:
-        columns.append("output_" + gene)
+        columns.append("out_" + gene)
 
     columns.append("path")
     columns.append("tile")
     columns.append("patient")
-
+    df = pd.DataFrame(columns=columns)
+    df.to_csv(filepath, index=False)
     with torch.no_grad():
         for idx, (images, labels) in enumerate(loader):
             images = images.unsqueeze(0).to(device)

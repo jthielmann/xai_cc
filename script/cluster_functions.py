@@ -3,6 +3,7 @@ import os.path
 import numpy as np
 import scipy.ndimage
 import torch
+from torch.utils.data import DataLoader
 from PIL import ImageFilter, Image, ImageDraw
 from crp.image import get_crop_range, imgify
 from torchvision.transforms.functional import gaussian_blur
@@ -15,6 +16,25 @@ from zennit.torchvision import VGGCanonizer, ResNetCanonizer
 from zennit.composites import EpsilonPlusFlat
 import torch.nn as nn
 from sklearn.mixture import GaussianMixture
+
+from pcx_utils.render import vis_opaque_img_border
+from crp.visualization import FeatureVisualization
+import os
+from data_loader import get_dataset_for_plotting
+from torchvision.utils import make_grid
+import zennit.image as zimage
+import pandas as pd
+from model import load_model, generate_model_list
+
+import matplotlib.pyplot as plt
+
+from crp.attribution import CondAttribution
+
+from crp.concepts import ChannelConcept
+
+from crp.image import imgify
+
+import torchvision
 
 
 def get_composite_layertype_layername(model):
@@ -35,11 +55,20 @@ def get_composite_layertype_layername(model):
         layer_name = get_layer_names(model, [layer_type])[-1]
     return composite, layer_type, layer_name
 
-def calculate_attributions(dataset, device, composite, layer_name, attribution, out_path, cc):
+
+def get_composite_layertype_layername_lightning(model):
+    composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
+    layer_type = model.encoder.layer1[0].__class__
+    # select last bottleneck module
+    layer_name = get_layer_names(model, [layer_type])[-1]
+    return composite, layer_type, layer_name
+
+
+def calculate_attributions(dataloader, device, composite, layer_name, attribution, out_path, cc):
     activations = []
     attributions = []
     outputs = []
-    for i, (x, _) in enumerate(tqdm(dataset)):
+    for i, (x, _) in enumerate(tqdm(dataloader)):
         x = x.to(device).unsqueeze(0).requires_grad_()
         condition = [{"y": [0]}]
         attr = attribution(x, condition, composite, record_layer=[layer_name])
@@ -54,7 +83,7 @@ def calculate_attributions(dataset, device, composite, layer_name, attribution, 
     torch.save(attributions, out_path + "/attributions.pt")
     outputs = torch.cat(outputs)
     torch.save(outputs, out_path + "/outputs.pt")
-    indices = np.arange(len(dataset))
+    indices = np.arange(len(dataloader.dataset))
     torch.save(indices, out_path + "/indices.pt")
     return activations, attributions, outputs, indices
 
@@ -183,7 +212,7 @@ def get_prototypes(attr, embedding_attr, act, embedding_act):
     prototypes = []
     for i, (X, emb) in enumerate([(attr, embedding_attr), (act, embedding_act)]):
         gmm = GaussianMixture(n_components=8, random_state=0).fit(X.detach().cpu().numpy())
-        knn
+
         prototypes.append(gmm.means_)
     return prototypes
 
@@ -195,13 +224,9 @@ def get_top_concepts():
 def get_umaps(attr, act, model_dir):
     embedding_attr = UMAP(n_neighbors=5, random_state=123, n_jobs=1)
     X_attr_filename = model_dir + "X_attr.npy"
-    if os.path.exists(X_attr_filename):
-        with open(X_attr_filename, 'rb') as f:
-            X_attr = np.load(X_attr_filename)
-    else:
-        X_attr = embedding_attr.fit_transform(attr.detach().cpu().numpy())
-        with open(X_attr_filename, 'wb') as f:
-            np.save(f, X_attr)
+    X_attr = embedding_attr.fit_transform(attr.detach().cpu().numpy())
+    with open(X_attr_filename, 'wb') as f:
+        np.save(f, X_attr)
 
     embedding_act = UMAP(n_neighbors=5, random_state=123, n_jobs=1)
     X_act_filename = model_dir + "X_act.npy"
@@ -215,6 +240,141 @@ def get_umaps(attr, act, model_dir):
 
     return embedding_attr, embedding_act, X_attr, X_act
 
+# debug fully loads the dataset but then only uses the first few samples for testing purposes
+def cluster_explanations(model, data_dir, model_dir, genes, debug=False):
+    for gene in genes:
+        print("clustering started for gene", gene)
+        model.eval()
+        composite, layer_type, layer_name = get_composite_layertype_layername_lightning(model)
+        out_path = model_dir + "/crp_out/"
+
+        os.makedirs(out_path, exist_ok=debug)
+        print("loading dataset")
+        dataset = get_dataset_for_plotting(data_dir, genes=[gene], device=model.device)
+        print("dataset loaded")
+        if debug:
+            dataset.dataframe = dataset.dataframe.drop(list(range(10, len(dataset))))
+        attribution = CondAttribution(model)
+
+        print("target layer:", layer_name)
+        print("target layer type:", layer_type)
+        layer_map = {layer_name: ChannelConcept()}
+
+        fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=None, path=out_path)
+        print("preprocessing CRP to ", out_path)
+        fv.run(composite, 0, len(dataset) // 1, batch_size=32)
+        print("CRP preprocessing done. output path:", out_path)
+
+        dataloader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=8)
+
+        cc = ChannelConcept()
+
+        print("calculating concept attributions and activations over the dataset")
+        activations, attributions, outputs, indices = calculate_attributions(dataloader, model.device, composite, layer_name, attribution, out_path, cc)
+        print("calculation finished")
+
+        # all indices are 0 because we only have one output
+        attr = attributions[outputs.argmax(1) == 0]
+        act = activations[outputs.argmax(1) == 0]
+        indices = indices[outputs.argmax(1) == 0]
+        print(attr)
+
+        embedding_attr, embedding_act, X_attr, X_act = get_umaps(attr, act, model_dir)
+        x_attr, y_attr = X_attr[:, 0], X_attr[:, 1]
+        x_act, y_act = X_act[:, 0], X_act[:, 1]
+
+        print("calculating prototypes")
+        os.makedirs(out_path + "/prototypes/", exist_ok=debug)
+        prototypes = get_prototypes(attr, embedding_attr, act, embedding_act)
+
+        for i in range(len(prototypes)):
+            np.save(out_path + "/prototypes/" + str(i), prototypes[i])
+
+        proto_attr = prototypes[0]
+        print("calculating distances")
+        distances = np.linalg.norm(attr[:, None, :].detach().cpu() - proto_attr, axis=2)
+        prototype_samples = np.argsort(distances, axis=0)[:8]
+        prototype_samples = indices[prototype_samples]
+
+        fig, axs = plt.subplots(1, 8, figsize=(6, 8), dpi=200, facecolor='white')
 
 
+        N_PROTOTYPES = 8
+        for i in range(N_PROTOTYPES):
+            imgs_proto = []
+            for j in range(8):
+                img = dataset[prototype_samples[j][i]][0]
+                imgs_proto.append(img)
+
+            grid = make_grid(imgs_proto,
+                nrow=1,
+                padding=0)
+            grid = np.array(zimage.imgify(grid.detach().cpu()))
+            img = imgify(grid)
+            axs[i].imshow(img)
+            axs[i].set_xticks([])
+            axs[i].set_yticks([])
+            axs[i].set_title(f"{i}")
+        plt.show()
+
+        proto = torch.from_numpy(proto_attr)
+        top_concepts = torch.topk(proto, 3).indices.flatten().unique()
+        top_concepts = top_concepts[proto[:, top_concepts].amax(0).argsort(descending=True)].tolist()
+        concept_matrix = proto[:, top_concepts].T
+        N_CONCEPTS = len(top_concepts)
+
+        n_refimgs = 12
+        print("top concepts:", top_concepts)
+        ref_imgs = fv.get_max_reference(top_concepts, layer_name, "relevance", (0, 6), composite=composite, rf=True,
+                                            plot_fn=vis_opaque_img_border, batch_size=6)
+
+
+        fig, axs = plt.subplots(nrows=N_CONCEPTS + 1, ncols=N_PROTOTYPES + 1, figsize=(N_PROTOTYPES + 6, N_CONCEPTS + 6), dpi=150,
+                                gridspec_kw={'width_ratios': [6] + [1 for _ in range(N_PROTOTYPES)],
+                                             'height_ratios': [6] + [1 for _ in range(N_CONCEPTS)]})
+        for i in range(N_CONCEPTS):
+            for j in range(N_PROTOTYPES):
+                val = concept_matrix[i, j].item()
+                axs[i + 1, j + 1].matshow(np.ones((1, 1)) * val if val >= 0 else np.ones((1, 1)) * val * -1,
+                                          vmin=0,
+                                          vmax=concept_matrix.abs().max(),
+                                          cmap="Reds" if val >= 0 else "Blues")
+                minmax = concept_matrix.abs().max() * 100 / 2
+                cos = val * 100
+                color = "white" if abs(cos) > minmax else "black"
+                axs[i + 1, j + 1].text(0, 0, f"{cos:.1f}", ha="center", va="center", color=color, fontsize=15)
+                axs[i + 1, j + 1].axis('off')
+        resize = torchvision.transforms.Resize((120, 120))
+        for i in range(N_PROTOTYPES):
+            grid = make_grid(
+                [resize(dataset[prototype_samples[j][i]][0])
+                 for j in range(6)],
+                nrow=1,
+                padding=0)
+            grid = np.array(zimage.imgify(grid.detach().cpu()))
+            img = imgify(grid)
+            axs[0, i + 1].imshow(img)
+            axs[0, i + 1].set_xticks([])
+            axs[0, i + 1].set_yticks([])
+            axs[0, i + 1].set_title(f"prototype {i}")
+            axs[0, 0].axis('off')
+
+
+        for i in range(N_CONCEPTS):
+            grid = make_grid(
+                [resize(torch.from_numpy(np.asarray(i)).permute((2, 0, 1))) for i in ref_imgs[top_concepts[i]]],
+                # [resize(torch.from_numpy(np.asarray(i)).permute((0, 1, 2))) for i in ref_imgs[topk_ind[i]]],
+                nrow=int(6 / 1),
+                padding=0)
+            grid = np.array(zimage.imgify(grid.detach().cpu()))
+            axs[i + 1, 0].imshow(grid)
+            axs[i + 1, 0].set_ylabel(f"concept {top_concepts[i]}")
+            axs[i + 1, 0].set_yticks([])
+            axs[i + 1, 0].set_xticks([])
+
+        plt.tight_layout()
+        result_path = out_path + "/result_" + gene + ".png"
+        plt.savefig(result_path)
+        plt.clf()
+        print("clustering result saved to", result_path)
 

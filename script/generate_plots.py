@@ -79,14 +79,14 @@ def generate_hists_loop(frame, out_file_appendix=""):
             plt.clf()
 
 
-def generate_hists(model_dir, model_path, device, results_filename, out_file_appendix=""):
-    model = load_model(model_dir, model_path, squelch=True).to(device).eval()
+def generate_hists(model, model_dir, results_filename, out_file_appendix=""):
+    model.eval()
     results_file = pd.read_csv(results_filename)
 
     patients = results_file[results_file.columns[-1]].unique()
     print(patients)
     figure_paths = []
-    for gene in model.gene_list:
+    for gene in model.genes:
         out_string = "out_" + gene
         labels_string = "labels_" + gene
         for patient in patients:

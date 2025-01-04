@@ -10,7 +10,7 @@ import wandb
 class LightiningNN(L.LightningModule):
     def __init__(self, genes, encoder, pretrained_out_dim, middel_layer_features, out_path, error_metric_name, freeze_pretrained):
         super(LightiningNN, self).__init__()
-
+        self.save_hyperparameters()
         # model setup
         self.encoder = encoder
         self.freeze_pretrained = freeze_pretrained
@@ -69,9 +69,6 @@ class LightiningNN(L.LightningModule):
             exit(1)
         return loss, y_hat, y
 
-    def backward(self, loss: torch.Tensor, *args: torch.Any, **kwargs: torch.Any):
-        loss.backward()
-
     def configure_optimizers(self):
         return self.optimizer
 
@@ -89,6 +86,8 @@ class LightiningNN(L.LightningModule):
             self.best_loss = self.current_loss
             torch.save(self.state_dict(), self.out_path + "/best_model.pth")
             self.best_val_epoch = self.val_epoch_counter
+            wandb.run.summary["best_val_loss"] = self.best_loss
+            wandb.run.summary["best_val_epoch"] = self.best_val_epoch
 
         self.y_hats = torch.cat(self.y_hats, dim=0)
         self.ys = torch.cat(self.ys, dim=0)
@@ -100,11 +99,15 @@ class LightiningNN(L.LightningModule):
         torch.save(self.state_dict(), self.out_path + "/latest.pth")
 
     def on_train_end(self):
-        columns = []
-        for gene in self.genes:
-            columns.append(gene + " pearson")
-        table = wandb.Table(columns=columns, data=[torch.stack(self.pearson_values).transpose(0, 1)])
-        wandb.log({"pearson": table})
+        best_pearsons = []
+        best_pearson_epochs = []
+        for i in range(len(self.genes)):
+            best_epoch = torch.argmax(torch.stack(self.pearson_values)[:,i].abs(), dim=0).item()
+            best_pearson_epochs.append(best_epoch)
+            best_pearsons.append(round(self.pearson_values[best_epoch][i].item(), 3))
+        best_pearson_dict = {self.genes[i]: best_pearsons[i] for i in range(len(self.genes))}
+        wandb.run.summary["best_pearsons"] = best_pearson_dict
+        best_pearson_epoch_dict = {self.genes[i]: best_pearson_epochs[i] for i in range(len(self.genes))}
+        wandb.run.summary["best_pearson_epochs"] = best_pearson_epoch_dict
 
         wandb.log({"final pearson": self.pearson_values[self.best_val_epoch]})
-

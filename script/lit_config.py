@@ -3,7 +3,6 @@ from lightning_model import LightiningNN
 import torch
 import os
 
-#genes = ["RUBCNL"]
 genes = ["COL3A1", "DCN", "THY1", "ENG", "PECAM1", "TAGLN", "ACTA2", "RGS5", "SYNPO2", "CNN1", "DES", "SOX10", "S100B", "PLP1"]
 error_metric_name = "MSELoss"
 out_dir = "../models/ligthning_test/"

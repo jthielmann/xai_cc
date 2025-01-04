@@ -1,3 +1,6 @@
+import torch
+print(torch.__version__)
+
 from pcx_utils.render import vis_opaque_img_border
 from crp.visualization import FeatureVisualization
 import os
