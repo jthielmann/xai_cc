@@ -1,9 +1,6 @@
 import torch.nn as nn
-import torchvision
-from torchvision import models
-import torch
-from train import training
-from model import init_res18_ciga, get_res50_dropout
+from script.train.train import training
+from script.model.model import get_res50_dropout
 import os
 import torch.optim as optim
 

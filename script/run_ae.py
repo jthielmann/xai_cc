@@ -1,7 +1,7 @@
-from model import get_Resnet_ae
-from train import train_ae2
+from script.model.model import get_Resnet_ae
+from script.train.train import train_ae2
 import torch.nn as nn
-from loss_functions import SparsityLoss, CompositeLoss
+from script.model.loss_functions import SparsityLoss, CompositeLoss
 import os
 
 learning_rates = [0.01, 0.001, 0.0001, 0.0005]

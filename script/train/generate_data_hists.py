@@ -8,7 +8,7 @@ use_val = True
 use_test = True
 
 patients_test = ["p008", "p021", "p026"]
-data_dir_test = "../data/crc_base/Test_Data/"
+data_dir_test = "../../data/crc_base/Test_Data/"
 def get_patients_datadir(switch, use_val):
     if not switch:
         patients = ["TENX92", "TENX91", "TENX90", "TENX89", "TENX70", "TENX49", "ZEN49", "ZEN48", "ZEN47", "ZEN46",
@@ -16,12 +16,12 @@ def get_patients_datadir(switch, use_val):
         if use_val:
             val_patitents = ["TENX29", "ZEN43", "ZEN42", "ZEN40", "ZEN39", "ZEN38", "ZEN36"]
             patients.extend(val_patitents)
-        data_dir = "../data/CRC-N19/"
+        data_dir = "../../data/CRC-N19/"
     else:
         patients = ["p007", "p014", "p016", "p020", "p025"]
         if use_val:
             patients.extend(["p009", "p013"])
-        data_dir = "../data/crc_base/Training_Data/"
+        data_dir = "../../data/crc_base/Training_Data/"
     return patients, data_dir
 calculate_target_mean_std = False
 patients, data_dir = get_patients_datadir(use_base, use_val)

@@ -1,7 +1,7 @@
 import torch
 print(torch.__version__)
-from lit_config import lit_config
-from cluster_functions import cluster_explanations_genes_loop
+from script.configs.lit_config import lit_config
+from script.xai.cluster_functions import cluster_explanations_genes_loop
 from model import load_model
 import torch
 import wandb

@@ -1,8 +1,8 @@
 import lightning as L
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2 as transforms
-from data_loader import get_dataset
-from image_transforms import get_transforms
+from script.data_processing.data_loader import get_dataset
+from script.data_processing.image_transforms import get_transforms
 import torch
 
 class STDataModule(L.LightningDataModule):

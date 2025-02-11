@@ -11,7 +11,7 @@ import pandas as pd
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
-from custom_transforms import Occlude
+from script.data_processing.custom_transforms import Occlude
 
 
 # debug

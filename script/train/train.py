@@ -5,12 +5,11 @@ import numpy as np
 import torch.nn.functional
 from scipy import stats
 import pandas as pd
-from data_loader import get_data_loaders, get_dataset_ae, get_dataset_ae_single, get_occlusion_dataset, get_data_loader_occlusion
+from script.data_processing.data_loader import get_data_loaders, get_dataset_ae_single, get_data_loader_occlusion
 import json
 import torch
 import torch.optim as optim
-import torch.nn as nn
-from custom_transforms import Occlude
+from script.data_processing.custom_transforms import Occlude
 
 DEFAULT_RANDOM_SEED = 42
 
@@ -184,7 +183,7 @@ def train_ae(ae, out_dir_name, criterion, optimizer=None, training_data_dir="../
         optimizer = optim.Adam(ae.parameters(), lr=lr)
 
     train_loader = get_dataset_ae_single(training_data_dir, file_type="tif")
-    val_loader = get_dataset_ae_single("../Training_Data/", file_type="tiff")
+    val_loader = get_dataset_ae_single("../../Training_Data/", file_type="tiff")
     best_val_loss = float('inf')
     logfile = out_dir_name + "/log.txt"
     open(logfile, "a").close()
@@ -250,7 +249,7 @@ def train_ae2(ae, out_dir_name, criterion, optimizer=None, training_data_dir="..
         optimizer = optim.Adam(ae.parameters(), lr=lr)
     occluder = Occlude(20, 20, patch_vary_width=0, patch_min_width=10, use_batch=True)
     train_loader = get_data_loader_occlusion(training_data_dir, batch_size=batch_size, file_endings=["tif", "tiff"])
-    val_loader = get_data_loader_occlusion("../Training_Data/", batch_size=batch_size, file_endings=["tif", "tiff"])
+    val_loader = get_data_loader_occlusion("../../Training_Data/", batch_size=batch_size, file_endings=["tif", "tiff"])
     best_val_loss = float('inf')
     logfile = out_dir_name + "/log.txt"
     if not debug:

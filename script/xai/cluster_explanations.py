@@ -28,7 +28,7 @@ import torchvision
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model_dir = "../models/"
+model_dir = "../../models/"
 model_list_file_name = "new_models.csv"
 
 must_contain = None
@@ -65,8 +65,8 @@ for idx, row in frame.iterrows():
     except AttributeError:
         continue
 
-    base_model_dir = "../models"
-    out_path = "../crp_out/"
+    base_model_dir = "../../models"
+    out_path = "../../crp_out/"
     out_path += model_dir[len(base_model_dir):] + "/"
     token_name = out_path + "clustering_token"
     if os.path.exists(token_name):

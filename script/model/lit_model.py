@@ -4,7 +4,7 @@ import torch.nn as nn
 import torchmetrics
 import wandb
 import torch.optim as optim
-from image_transforms import get_transforms
+from script.data_processing.image_transforms import get_transforms
 
 # lightning module
 class LightiningNN(L.LightningModule):

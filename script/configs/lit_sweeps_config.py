@@ -1,4 +1,4 @@
-from lit_config import lit_config
+from script.configs.lit_config import lit_config
 debug = lit_config["debug"]
 if not debug:
     sweep_config = {

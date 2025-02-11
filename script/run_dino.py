@@ -1,14 +1,13 @@
 import torch.nn as nn
 
-from train import training_multi
+from script.train.train import training_multi
 
 import torchmetrics
 
-from model import general_model
+from script.model.model import general_model
 import os
 import torch.optim as optim
-from data_loader import get_data_loaders
-from loss_functions import SparsityLoss, CompositeLoss, CompositeLoss
+from script.model.loss_functions import CompositeLoss
 import pandas as pd
 
 learning_rate = 0.001

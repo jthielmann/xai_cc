@@ -60,7 +60,7 @@ class CRP_Dataset(torch.utils.data.Dataset):
         return a, 0
 
 
-data_dir = "../Training_Data/"
+data_dir = "../../Training_Data/"
 dataset = CRP_Dataset(get_dataset(data_dir))
 
 

@@ -1,17 +1,17 @@
 import torch
 
-from lit_model import LightiningNN
+from script.model.lit_model import LightiningNN
 
 import numpy
 import sys
 from lightning.pytorch.loggers import WandbLogger
-from lit_config import lit_config, get_name, get_encoder
+from script.configs.lit_config import lit_config, get_name, get_encoder
 import lightning as L
 
-from lit_STDataModule import STDataModule
-from process_csv import generate_results_patient
+from script.data_processing.lit_STDataModule import STDataModule
+from script.data_processing.process_csv import generate_results_patient
 
-from generate_plots import generate_hists
+from script.train.train import generate_hists
 import os
 import json
 import wandb

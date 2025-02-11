@@ -1,4 +1,4 @@
-from data_loader import get_dataset
+from script.data_processing.data_loader import get_dataset
 import os
 import pandas as pd
 import torch

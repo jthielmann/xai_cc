@@ -1,5 +1,5 @@
 from torchvision.transforms import v2 as transforms
-from lit_config import lit_config
+from script.configs.lit_config import lit_config
 import torch
 
 def get_transforms():

@@ -6,14 +6,14 @@ import matplotlib.pyplot as plt
 from model import load_model
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-data_dir_train = "../Training_Data/"
-data_dir_test = "../Test_Data/"
+data_dir_train = "../../Training_Data/"
+data_dir_test = "../../Test_Data/"
 patients_train = [os.path.basename(f) for f in os.scandir(data_dir_train) if f.is_dir()]
 patients_test = [os.path.basename(f) for f in os.scandir(data_dir_test) if f.is_dir()][1:]
 print(patients_train)
 print(patients_test)
 
-model_dir = "../models/"
+model_dir = "../../models/"
 skip = 0
 model_dir_path = []
 # gather new models only

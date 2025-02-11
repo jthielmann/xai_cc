@@ -1,24 +1,24 @@
 import matplotlib.pyplot as plt
 import torch
 
-from lit_model import LightiningNN
+from script.model.lit_model import LightiningNN
 
 import numpy
 import sys
-from lit_config import lit_config, get_name, get_encoder
+from script.configs.lit_config import get_name, get_encoder, lit_config
 import lightning as L
 
-from lit_STDataModule import STDataModule
-from process_csv import generate_results_patient
+from script.data_processing.lit_STDataModule import STDataModule
+from script.data_processing.process_csv import generate_results_patient
 
-from generate_plots import generate_hists
+from script.train.generate_hists import generate_hists
 import os
 import json
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.profilers import PyTorchProfiler
 import wandb
 from lightning.pytorch.loggers import WandbLogger
-from image_transforms import get_transforms
+from script.data_processing.image_transforms import get_transforms
 
 def train_model(genes, epochs, learning_rate, encoder, encoder_type, error_metric_name, freeze_pretrained, out_dir,
                 train_samples, val_samples, data_dir, num_workers, batch_size, debug,
@@ -159,7 +159,7 @@ if __name__ == "__main__":
 
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print("device", device)
-    from lit_config import lit_config
+    from script.configs.lit_config import lit_config
     train_model(genes=lit_config["genes"], epochs=lit_config["epochs"][0], learning_rate=lit_config["learning_rates"][0],
                 encoder=get_encoder(lit_config["encoder_type"]), encoder_type=lit_config["encoder_type"],
                 error_metric_name=lit_config["error_metric_name"], freeze_pretrained=lit_config["freeze_pretrained"],

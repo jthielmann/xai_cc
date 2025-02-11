@@ -1,7 +1,7 @@
 import torch
 import torchvision.models as models
 
-debug = False
+debug = True
 data_module_num_workers = 0
 #genes = ["COL3A1", "DCN", "THY1", "ENG", "PECAM1", "TAGLN", "ACTA2", "RGS5", "SYNPO2", "CNN1", "DES", "SOX10", "S100B", "PLP1"]
 genes = ["COL3A1", "DCN", "THY1", "ENG", "PECAM1", "TAGLN", "ACTA2", "RGS5", "SYNPO2", "CNN1", "DES"]
