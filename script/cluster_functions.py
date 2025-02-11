@@ -23,8 +23,6 @@ import os
 from data_loader import get_dataset_for_plotting
 from torchvision.utils import make_grid
 import zennit.image as zimage
-import pandas as pd
-from model import load_model, generate_model_list
 
 import matplotlib.pyplot as plt
 
@@ -35,6 +33,7 @@ from crp.concepts import ChannelConcept
 from crp.image import imgify
 
 import torchvision
+
 
 
 def get_composite_layertype_layername(model):
@@ -69,7 +68,7 @@ def calculate_attributions(dataloader, device, composite, layer_name, attributio
     attributions = []
     outputs = []
     for i, (x, _) in enumerate(tqdm(dataloader)):
-        x = x.to(device).unsqueeze(0).requires_grad_()
+        x = x.to(device).requires_grad_()
         condition = [{"y": [0]}]
         attr = attribution(x, condition, composite, record_layer=[layer_name])
 
@@ -156,7 +155,7 @@ def vis_opaque_img_border(data_batch, heatmaps, rf=False, alpha=0.4, vis_th=0.05
 
         img = data_batch[i]
 
-        filtered_heat = gaussian_blur(heatmaps[i].unsqueeze(0), kernel_size=[kernel_size])[0]
+        filtered_heat = gaussian_blur(heatmaps[i].unsqueeze(0), kernel_size=kernel_size)[0]
         filtered_heat = filtered_heat / (filtered_heat.abs().max())
         vis_mask = filtered_heat > vis_th
         # imgs.append(imgify(img.detach().cpu()).convert('RGB'))
@@ -217,10 +216,6 @@ def get_prototypes(attr, embedding_attr, act, embedding_act):
     return prototypes
 
 
-def get_top_concepts():
-    pass
-
-
 def get_umaps(attr, act, model_dir):
     embedding_attr = UMAP(n_neighbors=5, random_state=123, n_jobs=1)
     X_attr_filename = model_dir + "X_attr.npy"
@@ -241,43 +236,46 @@ def get_umaps(attr, act, model_dir):
     return embedding_attr, embedding_act, X_attr, X_act
 
 # debug fully loads the dataset but then only uses the first few samples for testing purposes
-def cluster_explanations(model, data_dir, model_dir, genes, debug=False):
+def cluster_explanations_genes_loop(model, data_dir, model_dir, genes, debug=False, samples=None):
+    results_paths = []
+    out_path = model_dir + "/crp_out/"
+    os.makedirs(out_path, exist_ok=debug)
+    composite, layer_type, layer_name = get_composite_layertype_layername_lightning(model)
+    print("target layer type:", layer_type)
+    print("target layer:", layer_name)
+    model.eval()
+
+    attribution = CondAttribution(model)
+    layer_map = {layer_name: ChannelConcept()}
+    cc = ChannelConcept()
     for gene in genes:
         print("clustering started for gene", gene)
-        model.eval()
-        composite, layer_type, layer_name = get_composite_layertype_layername_lightning(model)
-        out_path = model_dir + "/crp_out/"
 
-        os.makedirs(out_path, exist_ok=debug)
         print("loading dataset")
-        dataset = get_dataset_for_plotting(data_dir, genes=[gene], device=model.device)
+        dataset = get_dataset_for_plotting(data_dir, genes=[gene], device=model.device, samples=samples)
         print("dataset loaded")
-        if debug:
-            dataset.dataframe = dataset.dataframe.drop(list(range(10, len(dataset))))
-        attribution = CondAttribution(model)
-
-        print("target layer:", layer_name)
-        print("target layer type:", layer_type)
-        layer_map = {layer_name: ChannelConcept()}
 
         fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=None, path=out_path)
         print("preprocessing CRP to ", out_path)
-        fv.run(composite, 0, len(dataset) // 1, batch_size=32)
+        # skip calculation in debug mode as we only require to calculate it once
+        if not debug and not os.path.exists(out_path + "/ActMax_sum_normed/encoder.layer4.2_data.npy"):
+            fv.run(composite, 0, len(dataset) // 1, batch_size=32)
         print("CRP preprocessing done. output path:", out_path)
 
-        dataloader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=8)
+        dataloader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=2)
 
-        cc = ChannelConcept()
-
-        print("calculating concept attributions and activations over the dataset")
-        activations, attributions, outputs, indices = calculate_attributions(dataloader, model.device, composite, layer_name, attribution, out_path, cc)
-        print("calculation finished")
+        if not debug and not os.path.exists(out_path + "/activations.pt"):
+            print("loading precalculated attributions and activations")
+            activations, attributions, outputs, indices = load_attributions(out_path)
+        else:
+            print("calculating concept attributions and activations over the dataset")
+            activations, attributions, outputs, indices = calculate_attributions(dataloader, model.device, composite, layer_name, attribution, out_path, cc)
+            print("calculation finished")
 
         # all indices are 0 because we only have one output
         attr = attributions[outputs.argmax(1) == 0]
         act = activations[outputs.argmax(1) == 0]
         indices = indices[outputs.argmax(1) == 0]
-        print(attr)
 
         embedding_attr, embedding_act, X_attr, X_act = get_umaps(attr, act, model_dir)
         x_attr, y_attr = X_attr[:, 0], X_attr[:, 1]
@@ -285,6 +283,7 @@ def cluster_explanations(model, data_dir, model_dir, genes, debug=False):
 
         print("calculating prototypes")
         os.makedirs(out_path + "/prototypes/", exist_ok=debug)
+
         prototypes = get_prototypes(attr, embedding_attr, act, embedding_act)
 
         for i in range(len(prototypes)):
@@ -377,4 +376,6 @@ def cluster_explanations(model, data_dir, model_dir, genes, debug=False):
         plt.savefig(result_path)
         plt.clf()
         print("clustering result saved to", result_path)
+        results_paths.append(result_path)
 
+    return results_paths

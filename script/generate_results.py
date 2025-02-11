@@ -69,7 +69,7 @@ def generate_results(model_frame, data_dirs, mode="train", calculate_anyway=Fals
         if model is None:
             continue
         model.to(device).eval()
-        columns_base = ["path"]
+        columns_base = []
         for gene in model.gene_list:
             columns_base.append("labels_" + gene)
         for gene in model.gene_list:
@@ -90,9 +90,9 @@ def generate_results(model_frame, data_dirs, mode="train", calculate_anyway=Fals
 
                     if loader is None:
                         continue
-                    for img, labels, path in loader:
+                    for img, labels in loader:
                         out = model(img.unsqueeze(0).to(device))
-                        out_row = [path]
+                        out_row = []
                         for label in labels:
                             out_row.append(label)
                         for out_item in out:
@@ -120,7 +120,7 @@ generate_results(frame, data_dirs_val, mode = "val", calculate_anyway=calculate_
 
 print("generate_results done")
 print("--------------------------------------------------")
-
+"""
 out_filename = "../results/results.csv"
 out_filename_mean = "../results/results_mean.csv"
 
@@ -209,3 +209,4 @@ for idx, row in frame.iterrows():
     results_df_mean.to_csv(out_filename_mean)
 
 print("done")
+"""

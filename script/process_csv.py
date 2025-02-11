@@ -1,9 +1,11 @@
-from data_loader import get_patient_loader
+from data_loader import get_dataset
 import os
 import pandas as pd
 import torch
 import anndata as ad
 import ntpath
+from torch.utils.data import DataLoader
+
 
 
 def ann_data_to_csv(data_dir):
@@ -34,12 +36,12 @@ def process_spatial_data(patients, data_dir):
         spatial_matrix.to_csv(filename, index=False)
 
 
-def generate_results(model, device, data_dir, patient, genes, filepath):
+def generate_results_patient(model, device, data_dir, patient, genes, filepath, transform=None, max_len=None):
     model.eval()
     print("generating results for patient", patient)
-    if os.path.exists(filepath):
-        os.remove(filepath)
-    loader = get_patient_loader(data_dir, patient=patient, genes=genes)
+    dataset = get_dataset(data_dir, genes, transform, [patient], max_len=max_len)
+    loader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=0, pin_memory=True)
+
     columns = []
 
     for gene in genes:
@@ -51,22 +53,20 @@ def generate_results(model, device, data_dir, patient, genes, filepath):
     columns.append("path")
     columns.append("tile")
     columns.append("patient")
-    df = pd.DataFrame(columns=columns)
-    df.to_csv(filepath, index=False)
+    if not os.path.exists(filepath):
+        df = pd.DataFrame(columns=columns)
+        df.to_csv(filepath, index=False)
     with torch.no_grad():
         for idx, (images, labels) in enumerate(loader):
-            images = images.unsqueeze(0).to(device)
+            images = images.to(device)
             images = images.float()
             labels = labels.clone().detach().to(device)
 
             output = model(images)
 
-            output = output.squeeze().unsqueeze(0)
-            labels = labels.unsqueeze(0)
-
             output = pd.DataFrame(output.cpu())
             labels = pd.DataFrame(labels.cpu())
-            name = loader.get_tilename(idx)
+            name = loader.dataset.get_tilename(idx)
             res = pd.concat([labels, output, pd.Series(name), pd.Series(os.path.basename(name)), pd.Series(patient)], axis=1)
             res.columns = columns
 

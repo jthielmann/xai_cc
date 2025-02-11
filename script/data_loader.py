@@ -49,14 +49,9 @@ def log_training(date, training_log):
 
 
 class STDataset(torch.utils.data.Dataset):
-    def __init__(self, dataframe, transforms=transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            # mean and std of the whole dataset
-            transforms.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])
-            ]), device_not_mps=True):
+    def __init__(self, dataframe, image_transforms=None, device_not_mps=True):
         self.dataframe = dataframe
-        self.transforms = transforms
+        self.transforms = image_transforms
         self.device_not_mps = device_not_mps
 
     def __len__(self):
@@ -66,19 +61,19 @@ class STDataset(torch.utils.data.Dataset):
         return self.dataframe.iloc[index]["tile"]
 
     def __getitem__(self, index):
-        gene_names = list(self.dataframe)[1:]
+        gene_names = list(self.dataframe)[:-1]
         gene_vals = []
         row = self.dataframe.iloc[index]
         a = Image.open(row["tile"]).convert("RGB")
         # print(x.size)
         for j in gene_names:
-            if self.device_not_mps:
-                gene_val = torch.tensor(float(row[j]))
-            else:
-                gene_val = torch.tensor(float(row[j]), dtype=torch.float32)
+            # mps: gene_val = torch.tensor(float(row[j]), dtype=torch.float32)
+            gene_val = torch.tensor(float(row[j]))
             gene_vals.append(gene_val)
+
         # apply normalization transforms as for pretrained colon classifier
-        a = self.transforms(a)
+        if self.transforms:
+            a = self.transforms(a)
         return a, torch.stack(gene_vals)
 
 
@@ -151,30 +146,27 @@ def get_test_samples():
 
 
 # contains tile path and gene data
-def get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/"):
-    columns_of_interest = ["tile"]
-    for gene in genes:
-        columns_of_interest.append(gene)
-    st_dataset = pd.DataFrame(columns=columns_of_interest)
-    # generate training dataframe with all training samples
+def get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/", max_len=None):
+    columns_of_interest = ["tile"] + genes
+    datasets = []  # Use a list to store DataFrames
+
     for i in samples:
-        st_dataset_patient = pd.read_csv(data_dir + "/" + i + "/" + meta_data_dir + "/gene_data.csv", index_col=-1)
-        st_dataset_patient["tile"] = st_dataset_patient.index
-        st_dataset_patient['tile'] = st_dataset_patient['tile'].apply(lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x))
-        if st_dataset.empty:
-            st_dataset = st_dataset_patient[columns_of_interest]
-        else:
-            st_dataset = pd.concat([st_dataset, st_dataset_patient[columns_of_interest]])  # concat all samples
-    st_dataset.reset_index(drop=True, inplace=True)
+        file_path = data_dir + i + meta_data_dir + "gene_data.csv"
+        st_dataset_patient = pd.read_csv(file_path, usecols=columns_of_interest, nrows=max_len)
+
+        st_dataset_patient["tile"] = [os.path.join(data_dir, i, "tiles", tilename) for tilename in st_dataset_patient.tile]
+
+        datasets.append(st_dataset_patient)
+
+    st_dataset = pd.concat(datasets)
     return st_dataset
 
 
-
-def get_dataset(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/"):
+def get_dataset(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/", max_len=None):
     if samples is None:
         samples = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
     # contains
-    raw_data = get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/")
+    raw_data = get_base_dataset(data_dir, genes, samples, meta_data_dir=meta_data_dir, max_len=max_len)
     if transforms is None:
         st_dataset = STDataset(raw_data)
     else:
@@ -281,7 +273,6 @@ class PlottingDataset(torch.utils.data.Dataset):
         gene_vals = []
         row = self.dataframe.iloc[index]
         a = Image.open(row["tile"]).convert("RGB")
-        # print(x.size)
         for j in gene_names:
             gene_val = float(row[j])
             gene_vals.append(gene_val)
