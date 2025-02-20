@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import json
 import matplotlib.pyplot as plt
-from model import load_model
+from script.model.model import load_model
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 data_dir_train = "../../Training_Data/"

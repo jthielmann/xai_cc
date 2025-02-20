@@ -17,10 +17,10 @@ from zennit.composites import EpsilonPlusFlat
 import torch.nn as nn
 from sklearn.mixture import GaussianMixture
 
-from pcx_utils.render import vis_opaque_img_border
+from script.pcx_utils.render import vis_opaque_img_border
 from crp.visualization import FeatureVisualization
 import os
-from data_loader import get_dataset_for_plotting
+from script.data_processing.data_loader import get_dataset_for_plotting
 from torchvision.utils import make_grid
 import zennit.image as zimage
 
@@ -33,7 +33,14 @@ from crp.concepts import ChannelConcept
 from crp.image import imgify
 
 import torchvision
+import wandb
 
+def cluster(model, data_dir, samples, genes, out_dir, debug=False):
+    print("clustering start")
+    results_paths = cluster_explanations_genes_loop(model, data_dir, out_dir, genes=genes, debug=debug, samples=samples)
+    for i in range(len(results_paths)):
+        wandb.log({"clustering restults for " + genes[i]: wandb.Image(results_paths[i])})
+    print("clustering done")
 
 
 def get_composite_layertype_layername(model):
@@ -67,6 +74,14 @@ def calculate_attributions(dataloader, device, composite, layer_name, attributio
     activations = []
     attributions = []
     outputs = []
+
+    if os.path.exists(out_path + "/activations.pt"):
+        activations = torch.load(out_path + "/activations.pt", weights_only=False, map_location='cpu')
+        attributions = torch.load(out_path + "/attributions.pt", weights_only=False, map_location='cpu')
+        outputs = torch.load(out_path + "/outputs.pt", weights_only=False, map_location='cpu')
+        indices = torch.load(out_path + "/indices.pt", weights_only=False, map_location='cpu')
+        return activations, attributions, outputs, indices
+
     for i, (x, _) in enumerate(tqdm(dataloader)):
         x = x.to(device).requires_grad_()
         condition = [{"y": [0]}]
@@ -236,10 +251,9 @@ def get_umaps(attr, act, model_dir):
     return embedding_attr, embedding_act, X_attr, X_act
 
 # debug fully loads the dataset but then only uses the first few samples for testing purposes
-def cluster_explanations_genes_loop(model, data_dir, model_dir, genes, debug=False, samples=None):
+def cluster_explanations_genes_loop(model, data_dir, out_path, genes, debug=False, samples=None):
     results_paths = []
-    out_path = model_dir + "/crp_out/"
-    os.makedirs(out_path, exist_ok=debug)
+    os.makedirs(out_path, exist_ok=True) # later we check if it is already calculated before we fill this dir
     composite, layer_type, layer_name = get_composite_layertype_layername_lightning(model)
     print("target layer type:", layer_type)
     print("target layer:", layer_name)
@@ -252,13 +266,16 @@ def cluster_explanations_genes_loop(model, data_dir, model_dir, genes, debug=Fal
         print("clustering started for gene", gene)
 
         print("loading dataset")
-        dataset = get_dataset_for_plotting(data_dir, genes=[gene], device=model.device, samples=samples)
+        #dataset = get_dataset_for_plotting(data_dir, genes=[gene], device=model.device, samples=samples)
+        from script.data_processing.data_loader import get_dataset
+        from script.data_processing.image_transforms import get_transforms
+        dataset = get_dataset(data_dir, genes=[gene], samples=samples, transforms=get_transforms(), max_len=100 if debug else None)
         print("dataset loaded")
 
         fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=None, path=out_path)
         print("preprocessing CRP to ", out_path)
         # skip calculation in debug mode as we only require to calculate it once
-        if not debug and not os.path.exists(out_path + "/ActMax_sum_normed/encoder.layer4.2_data.npy"):
+        if not debug or not os.path.exists(out_path + "/ActMax_sum_normed/encoder.layer4.2_data.npy"):
             fv.run(composite, 0, len(dataset) // 1, batch_size=32)
         print("CRP preprocessing done. output path:", out_path)
 
@@ -277,12 +294,12 @@ def cluster_explanations_genes_loop(model, data_dir, model_dir, genes, debug=Fal
         act = activations[outputs.argmax(1) == 0]
         indices = indices[outputs.argmax(1) == 0]
 
-        embedding_attr, embedding_act, X_attr, X_act = get_umaps(attr, act, model_dir)
+        embedding_attr, embedding_act, X_attr, X_act = get_umaps(attr, act, out_path)
         x_attr, y_attr = X_attr[:, 0], X_attr[:, 1]
         x_act, y_act = X_act[:, 0], X_act[:, 1]
 
         print("calculating prototypes")
-        os.makedirs(out_path + "/prototypes/", exist_ok=debug)
+        os.makedirs(out_path + "/prototypes/", exist_ok=True)
 
         prototypes = get_prototypes(attr, embedding_attr, act, embedding_act)
 

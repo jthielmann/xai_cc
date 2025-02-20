@@ -5,13 +5,28 @@ import torchmetrics
 import wandb
 import torch.optim as optim
 from script.data_processing.image_transforms import get_transforms
-
+from script.configs.lit_config import get_encoder
 # lightning module
+
+def load_model(path, config):
+    device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+
+
+    encoder = get_encoder(config["encoder_type"])
+    if "pretrained_out_dim" not in config:
+        config["pretrained_out_dim"] = 1000
+    if "middel_layer_features" not in config:
+        config["middel_layer_features"] = 64
+    model = LightiningNN(encoder=encoder, genes=config["genes"], pretrained_out_dim=config["pretrained_out_dim"], middel_layer_features=config["middel_layer_features"], out_path=path, error_metric_name=config["error_metric_name"], freeze_pretrained=config["freeze_pretrained"], epochs=config["epochs"], learning_rate=config["learning_rate"], use_transforms=config["use_transforms_in_model"], logging=False)
+    model.load_state_dict(torch.load(path, map_location=device))
+    return model
+
+# dummy default values to enable easy dummy building for loading from pth
 class LightiningNN(L.LightningModule):
     def __init__(self, genes, encoder, pretrained_out_dim, middel_layer_features, out_path, error_metric_name,
                  freeze_pretrained, epochs, learning_rate, use_transforms, logging):
         super(LightiningNN, self).__init__()
-        self.save_hyperparameters(ignore=['encoder'])
+
         self.epochs = epochs
         # model setup
         self.encoder = encoder
@@ -19,7 +34,8 @@ class LightiningNN(L.LightningModule):
         if self.freeze_pretrained:
             for param in self.encoder.parameters():
                 param.requires_grad = False
-
+        if genes is None:
+            genes = []
         for gene in genes:
             setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, middel_layer_features), nn.ReLU(),
                                               nn.Linear(middel_layer_features, 1)))
@@ -41,6 +57,8 @@ class LightiningNN(L.LightningModule):
         self.num_training_batches = 0
         self.learning_rate = learning_rate
         self.logging = logging
+        if logging:
+            self.save_hyperparameters(ignore=['encoder'])
         self.is_mps_available = torch.backends.mps.is_available()
         if use_transforms:
             self.transforms = get_transforms()
@@ -139,7 +157,6 @@ class LightiningNN(L.LightningModule):
             if len(self.genes) == 1:
                 best_epoch = torch.argmax(torch.stack(self.pearson_values).abs(), dim=0).item()
                 best_pearson_values = round(self.pearson_values[best_epoch].item(), 3)
-
             else:
                 best_epoch = torch.argmax(torch.stack(self.pearson_values)[:,i].abs(), dim=0).item()
                 best_pearson_values = round(self.pearson_values[best_epoch][i].item(), 3)
@@ -153,8 +170,6 @@ class LightiningNN(L.LightningModule):
         wandb.run.summary["best_pearsons"] = best_pearson_dict
         wandb.run.summary["best_pearson_epochs"] = best_pearson_epoch_dict
 
-        for i in range(len(self.genes)):
-            wandb.log({"best pearson " + self.genes[i]: self.pearson_values[self.best_val_epoch][i]})
-
     def set_num_training_batches(self, num_batches):
         self.num_training_batches = num_batches
+

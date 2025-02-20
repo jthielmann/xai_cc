@@ -40,7 +40,7 @@ def generate_results_patient(model, device, data_dir, patient, genes, filepath, 
     model.eval()
     print("generating results for patient", patient)
     dataset = get_dataset(data_dir, genes, transform, [patient], max_len=max_len)
-    loader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=0, pin_memory=True)
+    loader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=0, pin_memory=False)
 
     columns = []
 
@@ -67,7 +67,7 @@ def generate_results_patient(model, device, data_dir, patient, genes, filepath, 
             output = pd.DataFrame(output.cpu())
             labels = pd.DataFrame(labels.cpu())
             name = loader.dataset.get_tilename(idx)
-            res = pd.concat([labels, output, pd.Series(name), pd.Series(os.path.basename(name)), pd.Series(patient)], axis=1)
+            res = pd.concat([labels, output, pd.Series(name for _ in range(output.shape[0])), pd.Series(os.path.basename(name) for _ in range(output.shape[0])), pd.Series(patient for _ in range(output.shape[0]))], axis=1)
             res.columns = columns
 
             res.to_csv(filepath, index=False, mode='a', header=False)

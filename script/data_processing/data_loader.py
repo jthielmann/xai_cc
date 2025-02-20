@@ -49,10 +49,10 @@ def log_training(date, training_log):
 
 
 class STDataset(torch.utils.data.Dataset):
-    def __init__(self, dataframe, image_transforms=None, device_not_mps=True):
+    def __init__(self, dataframe, image_transforms=None, device="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"):
         self.dataframe = dataframe
         self.transforms = image_transforms
-        self.device_not_mps = device_not_mps
+        self.device = device
 
     def __len__(self):
         return len(self.dataframe)
@@ -74,6 +74,8 @@ class STDataset(torch.utils.data.Dataset):
         # apply normalization transforms as for pretrained colon classifier
         if self.transforms:
             a = self.transforms(a)
+            a = a.to(self.device)
+
         return a, torch.stack(gene_vals)
 
 
@@ -146,7 +148,7 @@ def get_test_samples():
 
 
 # contains tile path and gene data
-def get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/", max_len=None):
+def get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/", max_len=None, bins=1):
     columns_of_interest = ["tile"] + genes
     datasets = []  # Use a list to store DataFrames
 
@@ -159,18 +161,32 @@ def get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/", max_
         datasets.append(st_dataset_patient)
 
     st_dataset = pd.concat(datasets)
+
+    # resample data to have equal number of samples in each bin
+    if bins > 1:
+        # group dataset by gene values into #bins groups
+        gene_values = st_dataset[genes[0]]
+        gene_value_bins = pd.cut(gene_values, bins)
+        grouped_dataset = st_dataset.groupby(gene_value_bins)
+
+        # sample from each group
+        sample_size = grouped_dataset.size().max()
+        sampled_dataset = grouped_dataset.apply(lambda x: x.sample(sample_size, replace=True))
+        st_dataset = sampled_dataset.reset_index(drop=True)
+
+        #st_dataset = st_dataset.groupby(pd.cut(st_dataset[genes[0]], bins)).apply(lambda x: x.sample(st_dataset.shape[0] // bins, replace=True)).reset_index(drop=True)
+
+
+
     return st_dataset
 
 
-def get_dataset(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/", max_len=None):
+def get_dataset(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/", max_len=None, bins=1):
     if samples is None:
         samples = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
     # contains
-    raw_data = get_base_dataset(data_dir, genes, samples, meta_data_dir=meta_data_dir, max_len=max_len)
-    if transforms is None:
-        st_dataset = STDataset(raw_data)
-    else:
-        st_dataset = STDataset(raw_data, transforms)
+    gene_data_df = get_base_dataset(data_dir, genes, samples, meta_data_dir=meta_data_dir, max_len=max_len, bins=bins)
+    st_dataset = STDataset(gene_data_df, image_transforms=transforms)
 
     return st_dataset
 
@@ -252,15 +268,10 @@ def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True, meta
 
     return train_loader, val_loader
 
-
+from script.data_processing.image_transforms import get_transforms
 class PlottingDataset(torch.utils.data.Dataset):
     def __init__(self, dataframe, device,
-                 transforms=transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            # mean and std of the whole dataset
-            transforms.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])
-            ])):
+                 transforms=get_transforms()):
         self.dataframe = dataframe
         self.transforms = transforms
         self.device = device

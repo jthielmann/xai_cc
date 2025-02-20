@@ -8,9 +8,9 @@ learning_rates = [0.01, 0.001, 0.0001, 0.0005]
 
 model_types = ["resnet18"]
 epochs = 100
-training_data_dir="../NCT-CRC/"
+training_data_dir= "../../NCT-CRC/"
 
-out_dir = "../models/"
+out_dir = "../../models/"
 use_sparsity_loss = [True]
 debug = False
 

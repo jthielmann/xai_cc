@@ -6,7 +6,7 @@ from script.data_processing.image_transforms import get_transforms
 import torch
 
 class STDataModule(L.LightningDataModule):
-    def __init__(self, genes, train_samples, val_samples, test_samples, data_dir, num_workers, use_transforms_in_model, batch_size=64, debug=False):
+    def __init__(self, genes, train_samples, val_samples, test_samples, data_dir, num_workers, use_transforms_in_model, batch_size=64, debug=False, bins=1):
         super().__init__()
         self.data_dir = data_dir
         if not use_transforms_in_model:
@@ -24,29 +24,30 @@ class STDataModule(L.LightningDataModule):
         self.val_dataset = None
         self.test_dataset = None
         self.debug = debug
+        self.bins = bins
 
     def setup(self, stage: str):
         # Assign train/val datasets for use in dataloaders
         if stage == "fit":
             if not self.debug:
-                self.train_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.train_samples, transforms=self.transforms)
-                self.val_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.val_samples, transforms=self.transforms)
+                self.train_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.train_samples, transforms=self.transforms, bins=self.bins)
+                self.val_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.val_samples, transforms=self.transforms, bins=self.bins)
             else:
-                self.train_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.train_samples, transforms=self.transforms, max_len=100)
-                self.val_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.val_samples, transforms=self.transforms, max_len=100)
+                self.train_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.train_samples, transforms=self.transforms, bins=self.bins, max_len=100)
+                self.val_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.val_samples, transforms=self.transforms, bins=self.bins, max_len=100)
         # Assign test dataset for use in dataloader(s)
         if stage == "test":
-            self.test_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.test_samples, transforms=self.transforms)
+            self.test_dataset = get_dataset(self.data_dir, genes=self.genes, samples=self.test_samples, transforms=self.transforms, bins=self.bins)
 
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=False)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=False)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=False)
 
     def free_memory(self):
         self.train_dataset = None

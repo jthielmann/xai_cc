@@ -1,14 +1,15 @@
+
 import torch
 import torchvision.models as models
 
-debug = True
+debug = False
 data_module_num_workers = 0
 #genes = ["COL3A1", "DCN", "THY1", "ENG", "PECAM1", "TAGLN", "ACTA2", "RGS5", "SYNPO2", "CNN1", "DES", "SOX10", "S100B", "PLP1"]
-genes = ["COL3A1", "DCN", "THY1", "ENG", "PECAM1", "TAGLN", "ACTA2", "RGS5", "SYNPO2", "CNN1", "DES"]
-dataset = "CRC-N19"
+#genes = ["COL3A1", "DCN", "THY1", "ENG", "PECAM1", "TAGLN", "ACTA2", "RGS5", "SYNPO2", "CNN1", "DES"]
+#dataset = "CRC-N19"
 
-#genes = ["RUBCNL"]
-#dataset = "crc_base"
+genes = ["RUBCNL"]
+dataset = "crc_base"
 loss_fn = torch.nn.MSELoss()
 error_metric_name = "MSELoss"
 batch_size = 32
@@ -17,6 +18,7 @@ epochs = [2]#[10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 freeze_pretrained = False
 encoder_type = "resnet50random"
 image_size = 224
+data_bins = 10
 
 def get_encoder(encoder_type):
     if encoder_type == "dino":
@@ -38,9 +40,13 @@ def get_encoder_weights(encoder_type):
     return encoder_weights
 
 
-if dataset == "CRC-N19":
-    mean = [0.5766, 0.3454, 0.5366]
-    std = [0.2619, 0.2484, 0.2495]
+if dataset == "CRC_N19":
+    #mean = [0.0, 0.0, 0.0] # mit val
+    #std = [1, 1, 1] # mit val
+    #mean = [0.7406, 0.5331, 0.7059] # original base
+    #std = [0.1651, 0.2174, 0.1574] # original base
+    mean = [0.0555, 0.1002, 0.00617] # ohne val
+    std = [0.991, 0.9826, 0.9967] # ohne val
     data_dir = "../data/CRC-N19/"
     if debug:
         train_samples = ["TENX92"]#,"TENX91","TENX90","TENX89","TENX70","TENX49", "ZEN49", "ZEN48", "ZEN47", "ZEN46", "ZEN45", "ZEN44"]
@@ -49,8 +55,13 @@ if dataset == "CRC-N19":
         train_samples = ["TENX92","TENX91","TENX90","TENX89","TENX70","TENX49", "ZEN49", "ZEN48", "ZEN47", "ZEN46", "ZEN45", "ZEN44"]
         val_samples = ["TENX29", "ZEN43", "ZEN42", "ZEN40", "ZEN39", "ZEN38", "ZEN36"]
 elif dataset == "crc_base":
-    mean = [0.7406, 0.5331, 0.7059]
-    std = [0.1651, 0.2174, 0.1574]
+    #mean = [0.7406, 0.5331, 0.7059] # original base
+    #std = [0.1651, 0.2174, 0.1574] # original base
+    #mean = [-0.4683, -0.1412, -0.4501]
+    #std = [1.7697, 1.3199, 1.7859] # only train
+    mean = [0.331, 0.632, 0.3946] # calculated only for the training data
+    std = [1.1156, 1.1552, 1.1266] # calculated only for the training data
+
     data_dir = "../data/crc_base/Training_Data/"
     if debug:
         train_samples = ["p007"]
@@ -104,4 +115,6 @@ lit_config = {
     "mean": mean,
     "std": std,
     "pretrained_out_dim": 1000,
+    "do_hist_generation": True,
+    "bins": data_bins
 }

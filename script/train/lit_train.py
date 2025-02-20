@@ -11,7 +11,7 @@ import lightning as L
 from script.data_processing.lit_STDataModule import STDataModule
 from script.data_processing.process_csv import generate_results_patient
 
-from script.train.generate_hists import generate_hists
+from script.train.generate_plots import generate_hists
 import os
 import json
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
@@ -23,7 +23,7 @@ from script.data_processing.image_transforms import get_transforms
 def train_model(genes, epochs, learning_rate, encoder, encoder_type, error_metric_name, freeze_pretrained, out_dir,
                 train_samples, val_samples, data_dir, num_workers, batch_size, debug,
                 use_transforms_in_model=True,
-                do_hist_generation=False, do_results_generation=False, logger:any=False):
+                do_hist_generation=False, do_results_generation=False, logger:any=False, bins=1):
     print("train_samples", train_samples)
     print("val_samples", val_samples)
     print("saving model to", out_dir)
@@ -38,7 +38,7 @@ def train_model(genes, epochs, learning_rate, encoder, encoder_type, error_metri
 
     print("loading data")
     # free the memory because clustering currently loads it aswell but is not tied to lightning
-    data_module = STDataModule(genes, train_samples, val_samples, None, data_dir, num_workers, use_transforms_in_model, batch_size, debug=debug)
+    data_module = STDataModule(genes, train_samples, val_samples, None, data_dir, num_workers, use_transforms_in_model, batch_size, debug=debug, bins=bins)
     data_module.setup("fit")
     print("length of train_dataset", len(data_module.train_dataset))
     print("data loaded")
@@ -56,7 +56,7 @@ def train_model(genes, epochs, learning_rate, encoder, encoder_type, error_metri
 
     trainer = L.Trainer(max_epochs=epochs, logger=logger, log_every_n_steps=1,
                         enable_checkpointing=False, callbacks=[EarlyStopping(monitor="validation " + error_metric_name, mode="min", patience=10)],
-                        profiler=profiler, accelerator="gpu")
+                        profiler=profiler, accelerator="gpu", )
 
     if torch.cuda.is_available():
         torch.set_float32_matmul_precision("medium")
@@ -82,10 +82,11 @@ def train_model(genes, epochs, learning_rate, encoder, encoder_type, error_metri
                 generate_results_patient(model, model.device, data_dir, patient, genes, results_file_name, transforms, max_len=max_len)
         if do_hist_generation:
             figure_paths = generate_hists(model, out_dir, results_file_name)
-
-            for path in figure_paths:
-                plt.imshow(plt.imread(path))
-                plt.show()
+            wandb.log({"hist": [wandb.Image(path) for path in figure_paths]})
+            if debug:
+                for path in figure_paths:
+                    plt.imshow(plt.imread(path))
+                    plt.show()
 
 
         str_config = {}
@@ -130,13 +131,14 @@ def train_model_sweep(config=None):
         config = run.config
         epochs = config["epochs"]
         learning_rate = config["learning_rate"]
+        bins = config["bins"]
 
         encoder = get_encoder(lit_config["encoder_type"])
         model_name = encoder.__class__.__name__
         name = None if debug else get_name(epochs, model_name, learning_rate, lit_config["encoder_type"],
                                            lit_config["error_metric_name"],
                                            lit_config["freeze_pretrained"], lit_config["dataset"], lit_config["batch_size"])
-        run.name = str(epochs) + "_" + str(learning_rate)
+        run.name = str(epochs) + "_" + str(learning_rate) + "_" + str(bins)
         out_dir = "../models/" + run.project + "/"
         out_dir += "lit_testing" if debug else name
 
@@ -149,7 +151,7 @@ def train_model_sweep(config=None):
                     val_samples=lit_config["val_samples"], data_dir=lit_config["data_dir"],
                     num_workers=lit_config["num_workers"], batch_size=lit_config["batch_size"], debug=lit_config["debug"],
                     use_transforms_in_model=lit_config["use_transforms_in_model"],
-                    do_hist_generation=False, do_results_generation=False, logger=wandb_logger)
+                    do_hist_generation=lit_config["do_hist_generation"], do_results_generation=lit_config["do_hist_generation"], logger=wandb_logger, bins=bins)
 
 
 if __name__ == "__main__":

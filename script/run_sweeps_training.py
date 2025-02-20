@@ -1,21 +1,24 @@
-import torch
-import numpy
-import sys
-import wandb
-from script.train.lit_train_debug import train_model_sweep
-from script.configs.lit_sweeps_config import sweep_config
-import os
-from script.configs.lit_config import lit_config
-
 if __name__ == '__main__':
 
+    import torch
+    import numpy
+    import sys
+
+    sys.path.insert(0, '..')
     print("python version:", sys.version)
     print("numpy version:", numpy.version.version)
     print("torch version:", torch.__version__)
+    import wandb
+    from train.lit_train import train_model_sweep
+    from script.configs.lit_sweeps_config import sweep_config
+    import os
+    from script.configs.lit_config import lit_config
+    import random
+
     if lit_config["debug"]:
-        project_name = ("debug77717877")
+        project_name = "debug_" + random.randbytes(4).hex()
     else:
-        project_name = "transforms_lr_epochs_CRC-N19_no_enteric_glial_cells_random_temp_norm"
+        project_name = "base2 bins"
     sweep_id_path = "../wandb_sweep_ids/" + project_name + "/sweep_id.txt"
     if os.path.exists(sweep_id_path):
         with open(sweep_id_path, "r") as f:

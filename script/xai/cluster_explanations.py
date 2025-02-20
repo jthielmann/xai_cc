@@ -1,18 +1,19 @@
 import torch
 print(torch.__version__)
-
-from pcx_utils.render import vis_opaque_img_border
+import sys
+sys.path.insert(0, '..')
+from script.pcx_utils.render import vis_opaque_img_border
 from crp.visualization import FeatureVisualization
 import os
 
 import torch
 
-from data_loader import get_dataset_for_plotting
+from script.data_processing.data_loader import get_dataset_for_plotting
 from torchvision.utils import make_grid
 import zennit.image as zimage
 import pandas as pd
 from cluster_functions import (get_umaps, calculate_attributions, load_attributions, get_prototypes)
-from model import load_model, generate_model_list
+from script.model.model import load_model, generate_model_list
 from cluster_functions import get_composite_layertype_layername
 
 import numpy as np

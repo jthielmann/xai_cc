@@ -11,10 +11,10 @@ from script.model.loss_functions import CompositeLoss
 import pandas as pd
 
 learning_rates = [0.001, 0.01, 0.0001]
-output_dir = "../models/"
+output_dir = "../../models/"
 meta_data_dir = "/meta_data/"
 #data_dir = "../new_Training_Data/N20/"
-data_dir = '../data/CRC-N19/'
+data_dir = '../../data/CRC-N19/'
 
 #gene_lists = [["RUBCNL"]]
 #, "MYH11"

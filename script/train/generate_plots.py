@@ -5,9 +5,8 @@ import os
 import torchmetrics
 
 import pandas as pd
-from model import load_model
+from script.model.model import load_model
 import json
-from data_loader import get_patient_loader, get_test_samples, get_val_samples, get_train_samples
 import matplotlib.pyplot as plt
 
 def update_model_list(model_dir, model_list_file_name = "new_models.csv"):

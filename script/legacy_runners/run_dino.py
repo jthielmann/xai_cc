@@ -11,11 +11,11 @@ from script.model.loss_functions import CompositeLoss
 import pandas as pd
 
 learning_rate = 0.001
-output_dir = "../models/"
+output_dir = "../../models/"
 meta_data_dir = "/meta_data/"
 #data_dir = "../new_Training_Data/N20/"
 #data_dir = '../data/jonas/Training_Data/'
-data_dir = '../data/CRC-N19/'
+data_dir = '../../data/CRC-N19/'
 #gene_lists = [["RUBCNL"]]
 gene_lists = [["COL3A1","DCN","THY1"], ["ENG", "PECAM1"], ["TAGLN", "ACTA2", "RGS5"], ["TAGLN", "ACTA2", "SYNPO2", "CNN1", "DES"], ["SOX10", "S100B", "PLP1"]]
 samples = [["TENX92","TENX91","TENX90","TENX89","TENX70","TENX49", "ZEN49", "ZEN48", "ZEN47", "ZEN46", "ZEN45", "ZEN44"],

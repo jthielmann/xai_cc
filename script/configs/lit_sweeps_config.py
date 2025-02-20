@@ -5,9 +5,10 @@ if not debug:
         "method": "grid",
         "metric": {"goal": "minimize", "name": "mse_loss"},
         "parameters": {
-            "epochs": {"values": [10, 20, 40, 70]},
+            "epochs": {"values": [40]},
             #"learning_rate": {"distribution": "uniform", "max": 0.1, "min": 0},
-            "learning_rate": {"values": [0.01, 0.001]}
+            "learning_rate": {"values": [0.01]},
+            "bins": {"values": [1,3,5,7,9,10,15,50]}
             #"learning_rate": {"values": [0.01]}
         },
     }
@@ -16,8 +17,9 @@ else:
         "method": "grid",
         "metric": {"goal": "minimize", "name": "mse_loss"},
         "parameters": {
-            "epochs": {"values": [1, 2, 3]},
+            "epochs": {"values": [2]},
             #"learning_rate": {"distribution": "uniform", "max": 0.1, "min": 0},
-            "learning_rate": {"values": [0.01]}
+            "learning_rate": {"values": [0.01]},
+            "bins": {"values": [1, 3, 5, 7, 9, 10, 15, 50]}
         },
     }
