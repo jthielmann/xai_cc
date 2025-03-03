@@ -96,11 +96,12 @@ def generate_hists(model, model_dir, results_filename, out_file_appendix=""):
         label = torch.tensor(results_file[labels_string].to_numpy())
         result = mse(out, label)
         pearson = round(scipy.stats.pearsonr(out, label)[0], 2)
+        print("pearson", scipy.stats.pearsonr(out, label)[0])
 
         plt.text(x=-2, y=3, s="MSE: " + str(round(result.item(), 2)))
         plt.text(x=-2, y=1, s="pearson: " + str(pearson))
         plt.plot([-2, 3], [-2, 3], color='red')
-        plt.title(results_filename + "\n" + gene)
+        plt.title(results_filename + "\n" + gene + out_file_appendix)
         plt.legend(loc="lower right")
         plt.xlabel('output')
         plt.ylabel('target')

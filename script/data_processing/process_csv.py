@@ -35,11 +35,44 @@ def process_spatial_data(patients, data_dir):
         spatial_matrix['tile'] = spatial_matrix['tile'].apply(lambda x: os.path.basename(x))
         spatial_matrix.to_csv(filename, index=False)
 
+def generate_results_patient_from_loader(model, loader, filepath, patient):
+    columns = []
 
-def generate_results_patient(model, device, data_dir, patient, genes, filepath, transform=None, max_len=None):
+    for gene in model.genes:
+        columns.append("labels_" + gene)
+
+    for gene in model.genes:
+        columns.append("out_" + gene)
+
+    columns.append("path")
+    columns.append("tile")
+    columns.append("patient")
+    if not os.path.exists(filepath):
+        df = pd.DataFrame(columns=columns)
+        df.to_csv(filepath, index=False)
+    with torch.no_grad():
+        for idx, (images, labels) in enumerate(loader):
+            images = images.to(model.device)
+            images = images.float()
+            labels = labels.clone().detach().to(model.device)
+
+            output = model(images)
+
+            output = pd.DataFrame(output.cpu())
+            labels = pd.DataFrame(labels.cpu())
+            name = loader.dataset.get_tilename(idx)
+            res = pd.concat([labels, output, pd.Series(name for _ in range(output.shape[0])), pd.Series(os.path.basename(name) for _ in range(output.shape[0])), pd.Series(patient for _ in range(output.shape[0]))], axis=1)
+            res.columns = columns
+
+            res.to_csv(filepath, index=False, mode='a', header=False)
+    return filepath, columns
+
+
+def generate_results_patient(model, device, data_dir, patient, genes, filepath, transform=None, max_len=None, dataset=None):
     model.eval()
     print("generating results for patient", patient)
-    dataset = get_dataset(data_dir, genes, transform, [patient], max_len=max_len)
+    if dataset is None:
+        dataset = get_dataset(data_dir, genes, transform, [patient], max_len=max_len)
     loader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=0, pin_memory=False)
 
     columns = []

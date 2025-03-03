@@ -1,11 +1,16 @@
+import sys
+
+sys.path.insert(0, '..')
 from script.data_processing.data_loader import get_base_dataset, get_dataset
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+
+
 gene = "RUBCNL"
-use_base = True
+dataset_name = "crc_base"
 from script.data_processing.image_transforms import get_transforms
-use_val = True
+use_val = False
 use_test = False
 def get_mean_std_features(data_dirs, patients, genes = None):
     if genes is None:
@@ -52,7 +57,7 @@ def get_mean_std_features(data_dirs, patients, genes = None):
     print("Mean:", round(r_mean.item(), 4), round(g_mean.item(), 4), round(b_mean.item(), 4))
     print("Std:", round(r_std.item(), 4), round(g_std.item(), 4), round(b_std.item(), 4))
 
-def calculate_mean_std_labels(datadirs, gene, patients):
+def calculate_mean_std_labels(datadir, gene, patients):
     for patient in patients:
         bins = 30
         print("patient", patient)
@@ -69,23 +74,30 @@ def calculate_mean_std_labels(datadirs, gene, patients):
         print("mean", np.mean(loader[gene]))
 
 patients_test = ["p008", "p021", "p026"]
-data_dir_test = "../../data/crc_base/Test_Data/"
-def get_patients_datadir(switch, use_val):
-    if not switch:
+data_dir_test = "../data/crc_base/Test_Data/"
+def get_patients_datadir(dataset_name, use_val):
+    if dataset_name == "CRC-N19":
         patients = ["TENX92", "TENX91", "TENX90", "TENX89", "TENX70", "TENX49", "ZEN49", "ZEN48", "ZEN47", "ZEN46",
                     "ZEN45", "ZEN44"]
         if use_val:
             val_patitents = ["TENX29", "ZEN43", "ZEN42", "ZEN40", "ZEN39", "ZEN38", "ZEN36"]
             patients.extend(val_patitents)
-        data_dir = "../../data/CRC-N19/"
-    else:
+        data_dir = "../data/CRC-N19/"
+    elif dataset_name == "crc_base":
         patients = ["p007", "p014", "p016", "p020", "p025"]
         if use_val:
             patients.extend(["p009", "p013"])
-        data_dir = "../../data/crc_base/Training_Data/"
+        data_dir = "../data/crc_base/Training_Data/"
+    else: # CRC-N19_2
+        patients = ["TENX92", "TENX91", "TENX90", "TENX89", "TENX70", "TENX49", "ZEN49", "ZEN48", "ZEN47", "ZEN46",
+                    "ZEN45", "ZEN44"]
+        if use_val:
+            val_patitents = ["TENX29", "ZEN43", "ZEN42", "ZEN40", "ZEN39", "ZEN38", "ZEN36"]
+            patients.extend(val_patitents)
+        data_dir = "../data/N19/"
     return patients, data_dir
-calculate_target_mean_std = True
-patients, data_dir = get_patients_datadir(use_base, use_val)
+calculate_target_mean_std = False
+patients, data_dir = get_patients_datadir(dataset_name, use_val)
 if calculate_target_mean_std:
     for patient in patients:
         bins = 30
@@ -100,10 +112,77 @@ if calculate_target_mean_std:
         plt.show()
         print("std", np.std(loader[gene]))
         print("mean", np.mean(loader[gene]))
+calculate_hist_whole_dataset = True
+if calculate_hist_whole_dataset:
+    bins = 30
+    print("patients", patients)
+    print(data_dir)
+    loader = get_base_dataset(data_dir, [gene], samples=patients, )
+    print("len(loader)", len(loader))
+    counts, bin_edges = np.histogram(loader[gene], bins=bins)
+
+    #plt.title("patients" + " " + gene)
+    plt.hist(loader[gene], bins=bins)
+    #plt.show()
+    print("std", np.std(loader[gene]))
+    print("mean", np.mean(loader[gene]))
+
+    def get_bin_idx(label, bin_edges):
+        # define your own bin_index function
+        for i in range(len(bin_edges) - 1):
+            if bin_edges[i] <= label < bin_edges[i + 1]:
+                bin_idx = i
+                return bin_idx
+        return len(bin_edges) - 1
+    from collections import Counter
+    from scipy.ndimage import convolve1d
+    from scipy.ndimage import gaussian_filter1d
+    from scipy.signal.windows import triang
+
+    def get_lds_kernel_window(kernel, ks, sigma):
+        assert kernel in ['gaussian', 'triang', 'laplace']
+        half_ks = (ks - 1) // 2
+        if kernel == 'gaussian':
+            base_kernel = [0.] * half_ks + [1.] + [0.] * half_ks
+            kernel_window = gaussian_filter1d(base_kernel, sigma=sigma) / max(
+                gaussian_filter1d(base_kernel, sigma=sigma))
+        elif kernel == 'triang':
+            kernel_window = triang(ks)
+        else:
+            laplace = lambda x: np.exp(-abs(x) / sigma) / (2. * sigma)
+            kernel_window = list(map(laplace, np.arange(-half_ks, half_ks + 1))) / max(
+                map(laplace, np.arange(-half_ks, half_ks + 1)))
+
+        return kernel_window
+    # preds, labels: [Ns,], "Ns" is the number of total samples
+    # assign each label to its corresponding bin (start from 0)
+    # with your defined get_bin_idx(), return bin_index_per_label: [Ns,]
+    bin_index_per_label = [get_bin_idx(label, bin_edges) for label in loader[gene].values]
+
+    # calculate empirical (original) label distribution: [Nb,]
+    # "Nb" is the number of bins
+    Nb = max(bin_index_per_label) + 1
+    num_samples_of_bins = dict(Counter(bin_index_per_label))
+    emp_label_dist = counts#[num_samples_of_bins.get(i, 0) for i in range(Nb)]
+    ks = 5
+    sigma = 2
+    # lds_kernel_window: [ks,], here for example, we use gaussian, ks=5, sigma=2
+    lds_kernel_window = get_lds_kernel_window(kernel='gaussian', ks=ks, sigma=sigma)
+    # calculate effective label distribution: [Nb,]
+    eff_label_dist = convolve1d(np.array(emp_label_dist), weights=lds_kernel_window, mode='constant')
+    plt.title("ks: " + str(ks) + " sigma: " + str(sigma))
+    plt.stairs(eff_label_dist, edges=bin_edges)
+    plt.show()
+    """print("[")
+    for i in eff_label_dist:
+        print(str(i) + ",")
+    print("]")"""
+exit(0)
 
 
-patients, data_dir = get_patients_datadir(use_base, use_val)
-
+patients, data_dir = get_patients_datadir(dataset_name, use_val)
+print("--------------------------")
+get_mean_std_features([data_dir], patients, genes=[gene])
 
 
 exit(0)

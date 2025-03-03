@@ -1,0 +1,21 @@
+name: crp
+channels:
+  - bioconda
+  - conda-forge
+  - pytorch
+  - nodefaults
+prefix: /Users/thielmann/miniforge3/envs/test
+dependencies:
+  - pip
+  - pip:
+    - git+https://github.com/rachtibat/zennit-crp.git
+  - python=3.9 # required by zennit-crp
+  - pytorch=1.13.1 # required by zennit-crp
+  - torchvision=0.14.1 # required by zennit-crp
+  - tqdm
+  - matplotlib
+  - numpy<=1.23.5 # required by zennit-crp
+  - lightning
+  - umap-learn
+  - wandb
+  - pandas<2.0.0 # required by anndata

@@ -33,14 +33,12 @@ from crp.concepts import ChannelConcept
 from crp.image import imgify
 
 import torchvision
-import wandb
 
 def cluster(model, data_dir, samples, genes, out_dir, debug=False):
     print("clustering start")
     results_paths = cluster_explanations_genes_loop(model, data_dir, out_dir, genes=genes, debug=debug, samples=samples)
-    for i in range(len(results_paths)):
-        wandb.log({"clustering restults for " + genes[i]: wandb.Image(results_paths[i])})
-    print("clustering done")
+
+    return results_paths
 
 
 def get_composite_layertype_layername(model):
@@ -269,7 +267,7 @@ def cluster_explanations_genes_loop(model, data_dir, out_path, genes, debug=Fals
         #dataset = get_dataset_for_plotting(data_dir, genes=[gene], device=model.device, samples=samples)
         from script.data_processing.data_loader import get_dataset
         from script.data_processing.image_transforms import get_transforms
-        dataset = get_dataset(data_dir, genes=[gene], samples=samples, transforms=get_transforms(), max_len=100 if debug else None)
+        dataset = get_dataset(data_dir, genes=[gene], samples=samples, transforms=get_transforms(), max_len=None, only_inputs=True)
         print("dataset loaded")
 
         fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=None, path=out_path)
@@ -279,9 +277,9 @@ def cluster_explanations_genes_loop(model, data_dir, out_path, genes, debug=Fals
             fv.run(composite, 0, len(dataset) // 1, batch_size=32)
         print("CRP preprocessing done. output path:", out_path)
 
-        dataloader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=2)
+        dataloader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=0)
 
-        if not debug and not os.path.exists(out_path + "/activations.pt"):
+        if not debug and os.path.exists(out_path + "/activations.pt"):
             print("loading precalculated attributions and activations")
             activations, attributions, outputs, indices = load_attributions(out_path)
         else:
@@ -316,7 +314,7 @@ def cluster_explanations_genes_loop(model, data_dir, out_path, genes, debug=Fals
 
 
         N_PROTOTYPES = 8
-        for i in range(N_PROTOTYPES):
+        """for i in range(N_PROTOTYPES):
             imgs_proto = []
             for j in range(8):
                 img = dataset[prototype_samples[j][i]][0]
@@ -331,7 +329,7 @@ def cluster_explanations_genes_loop(model, data_dir, out_path, genes, debug=Fals
             axs[i].set_xticks([])
             axs[i].set_yticks([])
             axs[i].set_title(f"{i}")
-        plt.show()
+        plt.show()"""
 
         proto = torch.from_numpy(proto_attr)
         top_concepts = torch.topk(proto, 3).indices.flatten().unique()

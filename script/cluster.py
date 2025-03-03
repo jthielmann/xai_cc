@@ -1,19 +1,19 @@
 # check if main
 if __name__ == '__main__':
-    debug = True
+    debug = False
+    import torch
+    import numpy
+    import sys
+    import torchvision
+    sys.path.insert(0, '..')
     if debug:
-        import torch
-        import numpy
-        import sys
-        import torchvision
-        sys.path.insert(0, '..')
         print("python version:", sys.version)
         print("numpy version:", numpy.version.version)
         print("torch version:", torch.__version__)
         print("torchvision version:", torchvision.__version__)
 
     model_base_dir = "../models/"
-    model_path = "crc_base_RUBCNL_train_normed/ResNet_ep_10_lr_0.01_resnet50random_MSELoss_False_crc_base_32_RUBCNL/"
+    model_path = "base2_bins/ResNet_ep_40_lr_0.01_resnet50random_MSELoss_False_crc_base_32_RUBCNL/"
     model_name = "best_model.pth"
     config_name = "config.json"
 
