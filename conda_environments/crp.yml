@@ -1,4 +1,4 @@
-name: lit
+name: crp
 channels:
   - bioconda
   - conda-forge

@@ -12,7 +12,7 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from script.data_processing.custom_transforms import Occlude
-
+from script.data_processing.image_transforms import get_transforms
 
 # debug
 from inspect import currentframe, getframeinfo
@@ -49,10 +49,12 @@ def log_training(date, training_log):
 
 
 class STDataset(torch.utils.data.Dataset):
-    def __init__(self, dataframe, image_transforms=None, device="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"):
+    def __init__(self, dataframe, image_transforms=None, device="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu", inputs_only=False, device_handling=True):
         self.dataframe = dataframe
         self.transforms = image_transforms
         self.device = device
+        self.device_handling = device_handling
+        self.only_inputs = inputs_only
 
     def __len__(self):
         return len(self.dataframe)
@@ -62,21 +64,27 @@ class STDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         gene_names = list(self.dataframe)[:-1]
-        gene_vals = []
         row = self.dataframe.iloc[index]
         a = Image.open(row["tile"]).convert("RGB")
         # print(x.size)
-        for j in gene_names:
-            # mps: gene_val = torch.tensor(float(row[j]), dtype=torch.float32)
-            gene_val = torch.tensor(float(row[j]))
-            gene_vals.append(gene_val)
-
-        # apply normalization transforms as for pretrained colon classifier
         if self.transforms:
             a = self.transforms(a)
+        if self.device_handling:
             a = a.to(self.device)
 
+        # clustering uses crp which currently only supports classification tasks. therefore we take class 0 as a hack
+        # as we only have one gene output in clustering because we cluster each gene separately
+        if self.only_inputs:
+            return a, 0
+        gene_vals = []
+        for j in gene_names:
+            #gene_vals.append(float(row[j]))
+            #mps:
+            gene_val = torch.tensor(float(row[j]), dtype=torch.float32)
+            #gene_val = torch.tensor(float(row[j]))
+            gene_vals.append(gene_val)
         return a, torch.stack(gene_vals)
+
 
 
 class TileLoader:
@@ -149,7 +157,9 @@ def get_test_samples():
 
 # contains tile path and gene data
 def get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/", max_len=None, bins=1):
-    columns_of_interest = ["tile"] + genes
+    columns_of_interest = ["tile"]
+    if genes:
+        columns_of_interest += genes
     datasets = []  # Use a list to store DataFrames
 
     for i in samples:
@@ -171,23 +181,18 @@ def get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/", max_
 
         # sample from each group
         sample_size = grouped_dataset.size().max()
-        sampled_dataset = grouped_dataset.apply(lambda x: x.sample(sample_size, replace=True))
+        sampled_dataset = grouped_dataset.apply(lambda x: x.sample(sample_size, replace=True) if len(x) > 0 else x)
         st_dataset = sampled_dataset.reset_index(drop=True)
 
         #st_dataset = st_dataset.groupby(pd.cut(st_dataset[genes[0]], bins)).apply(lambda x: x.sample(st_dataset.shape[0] // bins, replace=True)).reset_index(drop=True)
-
-
-
     return st_dataset
 
 
-def get_dataset(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/", max_len=None, bins=1):
+def get_dataset(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/", max_len=None, bins=1, only_inputs=False):
     if samples is None:
         samples = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
-    # contains
     gene_data_df = get_base_dataset(data_dir, genes, samples, meta_data_dir=meta_data_dir, max_len=max_len, bins=bins)
-    st_dataset = STDataset(gene_data_df, image_transforms=transforms)
-
+    st_dataset = STDataset(gene_data_df, image_transforms=transforms, inputs_only=only_inputs)
     return st_dataset
 
 
@@ -268,8 +273,8 @@ def get_data_loaders(data_dir, batch_size, genes, use_default_samples=True, meta
 
     return train_loader, val_loader
 
-from script.data_processing.image_transforms import get_transforms
 class PlottingDataset(torch.utils.data.Dataset):
+    from script.data_processing.image_transforms import get_transforms
     def __init__(self, dataframe, device,
                  transforms=get_transforms()):
         self.dataframe = dataframe
@@ -578,3 +583,8 @@ def get_data_loader_occlusion(data_dir, batch_size, mean=None, std=None, file_en
     dataset = get_occlusion_dataset(data_dir, mean, std, file_endings=file_endings)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return loader
+
+def get_dino_dataset(csv_path, transforms=get_transforms(), max_len=None, bins=1, device_handling=False):
+    file_df = pd.read_csv(csv_path, nrows=max_len)
+    st_dataset = STDataset(file_df, image_transforms=transforms, inputs_only=True, device_handling=device_handling)
+    return st_dataset

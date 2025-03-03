@@ -1,4 +1,4 @@
-name: crp
+name: dino
 channels:
   - bioconda
   - conda-forge
@@ -6,16 +6,21 @@ channels:
   - nodefaults
 prefix: /Users/thielmann/miniforge3/envs/test
 dependencies:
-  - pip
-  - pip:
-    - git+https://github.com/rachtibat/zennit-crp.git
-  - python=3.9 # required by zennit-crp
-  - pytorch=1.13.1 # required by zennit-crp
-  - torchvision=0.14.1 # required by zennit-crp
+  - python
+  - pytorch
+  - torchvision
   - tqdm
+  - onnx
   - matplotlib
-  - numpy<=1.23.5 # required by zennit-crp
+  - numpy
   - lightning
+  - scipy
+  - anndata
   - umap-learn
+  - timm
   - wandb
   - pandas<2.0.0 # required by anndata
+  - pip
+  - pip:
+    - onnxscript
+  - lightly

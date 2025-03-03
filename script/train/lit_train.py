@@ -28,12 +28,6 @@ def train_model(genes, epochs, learning_rate, encoder, encoder_type, error_metri
     print("val_samples", val_samples)
     print("saving model to", out_dir)
 
-    model = LightiningNN(genes=genes, encoder=encoder, pretrained_out_dim=lit_config["pretrained_out_dim"],
-                         middel_layer_features=64,
-                         error_metric_name=error_metric_name, out_path=out_dir,
-                         freeze_pretrained=freeze_pretrained, epochs=epochs,
-                         learning_rate=learning_rate, use_transforms=use_transforms_in_model, logging=not debug)
-
     os.makedirs(out_dir, exist_ok=True)
 
     print("loading data")
@@ -42,17 +36,11 @@ def train_model(genes, epochs, learning_rate, encoder, encoder_type, error_metri
     data_module.setup("fit")
     print("length of train_dataset", len(data_module.train_dataset))
     print("data loaded")
-    if debug:
+    if lit_config["do_profile"]:
         profiler = PyTorchProfiler(record_module_names=True, export_to_chrome=True, profile_memory=True,
                                 on_trace_ready=torch.profiler.tensorboard_trace_handler("./logs"))
     else:
         profiler = None
-    """profiler = PyTorchProfiler(
-        on_trace_ready=torch.profiler.tensorboard_trace_handler("./logs"),
-        record_shapes=True,
-        with_stack=True,
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1)
-    )"""
 
     trainer = L.Trainer(max_epochs=epochs, logger=logger, log_every_n_steps=1,
                         enable_checkpointing=False, callbacks=[EarlyStopping(monitor="validation " + error_metric_name, mode="min", patience=10)],
@@ -63,50 +51,61 @@ def train_model(genes, epochs, learning_rate, encoder, encoder_type, error_metri
     train_loader = data_module.train_dataloader()
     val_loader = data_module.val_dataloader()
 
+    wandb.run.summary["encoder"] = encoder_type
+    model = LightiningNN(genes=genes, encoder=encoder, pretrained_out_dim=lit_config["pretrained_out_dim"],
+                         middel_layer_features=64,
+                         error_metric_name=error_metric_name, out_path=out_dir,
+                         freeze_pretrained=freeze_pretrained, epochs=epochs,
+                         learning_rate=learning_rate, use_transforms=use_transforms_in_model, logging=True)
     model.set_num_training_batches(len(train_loader))
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
     data_module.free_memory()
-    if do_results_generation:
-        results_file_name = out_dir + "/results.csv"
-        if os.path.exists(results_file_name):
-            os.remove(results_file_name)
-        if not os.path.exists(results_file_name):
-            if lit_config["use_transforms_in_model"]:
-                transforms = None
-                max_len = None
-            else:
-                transforms = get_transforms()
-                max_len = 100
-            for patient in val_samples:
-                generate_results_patient(model, model.device, data_dir, patient, genes, results_file_name, transforms, max_len=max_len)
-        if do_hist_generation:
-            figure_paths = generate_hists(model, out_dir, results_file_name)
-            wandb.log({"hist": [wandb.Image(path) for path in figure_paths]})
-            if debug:
+    if False:
+        model_names = ["best_model.pth", "latest.pth"]
+        for model_name in model_names:
+            model.load_state_dict(torch.load(out_dir + "/" + model_name))
+            results_file_name = out_dir + "/results.csv"
+            if os.path.exists(results_file_name):
+                os.remove(results_file_name)
+            if not os.path.exists(results_file_name):
+                if lit_config["use_transforms_in_model"]:
+                    transforms = None
+                    max_len = None
+                else:
+                    transforms = get_transforms()
+                    if debug:
+                        max_len = 100
+                    else:
+                        max_len = None
+                for patient in val_samples:
+                    generate_results_patient(model, model.device, data_dir, patient, genes, results_file_name, transforms, max_len=max_len)
+            if do_hist_generation:
+                figure_paths = generate_hists(model, out_dir, results_file_name, out_file_appendix="_" + model_name)
+                wandb.log({"hist": [wandb.Image(path) for path in figure_paths]})
                 for path in figure_paths:
                     plt.imshow(plt.imread(path))
                     plt.show()
 
 
-        str_config = {}
-        str_config["genes"] = genes
-        str_config["epochs"] = epochs
-        str_config["batch_size"] = batch_size
-        str_config["data_dir"] = data_dir
-        str_config["freeze_pretrained"] = freeze_pretrained
-        str_config["train_samples"] = train_samples
-        str_config["val_samples"] = val_samples
-        str_config["test_samples"] = None
-        str_config["error_metric_name"] = error_metric_name
-        str_config["encoder_type"] = encoder_type
-        str_config["learning_rate"] = learning_rate
-        str_config["use_transforms_in_model"] = use_transforms_in_model
-        str_config["num_workers"] = num_workers
+    str_config = {}
+    str_config["genes"] = genes
+    str_config["epochs"] = epochs
+    str_config["batch_size"] = batch_size
+    str_config["data_dir"] = data_dir
+    str_config["freeze_pretrained"] = freeze_pretrained
+    str_config["train_samples"] = train_samples
+    str_config["val_samples"] = val_samples
+    str_config["test_samples"] = None
+    str_config["error_metric_name"] = error_metric_name
+    str_config["encoder_type"] = encoder_type
+    str_config["learning_rate"] = learning_rate
+    str_config["use_transforms_in_model"] = use_transforms_in_model
+    str_config["num_workers"] = num_workers
 
-        out_file = open(out_dir + "/config.json", "w")
-        json.dump(str_config, out_file)
-        open(out_dir + "/clustering_job", "w").close()
+    out_file = open(out_dir + "/config.json", "w")
+    json.dump(str_config, out_file)
+    open(out_dir + "/clustering_job", "w").close()
     print("finished training")
 
 
@@ -133,14 +132,9 @@ def train_model_sweep(config=None):
         learning_rate = config["learning_rate"]
         bins = config["bins"]
 
-        encoder = get_encoder(lit_config["encoder_type"])
-        model_name = encoder.__class__.__name__
-        name = None if debug else get_name(epochs, model_name, learning_rate, lit_config["encoder_type"],
-                                           lit_config["error_metric_name"],
-                                           lit_config["freeze_pretrained"], lit_config["dataset"], lit_config["batch_size"])
-        run.name = str(epochs) + "_" + str(learning_rate) + "_" + str(bins)
+        run.name = "ep" + str(epochs) + "_lr" + str(learning_rate) + "_bins" + str(bins)
         out_dir = "../models/" + run.project + "/"
-        out_dir += "lit_testing" if debug else name
+        out_dir += "lit_testing" if debug else run.name
 
         train_model(genes=lit_config["genes"], epochs=epochs,
                     learning_rate=learning_rate,

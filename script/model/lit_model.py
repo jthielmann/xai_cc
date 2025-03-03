@@ -6,7 +6,13 @@ import wandb
 import torch.optim as optim
 from script.data_processing.image_transforms import get_transforms
 from script.configs.lit_config import get_encoder
-# lightning module
+from script.configs.lit_config import lit_config
+import os
+from script.data_processing.process_csv import generate_results_patient_from_loader
+from script.train.generate_plots import generate_hists
+import matplotlib.pyplot as plt
+from script.data_processing.data_loader import get_dataset
+from torch.utils.data import DataLoader
 
 def load_model(path, config):
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -24,7 +30,7 @@ def load_model(path, config):
 # dummy default values to enable easy dummy building for loading from pth
 class LightiningNN(L.LightningModule):
     def __init__(self, genes, encoder, pretrained_out_dim, middel_layer_features, out_path, error_metric_name,
-                 freeze_pretrained, epochs, learning_rate, use_transforms, logging):
+                 freeze_pretrained, epochs, learning_rate, use_transforms, logging, log_loss=False, generate_scatters=True):
         super(LightiningNN, self).__init__()
 
         self.epochs = epochs
@@ -57,6 +63,7 @@ class LightiningNN(L.LightningModule):
         self.num_training_batches = 0
         self.learning_rate = learning_rate
         self.logging = logging
+        self.log_loss = log_loss
         if logging:
             self.save_hyperparameters(ignore=['encoder'])
         self.is_mps_available = torch.backends.mps.is_available()
@@ -65,6 +72,7 @@ class LightiningNN(L.LightningModule):
         else:
             self.transforms = None
         self.sane = False # skip things for sanity check
+        self.generate_scatters = generate_scatters
 
     def forward(self, x):
         if self.transforms:
@@ -75,6 +83,7 @@ class LightiningNN(L.LightningModule):
             x = self.transforms(x)
             if self.is_mps_available:
                 x = x.to(self.device)
+                x = x.to(torch.float32)
         x = self.encoder(x)
         out = []
         for gene in self.genes:
@@ -85,12 +94,14 @@ class LightiningNN(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss, _, _ = self.common_step(batch, batch_idx)
-        self.log_dict({"training " + self.error_metric_name: loss}, on_step=True, on_epoch=True, prog_bar=True)
+        if self.log_loss:
+            self.log_dict({"training " + self.error_metric_name: loss}, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss, y_hat, y = self.common_step(batch, batch_idx)
-        self.log_dict({"validation " + self.error_metric_name: loss}, on_step=True, on_epoch=True)
+        # validation loss must be logged so that we can use early stopping with wandb
+        self.log_dict({"validation " + self.error_metric_name: loss}, on_step=False, on_epoch=True)
         self.current_loss += loss
 
         self.y_hats.append(y_hat)
@@ -130,7 +141,20 @@ class LightiningNN(L.LightningModule):
         if not self.sane:
             self.sane = True
             return # skip the first validation epoch from sanity check
-        if self.current_loss.abs() < self.best_loss.abs():
+        self.y_hats = torch.cat(self.y_hats, dim=0)
+        self.ys = torch.cat(self.ys, dim=0)
+        pearsons = self.pearson(self.y_hats, self.ys)
+        self.pearson_values.append(pearsons)
+        self.val_epoch_counter += 1
+        if self.logging:
+            if len(self.genes) == 1:
+                wandb.log({"pearsons_" + self.genes[0]: pearsons})
+            else:
+                for gene in self.genes:
+                    wandb.log({"pearsons_" + gene: pearsons[self.genes.index(gene)]})
+        if lit_config["debug"]:
+            torch.save(self.state_dict(), self.out_path + "/" + str(self.current_epoch) + ".pth")
+        if len(self.pearson_values) == 1 or (torch.abs(self.pearson_values[-1]) > max(torch.abs(torch.stack(self.pearson_values[:-1])))).item():
             self.best_loss = self.current_loss
             torch.save(self.state_dict(), self.out_path + "/best_model.pth")
             self.best_val_epoch = self.val_epoch_counter
@@ -139,11 +163,25 @@ class LightiningNN(L.LightningModule):
                 wandb.run.summary["best_val_loss_avg"] = self.best_loss / self.num_training_batches
                 wandb.run.summary["best_val_epoch"] = self.best_val_epoch
 
-        self.y_hats = torch.cat(self.y_hats, dim=0)
-        self.ys = torch.cat(self.ys, dim=0)
-        pearsons = self.pearson(self.y_hats, self.ys)
-        self.pearson_values.append(pearsons)
-        self.val_epoch_counter += 1
+        if self.generate_scatters:
+            model_names = ["ep_" + str(self.current_epoch)]
+            for model_name in model_names:
+                results_file_name = self.out_path + "/results.csv"
+                if os.path.exists(results_file_name):
+                    os.remove(results_file_name)
+
+                for patient in lit_config["val_samples"]:
+                    val_dataset = get_dataset(lit_config["data_dir"], genes=self.genes, samples=[patient],
+                                                   transforms=get_transforms(), bins=wandb.run.config["bins"])
+                    loader = DataLoader(val_dataset, batch_size=lit_config["batch_size"], shuffle=False,
+                               num_workers=lit_config["num_workers"], pin_memory=False)
+                    generate_results_patient_from_loader(self, loader, results_file_name, patient)
+                figure_paths = generate_hists(self, self.out_path, results_file_name, out_file_appendix="_" + model_name)
+                wandb.log({"hist " + str(self.current_epoch) : [wandb.Image(path) for path in figure_paths]})
+                for path in figure_paths:
+                    plt.imshow(plt.imread(path))
+                    plt.show()
+
 
     def on_train_epoch_end(self):
         torch.save(self.state_dict(), self.out_path + "/latest.pth")
@@ -164,12 +202,38 @@ class LightiningNN(L.LightningModule):
             best_pearson_epochs.append(best_epoch)
             best_pearsons.append(best_pearson_values)
         best_pearson_dict = {self.genes[i]: best_pearsons[i] for i in range(len(self.genes))}
+        print("pearsons", self.pearson_values)
+
+        print("best_pearson_dict", best_pearson_dict)
         best_pearson_epoch_dict = {self.genes[i]: best_pearson_epochs[i] for i in range(len(self.genes))}
+        print("best_pearson_epoch_dict", best_pearson_epoch_dict)
         if not self.logging:
             return
         wandb.run.summary["best_pearsons"] = best_pearson_dict
         wandb.run.summary["best_pearson_epochs"] = best_pearson_epoch_dict
+        if lit_config["debug"]:
+            print("best_pearsons", best_pearson_dict)
+            print("best_pearson_epochs", best_pearson_epoch_dict)
+            print("pearsons", self.pearson_values)
 
+        if self.generate_scatters:
+            model_names = ["best_model.pth"]
+            for model_name in model_names:
+                results_file_name = self.out_path + "/results.csv"
+                if os.path.exists(results_file_name):
+                    os.remove(results_file_name)
+
+                for patient in lit_config["val_samples"]:
+                    val_dataset = get_dataset(lit_config["data_dir"], genes=self.genes, samples=[patient],
+                                                   transforms=get_transforms(), bins=wandb.run.config["bins"])
+                    loader = DataLoader(val_dataset, batch_size=lit_config["batch_size"], shuffle=False,
+                               num_workers=lit_config["num_workers"], pin_memory=False)
+                    generate_results_patient_from_loader(self, loader, results_file_name, patient)
+                figure_paths = generate_hists(self, self.out_path, results_file_name, out_file_appendix="_" + model_name)
+                wandb.log({"hist": [wandb.Image(path) for path in figure_paths]})
+                for path in figure_paths:
+                    plt.imshow(plt.imread(path))
+                    plt.show()
     def set_num_training_batches(self, num_batches):
         self.num_training_batches = num_batches
 
