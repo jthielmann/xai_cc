@@ -169,3 +169,45 @@ def generate_results2(model, device, data_dir, results_dir,patient=None, gene="R
             res.columns = columns
 
             res.to_csv(filename, index=False, mode='a', header=False)
+
+
+def get_dino_csv(split, data_dir):
+    columns = ["tile", "type"]
+
+    file_name_train = "train.csv"
+    file_path_train = data_dir + file_name_train
+    if os.path.exists(file_path_train):
+        os.remove(file_path_train)
+
+    file_name_val = "val.csv"
+    file_path_val = data_dir + file_name_val
+    if os.path.exists(file_path_val):
+        os.remove(file_path_val)
+
+    df = pd.DataFrame(columns=columns)
+    df.to_csv(file_path_train, index=False)
+    df.to_csv(file_path_val, index=False)
+
+    for d in os.listdir(data_dir):
+        d_path = data_dir + d
+        if os.path.isdir(d_path) and not d.startswith(".") and not d.startswith("_"):
+            local_files_train = []
+            local_files_val = []
+            local_file_list = []
+            for f in os.listdir(data_dir + d + "/tiles/"):
+                if f.endswith(".tif"):
+                    local_file_list.append(d_path + "/tiles/" + f)
+
+            len_train = int(len(local_file_list) * split)
+            for f in local_file_list[:len_train]:
+                local_files_train.append(f)
+            for f in local_file_list[len_train:]:
+                local_files_val.append(f)
+
+
+            append = pd.concat([pd.Series(local_files_train), pd.Series(d for _ in range(len(local_files_train)))], axis=1)
+            append.to_csv(file_path_train, index=False, mode='a', header=False)
+
+            append = pd.concat([pd.Series(local_files_val), pd.Series(d for _ in range(len(local_files_val)))], axis=1)
+            append.to_csv(file_path_val, index=False, mode='a', header=False)
+    return file_path_train, file_path_val

@@ -10,13 +10,13 @@ import torch
 
 
 
-def get_transforms():
+def get_transforms(normalize=True):
     image_size = lit_config["image_size"]
 
     mean = lit_config["mean"]
     std = lit_config["std"]
     if v2_ready is not None:
-        image_transforms = transforms.Compose([
+        ts = [
                     transforms.Resize((image_size, image_size)),
                     transforms.RandomResizedCrop(image_size, scale=(0.85, 1.0)),
                     transforms.Resize((image_size, image_size)),
@@ -25,20 +25,22 @@ def get_transforms():
                     #transforms.GaussianNoise(), max sagt ohne
                     #transforms.ToTensor(),
                     transforms.ToImage(),
-                    transforms.ToDtype(torch.float32, scale=True),
-                    # mean and std of the whole dataset
-                    transforms.Normalize(mean, std)
-                    ])
+                    transforms.ToDtype(torch.float32, scale=True)]
+        if normalize:
+            ts.append(transforms.Normalize(mean, std))
+        image_transforms = transforms.Compose(ts)
     else:
-        image_transforms = transforms.Compose([
-                    transforms.Resize((image_size, image_size)),
-                    transforms.RandomResizedCrop(image_size, scale=(0.85, 1.0)),
-                    transforms.Resize((image_size, image_size)),
-                    transforms.RandomHorizontalFlip(0.5),
-                    transforms.RandomRotation(90),
-                    #transforms.GaussianNoise(), max sagt ohne
-                    transforms.ToTensor(),
-                    # mean and std of the whole dataset
-                    transforms.Normalize(mean, std)
-                    ])
+        ts = [
+            transforms.Resize((image_size, image_size)),
+            transforms.RandomResizedCrop(image_size, scale=(0.85, 1.0)),
+            transforms.Resize((image_size, image_size)),
+            transforms.RandomHorizontalFlip(0.5),
+            transforms.RandomRotation(90),
+            # transforms.GaussianNoise(), max sagt ohne
+            transforms.ToTensor(),
+            # mean and std of the whole dataset
+            transforms.Normalize(mean, std)]
+        if normalize:
+            ts.append(transforms.Normalize(mean, std))
+        image_transforms = transforms.Compose(ts)
     return image_transforms

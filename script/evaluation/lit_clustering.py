@@ -1,6 +1,6 @@
 import torch
 print(torch.__version__)
-from script.xai.cluster_functions import cluster_explanations_genes_loop
+from script.evaluation.cluster_functions import cluster_explanations_genes_loop
 import wandb
 
 def cluster(model, data_dir, samples, genes, out_dir, debug=False):

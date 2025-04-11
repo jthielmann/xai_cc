@@ -1,0 +1,16 @@
+name: plip
+channels:
+  - bioconda
+  - conda-forge
+  - pytorch
+  - nodefaults
+dependencies:
+  - pip
+  - python=3.8
+  - pillow
+  - numpy
+  - pip:
+      - -r ../repos/plip/requirements.txt
+  - transformers
+  - pytorch
+  - torchvision

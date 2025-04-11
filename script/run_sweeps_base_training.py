@@ -21,7 +21,7 @@ if __name__ == '__main__':
     if lit_config["debug"]:
         project_name = "debug_" + random.randbytes(4).hex()
     else:
-        project_name = "debug9"
+        project_name = "gene_data_ranknorm.csv crc_base RUBCNL freeze dino"
     sweep_id_path = "../wandb_sweep_ids/" + project_name + "/sweep_id.txt"
     if os.path.exists(sweep_id_path):
         with open(sweep_id_path, "r") as f:

@@ -8,6 +8,9 @@ import pandas as pd
 from script.model.model import load_model
 import json
 import matplotlib.pyplot as plt
+from io import BytesIO
+from PIL import Image
+import wandb
 
 def update_model_list(model_dir, model_list_file_name = "new_models.csv"):
     for model_type_dir in os.listdir(model_dir):
@@ -38,7 +41,7 @@ def update_model_list(model_dir, model_list_file_name = "new_models.csv"):
     return frame
 
 
-def generate_hists_loop(frame, out_file_appendix=""):
+"""def generate_hists_loop(frame, out_file_appendix=""):
     for idx, row in frame.iterrows():
         results_filename = row["model_dir"] + os.path.basename(row["model_path"][:-3]) + out_file_appendix + "_results.csv"
         print(results_filename)
@@ -76,40 +79,42 @@ def generate_hists_loop(frame, out_file_appendix=""):
             plt.ylabel('target')
             plt.savefig(row["model_dir"] + "/" + gene + out_file_appendix + "_scatter.png")
             plt.clf()
+"""
 
-
-def generate_hists(model, model_dir, results_filename, out_file_appendix=""):
+def generate_hists_2(model, results_filename, out_file_appendix=""):
     model.eval()
     results_file = pd.read_csv(results_filename)
-
     patients = results_file[results_file.columns[-1]].unique()
-    print(patients)
-    figure_paths = []
+
+    figures = {}
+
     for gene in model.genes:
         out_string = "out_" + gene
         labels_string = "labels_" + gene
+
+        fig, ax = plt.subplots()
+
         for patient in patients:
             patient_df = results_file[results_file[results_file.columns[-1]] == patient]
-            plt.scatter(patient_df[out_string], patient_df[labels_string], label=patient)
+            ax.scatter(patient_df[out_string], patient_df[labels_string], label=patient)
+
         mse = torchmetrics.MeanSquaredError()
         out = torch.tensor(results_file[out_string].to_numpy())
         label = torch.tensor(results_file[labels_string].to_numpy())
         result = mse(out, label)
         pearson = round(scipy.stats.pearsonr(out, label)[0], 2)
-        print("pearson", scipy.stats.pearsonr(out, label)[0])
 
-        plt.text(x=-2, y=3, s="MSE: " + str(round(result.item(), 2)))
-        plt.text(x=-2, y=1, s="pearson: " + str(pearson))
-        plt.plot([-2, 3], [-2, 3], color='red')
-        plt.title(results_filename + "\n" + gene + out_file_appendix)
-        plt.legend(loc="lower right")
-        plt.xlabel('output')
-        plt.ylabel('target')
-        figure_path = model_dir + "/" + gene + out_file_appendix + "_scatter.png"
-        figure_paths.append(figure_path)
-        plt.savefig(figure_path)
-        plt.clf()
-    return figure_paths
+        ax.text(x=-2, y=3, s="MSE: " + str(round(result.item(), 2)))
+        ax.text(x=-2, y=1, s="Pearson: " + str(pearson))
+        ax.plot([-2, 3], [-2, 3], color='red')
+        ax.set_title(f"{results_filename}\n{gene}{out_file_appendix}")
+        ax.legend(loc="lower right")
+        ax.set_xlabel("output")
+        ax.set_ylabel("target")
+
+        figures[gene] = fig  # ✅ store the figure object
+
+    return figures
 
 
 def plot_hist_comparison(img_paths, width=4, subplot_size=10, gene=None, appendix=""):

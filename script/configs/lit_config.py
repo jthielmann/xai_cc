@@ -1,29 +1,29 @@
 import torch
 import torchvision.models as models
 import torch.nn as nn
-debug = True
+debug = False
 data_module_num_workers = 0
-#genes = ["COL3A1", "DCN", "THY1", "ENG", "PECAM1", "TAGLN", "ACTA2", "RGS5", "SYNPO2", "CNN1", "DES", "SOX10", "S100B", "PLP1"]
-#genes = ["COL3A1", "DCN", "THY1", "ENG", "PECAM1", "TAGLN", "ACTA2", "RGS5", "SYNPO2", "CNN1", "DES"]
-#dataset = "CRC-N19"
 
 genes = ["RUBCNL"]
 dataset = "crc_base"
 loss_fn_switch = "MSE"
 error_metric_name = loss_fn_switch
 batch_size = 32
-learning_rates = [0.01]
-epochs = [10]
-freeze_pretrained = False
-encoder_type = "resnet50random"
+learning_rates = [0.01, 0.1, 0.001, 0.0001] if not debug else [0.01]
+epochs = [40 if not debug else 3]
+freeze_pretrained = True
+encoder_type = "dino"
 image_size = 224
-data_bins = [4]
+data_bins = [1, 3, 5, 7, 9, 10]
+gene_data_csv_filename = "gene_data_ranknorm.csv"#"gene_data_raw.csv"#"gene_data_ranknorm.csv"#"gene_data.csv"#"gene_data_raw.csv" #"gene_data_log1p.csv"
 
 def get_encoder(encoder_type):
     if encoder_type == "dino":
         encoder = torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
     elif encoder_type == "resnet50random":
         encoder = models.resnet50(pretrained=False)
+    elif encoder_type == "resnet50imagenet":
+        encoder = models.resnet50(weights="IMAGENET1K_V2")
     else:
         raise ValueError("encoder not found")
     return encoder
@@ -32,7 +32,7 @@ def get_encoder(encoder_type):
 def get_pretrained_output_dim(encoder_type):
     if encoder_type == "dino":
         pretrained_out_dim = 2048
-    elif encoder_type == "resnet50random":
+    elif encoder_type == "resnet50random" or encoder_type == "resnet50imagenet":
         pretrained_out_dim = 1000
     else:
         raise ValueError("encoder not found")
@@ -80,6 +80,17 @@ elif dataset == "crc_base":
     else:
         train_samples = ["p007", "p014", "p016", "p020", "p025"]
         val_samples = ["p009", "p013"]
+elif dataset == "pseudospot":
+    mean = [0.331, 0.632, 0.3946] # calculated only for the training data
+    std = [1.1156, 1.1552, 1.1266] # calculated only for the training data
+
+    data_dir = "../data/pseudospot/"
+    if debug:
+        train_samples = ["p007"]
+        val_samples = ["p009"]
+    else:
+        train_samples = ["p007", "p014", "p016", "p020", "p025"]
+        val_samples = ["p009", "p013"]
 else:
     raise ValueError("dataset not found")
 
@@ -94,9 +105,13 @@ elif loss_fn_switch == "Weighted MSE":
                            2.50000000e-02, 2.50000000e-02, 2.56410256e-02, 2.63157895e-02, 2.85714286e-02, 6.25000000e-02,
                            1, 1.00000000e+00, 1.00000000e+00, 1.00000000e+00, 1.00000000e+00, 1.00000000e+00, 1.00000000e+00]
         elif dataset == "crc_base":
-            mse_weights = [1 / i if i != 0 else 1 for i in [6478,9043,9994,9530,6989,6769,4580,5883,5732,5595,5293,5827,4186,4467,4476,3725,3581,3262,2488,1912,1333,861,563,332,191,118,66,38,15,5,1,]]
+            counts_after_smoothing = [6478,9043,9994,9530,6989,6769,4580,5883,5732,5595,5293,5827,4186,4467,4476,3725,3581,3262,2488,1912,1333,861,563,332,191,118,66,38,15,5,1]
+            sum_counts = sum(counts_after_smoothing)
+            mse_weights = [sum_counts / i if i != 0 else 1 for i in counts_after_smoothing]
         elif dataset == "CRC-N19_2":
-            mse_weights = [1 / i if i != 0 else 1 for i in [2336,21885,28604,32114,31730,30716,13970,10315,8956,8808,8527,5873,4818,3657,2037,1130,496,210,40,40,39,38,35,16,0,1,1,1,1,1,1,]]
+            counts_after_smoothing = [2336,21885,28604,32114,31730,30716,13970,10315,8956,8808,8527,5873,4818,3657,2037,1130,496,210,40,40,39,38,35,16,0,1,1,1,1,1,1,]
+            sum_counts = sum(counts_after_smoothing)
+            mse_weights = [sum_counts / i if i != 0 else 1 for i in counts_after_smoothing]
         else:
             raise ValueError("dataset not implemented for get_mse_weights")
         return torch.tensor(mse_weights)
@@ -161,10 +176,11 @@ lit_config = {
     "do_hist_generation": True,
     "bins": data_bins,
     "do_profile": False,
+    "gene_data_filename_train":gene_data_csv_filename,
+    "gene_data_filename_val":gene_data_csv_filename,
+    "gene_data_filename_test":gene_data_csv_filename
 }
 
-from script.configs.lit_config import lit_config
-debug = lit_config["debug"]
 if not debug:
     sweep_config = {
         "method": "grid",
