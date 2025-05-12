@@ -5,16 +5,13 @@ if v2_ready is not None:
 else:
     import torchvision.transforms as transforms
 
-from script.configs.lit_config import lit_config
 import torch
 
+def get_transforms(cfg, normalize=True):
+    image_size = cfg["image_size"]
 
-
-def get_transforms(normalize=True):
-    image_size = lit_config["image_size"]
-
-    mean = lit_config["mean"]
-    std = lit_config["std"]
+    mean = cfg["mean"]
+    std = cfg["std"]
     if v2_ready is not None:
         ts = [
                     transforms.Resize((image_size, image_size)),

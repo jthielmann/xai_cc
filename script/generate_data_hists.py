@@ -1,27 +1,31 @@
 import sys
 
 sys.path.insert(0, '..')
-from script.data_processing.data_loader import get_base_dataset, get_dataset
+from script.data_processing.data_loader import get_base_dataset, get_dataset, NCT_CRC_Dataset
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import torchvision.transforms as transforms
 
 
 gene = "RUBCNL"
-dataset_name = "pseudospot"
+dataset_name = "NCT-CRC-HE-100K"
 from script.data_processing.image_transforms import get_transforms
 use_val = False
 use_test = False
-def get_mean_std_features(data_dirs, patients, genes=None, gene_data_filename="gene_data.csv"):
-    if genes is None:
-        genes = ["RUBCNL"]
+
+def get_mean_std_features(dataset_name, data_dirs, gene, patients, use_tiles_subdir=False, gene_data_filename=None):
+
     r_sum, g_sum, b_sum = 0, 0, 0
     r_sq_sum, g_sq_sum, b_sq_sum = 0, 0, 0
     num_pixels = 0  # Total number of pixels across all images
 
     for patient in patients:
         for data_dir in data_dirs:
-            if not os.path.exists(data_dir + "/" + patient):
+            image_dir_i = data_dir + "/" + patient
+            if use_tiles_subdir:
+                image_dir_i += "/tiles/"
+            if not os.path.exists(image_dir_i):
                 if data_dirs.index(data_dir) == len(data_dirs) - 1:
                     out_text = "patient" + patient + "does not exist in any datadir, datadirs:"
                     for d in data_dirs:
@@ -29,8 +33,14 @@ def get_mean_std_features(data_dirs, patients, genes=None, gene_data_filename="g
                         out_text += ", "
                     print(out_text)
                 continue
-            dataset = get_dataset(data_dir, genes, samples=[patient], transforms=get_transforms(),gene_data_filename=gene_data_filename)
             print("patient", patient)
+            if dataset_name == "NCT-CRC-HE-100K":
+                dataset = NCT_CRC_Dataset(data_dir, patients, use_tiles_sub_dir=use_tiles_subdir,
+                                          image_transforms=transforms.Compose([transforms.ToTensor()]))
+
+            else:
+                dataset = get_dataset(data_dir, [gene], samples=[patient], transforms=get_transforms(),gene_data_filename=gene_data_filename)
+
 
             for data, target in dataset:
                 # Assuming data shape is (3, H, W)
@@ -99,13 +109,20 @@ def get_patients_datadir(dataset_name, use_val):
         if use_val:
             patients.extend(["p009", "p013"])
         data_dir = "../data/pseudospot/"
-    else: # CRC-N19_2
+    elif dataset_name == "CRC-N19_2":
         patients = ["TENX92", "TENX91", "TENX90", "TENX89", "TENX70", "TENX49", "ZEN49", "ZEN48", "ZEN47", "ZEN46",
                     "ZEN45", "ZEN44"]
         if use_val:
             val_patitents = ["TENX29", "ZEN43", "ZEN42", "ZEN40", "ZEN39", "ZEN38", "ZEN36"]
             patients.extend(val_patitents)
         data_dir = "../data/N19/"
+    elif dataset_name == "NCT-CRC-HE-100K":
+        patients = ["ADI", "BACK", "DEB", "LYM", "MUC", "MUS", "NORM", "STR", "TUM"]
+        data_dir = "../data/NCT-CRC-HE-100K/"
+    else:
+        print("dataset not recognized")
+        exit(1)
+
     return patients, data_dir
 
 calculate_target_mean_std = False
@@ -234,14 +251,19 @@ if calculate_hist_whole_dataset:
 
 patients, data_dir = get_patients_datadir(dataset_name, use_val)
 print("--------------------------")
-#get_mean_std_features([data_dir], patients, genes=[gene], gene_data_filename=gene_data_filename)
 
 
+get_mean_std_features(dataset_name, [data_dir], gene, patients, use_tiles_subdir=True, gene_data_filename=gene_data_filename)
+
+exit(0)
 
 r, g, b = 0,0,0
 len_datasets = 0
 for patient in patients:
-    dataset = get_dataset(data_dir, [gene], samples=[patient], transforms=get_transforms(normalize=False),gene_data_filename=gene_data_filename)
+    if dataset_name == "NCT-CRC-HE-100K":
+        dataset = NCT_CRC_Dataset(data_dir, patients, use_tiles_sub_dir=True, image_transforms=transforms.Compose([transforms.ToTensor()]))
+    else:
+        dataset = get_dataset(data_dir, [gene], samples=[patient], transforms=get_transforms(normalize=False),gene_data_filename=gene_data_filename)
     print("patient", patient)
     len_dataset = len(dataset)
     for idx, (data, target) in enumerate(dataset):

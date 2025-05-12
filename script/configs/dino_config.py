@@ -3,7 +3,7 @@ import torchvision.models as models
 debug = False
 data_module_num_workers = 0
 
-data_dir = "../data/NCT-CRC/"
+data_dir = "../data/NCT-CRC-HE-100K/"
 csv_name = "files.csv"
 data_split = 0.8
 

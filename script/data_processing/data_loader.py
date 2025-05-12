@@ -180,11 +180,11 @@ def get_base_dataset(data_dir, genes, samples, meta_data_dir="/meta_data/", max_
     return st_dataset
 
 
-def get_dataset(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/", max_len=None, bins=1, only_inputs=False, gene_data_filename="gene_data.csv"):
+def get_dataset(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/", max_len=None, bins=1, only_inputs=False, gene_data_filename="gene_data.csv", device_handling=False):
     if samples is None:
         samples = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
     gene_data_df = get_base_dataset(data_dir, genes, samples, meta_data_dir=meta_data_dir, max_len=max_len, bins=bins, gene_data_filename=gene_data_filename)
-    st_dataset = STDataset(gene_data_df, image_transforms=transforms, inputs_only=only_inputs)
+    st_dataset = STDataset(gene_data_df, image_transforms=transforms, inputs_only=only_inputs, device_handling=device_handling)
     return st_dataset
 
 
@@ -206,14 +206,17 @@ def get_dino_dataset(csv_path, dino_transforms=None, max_len=None, bins=1, devic
 
 
 class NCT_CRC_Dataset(torch.utils.data.Dataset):
-    def __init__(self, data_dir, classes, image_transforms=None, device="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu", label_as_string=True):
+    def __init__(self, data_dir, classes, use_tiles_sub_dir=False, image_transforms=None, device="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu", label_as_string=True):
         self.transforms = image_transforms
         self.device = device
         self.label_as_string = label_as_string
         self.classes = classes
         self.dataframe = pd.DataFrame(columns=["tile", "class"])
         for c in classes:
-            for file in os.scandir(data_dir + c):
+            class_dir = data_dir + c
+            if use_tiles_sub_dir:
+                class_dir += "/tiles/"
+            for file in os.scandir(class_dir):
                 if file.is_file() and file.name.endswith(".tif"):
                     self.dataframe = pd.concat([self.dataframe, pd.DataFrame({"tile": [file.path], "class": [c if label_as_string else classes.index(c)]})], ignore_index=True)
 

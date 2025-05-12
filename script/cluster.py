@@ -26,5 +26,5 @@ if __name__ == '__main__':
     print(str_config)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = load_model(model_base_dir + model_path + model_name, str_config).to(device)
-    from script.xai.cluster_functions import cluster
+    from script.evaluation.cluster_functions import cluster
     cluster(model=model, data_dir = str_config["data_dir"], samples = str_config["val_samples"], genes = str_config["genes"], out_dir= "../crp_out/" + model_path, debug=debug)

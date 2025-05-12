@@ -6,15 +6,14 @@ import torchmetrics
 import torch.optim as optim
 import wandb
 from script.data_processing.image_transforms import get_transforms
-from script.configs.lit_config import get_encoder
-from script.configs.lit_config import lit_config
+from script.model.model_factory import get_encoder
 import os
 from script.data_processing.process_csv import generate_results_patient_from_loader
 from script.train.generate_plots import generate_hists_2
 import matplotlib.pyplot as plt
 from script.data_processing.data_loader import get_dataset
 from torch.utils.data import DataLoader
-import script.configs.dino_config as dino_config
+import random
 
 import copy
 
@@ -35,109 +34,72 @@ def load_model(path, config):
     encoder = get_encoder(config["encoder_type"])
     if "pretrained_out_dim" not in config:
         config["pretrained_out_dim"] = 1000
-    if "middel_layer_features" not in config:
-        config["middel_layer_features"] = 64
-    model = LightiningNN(encoder=encoder, genes=config["genes"], pretrained_out_dim=config["pretrained_out_dim"], middel_layer_features=config["middel_layer_features"], out_path=path, error_metric_name=config["error_metric_name"], freeze_pretrained=config["freeze_pretrained"], epochs=config["epochs"], learning_rate=config["learning_rate"], use_transforms=config["use_transforms_in_model"], logging=False)
+    if "middle_layer_features" not in config:
+        config["middle_layer_features"] = 64
+    model = LightiningNN(config, encoder)
     model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
     return model
 
-# dummy default values to enable easy dummy building for loading from pth
+def get_model(config):
+    return LightiningNN(config)
+
 class LightiningNN(L.LightningModule):
-    def __init__(self, genes, encoder, pretrained_out_dim, middel_layer_features, out_path, error_metric_name,
-                 freeze_pretrained, epochs, learning_rate, bins, use_transforms, logging, log_loss=False,
-                 generate_scatters=True, ae=None):
+    def __init__(self, config):
         super().__init__()
 
-        self.epochs = epochs
-        # model setup
-        self.encoder = encoder
-        self.freeze_pretrained = freeze_pretrained
+        # Unpack hyperparameters
+        self.config = config
+        self.encoder = get_encoder(self.config["encoder_type"])
+        self.freeze_pretrained = self.config['freeze_pretrained']
         if self.freeze_pretrained:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-        if genes is None:
-            genes = []
-        for gene in genes:
-            setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, middel_layer_features), nn.ReLU(),
-                                              nn.Linear(middel_layer_features, 1)))
-        self.genes = genes
-        # metrics
-        self.pearson = torchmetrics.PearsonCorrCoef(num_outputs=len(genes))
-        self.loss = torch.nn.MSELoss()
-        self.optimizer = None
-        self.scheduler = None
-        self.error_metric_name = error_metric_name
-        self.current_loss = torch.Tensor([0])
-        self.best_loss = torch.Tensor([float("Inf")])
-        self.out_path = out_path
-        self.pearson_values = []
-        self.y_hats = []
-        self.ys = []
-        self.val_epoch_counter = 0
-        self.best_val_epoch = 0
+            for p in self.encoder.parameters(): p.requires_grad = False
+
+        # Build gene heads
+        for gene in self.config['genes']:
+            setattr(self, gene,
+                    nn.Sequential(nn.Linear(self.config['pretrained_out_dim'], self.config['middle_layer_features']),
+                                  nn.ReLU(),
+                                  nn.Linear(self.config['middle_layer_features'], 1)))
+        self.genes = self.config['genes']
+
+        # Metrics and loss
+        self.pearson = torchmetrics.PearsonCorrCoef(num_outputs=len(self.genes))
+        self.loss_fn = nn.MSELoss()
+
+        # Training bookkeeping
         self.num_training_batches = 0
-        self.learning_rate = learning_rate
-        self.bins = bins
-        self.logging = logging
-        self.log_loss = log_loss
-        if logging:
-            self.save_hyperparameters(ignore=['encoder'])
-        self.is_mps_available = torch.backends.mps.is_available()
-        if use_transforms:
-            self.transforms = get_transforms()
-        else:
-            self.transforms = None
-        self.sane = False # skip things for sanity check
-        self.generate_scatters = generate_scatters
-        self.ae = ae
-        self.table = wandb.Table(columns=["epoch", "gene", "learning rate", "bins", "scatter_plot"])
+        self.current_loss = torch.tensor(0.)
+        self.best_loss = torch.tensor(float('inf'))
+        if self.config.get('generate_scatters', False):
+            self.table = wandb.Table(columns=["epoch","gene","lr","bins","scatter_plot"])
+        wandb.watch(self, log=None)
 
     def forward(self, x):
-        if self.transforms:
-            # some functions are not supported on mps device as of jan 2025, use the transforms on cpu via the datamodule
-            # note: this slows down the training process for mps when using transforms because copy but it is what it is
-            if self.is_mps_available:
-                x = x.cpu()
-            x = self.transforms(x)
-            if self.is_mps_available:
-                x = x.to(self.device)
-                x = x.to(torch.float32)
         x = self.encoder(x)
-        if self.ae:
-            x = self.ae(x)
-        out = []
-        for gene in self.genes:
-            out.append(getattr(self, gene)(x))
-        if len(out) == 1:
-            return out[0]
-        return torch.cat(out, dim=1)
+        outs = [getattr(self, g)(x) for g in self.genes]
+        return outs[0] if len(outs) == 1 else torch.cat(outs, dim=1)
 
     def training_step(self, batch, batch_idx):
-        loss, _, _ = self.common_step(batch, batch_idx)
-        if self.log_loss:
-            self.log_dict({"training " + self.error_metric_name: loss}, on_step=True, on_epoch=True, prog_bar=True)
+        loss, _, _ = self._step(batch)
+        self.log('train_' + self.config['error_metric_name'], loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss, y_hat, y = self.common_step(batch, batch_idx)
-        # validation loss must be logged so that we can use early stopping with wandb
-        self.log_dict({"validation " + self.error_metric_name: loss}, on_step=False, on_epoch=True)
-        self.current_loss += loss
-
+        loss, y_hat, y = self._step(batch)
+        self.log('val_' + self.config['error_metric_name'], loss, on_epoch=True)
+        # accumulate for epoch end
         self.y_hats.append(y_hat)
         self.ys.append(y)
         return loss
 
-    def common_step(self, batch, batch_idx):
-        x, y = batch
+
+    def _step(self, batch):
+        x,y = batch
         y_hat = self(x)
-        loss = self.loss(y_hat, y)
-        if torch.any(loss.isnan()):
-            print("loss is nan")
-            exit(1)
+        loss = self.loss_fn(y_hat, y)
         return loss, y_hat, y
 
-    def configure_optimizers(self):
+    """    def configure_optimizers(self):
         params = []
         seen = set()
 
@@ -155,110 +117,93 @@ class LightiningNN(L.LightningModule):
         scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=self.learning_rate, epochs=self.epochs, steps_per_epoch=self.num_training_batches)
         self.scheduler = scheduler
         self.optimizer = optimizer
-        return {"lr_scheduler": scheduler, "optimizer": optimizer}
+        return {"lr_scheduler": scheduler, "optimizer": optimizer}"""
+
+
+    def configure_optimizers(self):
+        params = [{'params': self.encoder.parameters(), 'lr': self.config['learning_rate']}]
+        for gene in self.genes:
+            params.append({'params': getattr(self, gene).parameters(), 'lr': self.config['learning_rate']})
+        optimizer = optim.AdamW(params)
+        scheduler = optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=self.config['learning_rate'],
+            epochs=self.config['epochs'],
+            steps_per_epoch=self.num_training_batches)
+        return {'optimizer': optimizer, 'lr_scheduler': scheduler}
+
 
     def on_validation_start(self) -> None:
         # in the init function self.device is cpu, so we can do it e.g. here
         self.best_loss = self.best_loss.to(self.device)
 
     def on_validation_epoch_start(self):
-        self.current_loss = torch.Tensor([0]).to(self.device)
+        self.current_loss = 0.0
         self.y_hats = []
         self.ys = []
 
     def on_validation_epoch_end(self):
-        if not self.sane:
-            self.sane = True
-            return # skip the first validation epoch from sanity check
-        self.y_hats = torch.cat(self.y_hats, dim=0)
-        self.ys = torch.cat(self.ys, dim=0)
-        pearsons = self.pearson(self.y_hats, self.ys)
-        self.pearson_values.append(pearsons)
-        self.val_epoch_counter += 1
-        if self.logging:
-            if len(self.genes) == 1:
-                self.log("pearsons_" + self.genes[0], pearsons)
-            else:
-                for i, gene in enumerate(self.genes):
-                    self.log("pearsons_" + gene, pearsons[i])
-        if lit_config["debug"]:
-            torch.save(self.state_dict(), self.out_path + "/" + str(self.current_epoch) + ".pth")
-        if len(self.genes) == 1:
-            if len(self.pearson_values) == 1 or (torch.abs(self.pearson_values[-1]) > max(torch.abs(torch.stack(self.pearson_values[:-1])))).item():
-                self.best_loss = self.current_loss
-                torch.save(self.state_dict(), self.out_path + "/best_model.pth")
-                self.best_val_epoch = self.val_epoch_counter
-                if self.logging:
-                    wandb.run.summary["best_val_loss"] = self.best_loss
-                    wandb.run.summary["best_val_loss_avg"] = self.best_loss / self.num_training_batches
-                    wandb.run.summary["best_val_epoch"] = self.best_val_epoch
-        else:
-            if len(self.pearson_values) == 1 or torch.sum(torch.abs(self.pearson_values[-1]) - torch.abs(torch.stack(self.pearson_values[:-1]))).item() > 0:
-                self.best_loss = self.current_loss
-                torch.save(self.state_dict(), self.out_path + "/best_model.pth")
-                self.best_val_epoch = self.val_epoch_counter
-                if self.logging:
-                    wandb.run.summary["best_val_loss"] = self.best_loss
-                    wandb.run.summary["best_val_loss_avg"] = self.best_loss / self.num_training_batches
-                    wandb.run.summary["best_val_epoch"] = self.best_val_epoch
-        if self.generate_scatters:
-            model_names = ["ep_" + str(self.current_epoch)]
-            for model_name in model_names:
-                results_file_name = self.out_path + "/results.csv"
-                if os.path.exists(results_file_name):
-                    os.remove(results_file_name)
+        # Skip sanity check epoch
+        if not hasattr(self, 'sanity_skipped'):
+            self.sanity_skipped = True
+            return
 
-                for patient in lit_config["val_samples"]:
-                    val_dataset = get_dataset(lit_config["data_dir"], genes=self.genes, samples=[patient],
-                                                   transforms=get_transforms(), bins=wandb.run.config["bins"],
-                                                   gene_data_filename=lit_config["gene_data_filename_val"], max_len=100 if lit_config["debug"] else None)
-                    loader = DataLoader(val_dataset, batch_size=lit_config["batch_size"], shuffle=False,
-                               num_workers=lit_config["num_workers"], pin_memory=False)
-                    generate_results_patient_from_loader(self, loader, results_file_name, patient)
-                figures = generate_hists_2(self, results_file_name, out_file_appendix="_" + model_name)
+        # Aggregate outputs
+        y_hat = torch.cat(self.y_hats, dim=0)
+        y_true = torch.cat(self.ys, dim=0)
+        pearson = self.pearson(y_hat, y_true)
+        self.log(f"pearson_{self.genes[0] if len(self.genes)==1 else 'all'}", pearson)
 
-                for gene, fig in figures.items():
-                    buf = BytesIO()
-                    fig.savefig(buf, format="png")
-                    buf.seek(0)
-                    img = Image.open(buf)
-                    self.table.add_data(self.current_epoch, gene, self.learning_rate, self.bins, wandb.Image(img, caption=gene))
-                    plt.close(fig)
+        # Generate scatter plots if requested
+        if self.config.get('generate_scatters', False):
+            model_name = f"ep_{self.current_epoch}"
+            results_file = os.path.join(self.config['out_path'], "_" + str(random.randbytes(4).hex()) + "_results.csv")
+
+            # iterate patients
+            for patient in self.config['val_samples']:
+                val_ds = get_dataset(
+                    self.config['data_dir'],
+                    genes=self.genes,
+                    samples=[patient],
+                    transforms=get_transforms(self.config),
+                    bins=self.config['bins'],
+                    gene_data_filename=self.config['gene_data_filename'],
+                    max_len=100 if self.config.get('debug') else None
+                )
+                loader = DataLoader(
+                    val_ds,
+                    batch_size=self.config['batch_size'],
+                    shuffle=False,
+                    num_workers=self.config.get('num_workers', 0),
+                    pin_memory=False
+                )
+                generate_results_patient_from_loader(self, loader, results_file, patient)
+
+
+            figures = generate_hists_2(self, results_file, out_file_appendix="_" + model_name)
+            for gene, fig in figures.items():
+                buf = BytesIO()
+                fig.savefig(buf, format="png")
+                buf.seek(0)
+                img = Image.open(buf)
+                self.table.add_data(
+                    self.current_epoch,
+                    gene,
+                    self.config['learning_rate'],
+                    self.config['bins'],
+                    wandb.Image(img, caption=gene)
+                )
+                plt.close(fig)
+            os.remove(results_file)
 
 
     def on_train_epoch_end(self):
-        torch.save(self.state_dict(), self.out_path + "/latest.pth")
+        torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
 
     def on_train_end(self):
-        print("device used", self.device)
-        wandb.log({"scatter_table": self.table}, step=self.current_epoch)
-
-        best_pearsons = []
-        best_pearson_epochs = []
-        for i in range(len(self.genes)):
-            if len(self.genes) == 1:
-                best_epoch = torch.argmax(torch.stack(self.pearson_values).abs(), dim=0).item()
-                best_pearson_values = round(self.pearson_values[best_epoch].item(), 3)
-            else:
-                best_epoch = torch.argmax(torch.stack(self.pearson_values)[:,i].abs(), dim=0).item()
-                best_pearson_values = round(self.pearson_values[best_epoch][i].item(), 3)
-
-            best_pearson_epochs.append(best_epoch)
-            best_pearsons.append(best_pearson_values)
-        best_pearson_dict = {self.genes[i]: best_pearsons[i] for i in range(len(self.genes))}
-        print("pearsons", self.pearson_values)
-
-        print("best_pearson_dict", best_pearson_dict)
-        best_pearson_epoch_dict = {self.genes[i]: best_pearson_epochs[i] for i in range(len(self.genes))}
-        print("best_pearson_epoch_dict", best_pearson_epoch_dict)
-        if not self.logging:
-            return
-        wandb.run.summary["best_pearsons"] = best_pearson_dict
-        wandb.run.summary["best_pearson_epochs"] = best_pearson_epoch_dict
-        if lit_config["debug"]:
-            print("best_pearsons", best_pearson_dict)
-            print("best_pearson_epochs", best_pearson_epoch_dict)
-            print("pearsons", self.pearson_values)
+        # Log final table if populated
+        if hasattr(self, 'table'):
+            wandb.log({'scatter_table': self.table})
 
     def set_num_training_batches(self, num_batches):
         self.num_training_batches = num_batches

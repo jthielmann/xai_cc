@@ -1,7 +1,7 @@
 import torch
 import torchvision.models as models
 import torch.nn as nn
-debug = False
+debug = True
 data_module_num_workers = 0
 
 genes = ["RUBCNL"]

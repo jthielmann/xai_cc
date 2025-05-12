@@ -8,6 +8,8 @@ if __name__ == '__main__':
     import sys
 
     sys.path.insert(0, '..')
+    num_args = len(sys.argv)
+
     print("python version:", sys.version)
     print("numpy version:", numpy.version.version)
     print("torch version:", torch.__version__)

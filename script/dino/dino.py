@@ -27,7 +27,7 @@ def train_model_sweep_dino(config=None):
     def target_transform(t):
         return 0
 
-    file_path_train, file_path_val = get_dino_csv(0.8, "../data/NCT-CRC/")
+    file_path_train, file_path_val = get_dino_csv(0.8, "../data/NCT-CRC-HE-100K/")
 
     dataset_name = "dino_dataset"
     if dataset_name == "pascal_voc":
