@@ -24,7 +24,7 @@ from lightly.utils.scheduler import cosine_schedule
 import sys
 from io import BytesIO
 from PIL import Image
-
+from torch.optim.lr_scheduler import OneCycleLR
 sys.path.insert(0, '..')
 
 def load_model(path, config):
@@ -68,8 +68,8 @@ class LightiningNN(L.LightningModule):
 
         # Training bookkeeping
         self.num_training_batches = 0
-        self.current_loss = torch.tensor(0.)
-        self.best_loss = torch.tensor(float('inf'))
+        self.current_loss = torch.tensor(0.).to(self.device)
+        self.best_loss = torch.tensor(float('inf')).to(self.device)
         if self.config.get('generate_scatters', False):
             self.table = wandb.Table(columns=["epoch","gene","lr","bins","scatter_plot"])
         wandb.watch(self, log=None)
@@ -90,35 +90,14 @@ class LightiningNN(L.LightningModule):
         # accumulate for epoch end
         self.y_hats.append(y_hat)
         self.ys.append(y)
+        self.current_loss += loss
         return loss
-
 
     def _step(self, batch):
         x,y = batch
         y_hat = self(x)
         loss = self.loss_fn(y_hat, y)
         return loss, y_hat, y
-
-    """    def configure_optimizers(self):
-        params = []
-        seen = set()
-
-        def add_unique_params(module):
-            for p in module.parameters():
-                if p not in seen:
-                    seen.add(p)
-                    yield p
-
-        params.append({"params": list(add_unique_params(self.encoder)), "lr": self.learning_rate})
-        for gene in self.genes:
-            head = getattr(self, gene)
-            params.append({"params": list(add_unique_params(head)), "lr": self.learning_rate})
-        optimizer = optim.AdamW(params)
-        scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=self.learning_rate, epochs=self.epochs, steps_per_epoch=self.num_training_batches)
-        self.scheduler = scheduler
-        self.optimizer = optimizer
-        return {"lr_scheduler": scheduler, "optimizer": optimizer}"""
-
 
     def configure_optimizers(self):
         params = [{'params': self.encoder.parameters(), 'lr': self.config['learning_rate']}]
@@ -130,12 +109,14 @@ class LightiningNN(L.LightningModule):
             max_lr=self.config['learning_rate'],
             epochs=self.config['epochs'],
             steps_per_epoch=self.num_training_batches)
-        return {'optimizer': optimizer, 'lr_scheduler': scheduler}
-
-
-    def on_validation_start(self) -> None:
-        # in the init function self.device is cpu, so we can do it e.g. here
-        self.best_loss = self.best_loss.to(self.device)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1
+            }
+        }
 
     def on_validation_epoch_start(self):
         self.current_loss = 0.0
@@ -147,7 +128,16 @@ class LightiningNN(L.LightningModule):
         if not hasattr(self, 'sanity_skipped'):
             self.sanity_skipped = True
             return
-
+        torch.save(self.state_dict(), os.path.join(self.config['out_path'], "latest.pth"))
+        if self.current_loss < self.best_loss:
+            self.best_loss = self.current_loss
+            wandb.run.summary["best_val_loss"] = self.best_loss
+            wandb.run.summary["best_val_epoch"] = self.current_epoch
+            # Save the best model
+            best_model_path = os.path.join(self.config['out_path'], "best_model.pth")
+            torch.save(self.state_dict(), best_model_path)
+            wandb.save(best_model_path, base_path=self.config['out_path'])
+            wandb.log({"epoch": self.current_epoch})
         # Aggregate outputs
         y_hat = torch.cat(self.y_hats, dim=0)
         y_true = torch.cat(self.ys, dim=0)
@@ -201,9 +191,9 @@ class LightiningNN(L.LightningModule):
         torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
 
     def on_train_end(self):
-        # Log final table if populated
         if hasattr(self, 'table'):
             wandb.log({'scatter_table': self.table})
+
 
     def set_num_training_batches(self, num_batches):
         self.num_training_batches = num_batches
@@ -211,31 +201,38 @@ class LightiningNN(L.LightningModule):
 
 # adapted from https://docs.lightly.ai/self-supervised-learning/examples/dino.html#dino
 class DINO(L.LightningModule):
-    def __init__(self):
+    def __init__(self, dino_config, lr=0.001):
         super().__init__()
-        backbone = dino_config.backbone
-        if backbone == "resnet18":
-            resnet = torchvision.models.resnet18()
-            input_dim = 512
-        else:#if backbone == "resnet50":
-            resnet = torchvision.models.resnet50()
-            input_dim = 2048
-        backbone = nn.Sequential(*list(resnet.children())[:-1])
-        # instead of a resnet you can also use a vision transformer backbone as in the
-        # original paper (you might have to reduce the batch size in this case):
-        # backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
-        # input_dim = backbone.embed_dim
+        self.config = dino_config
+        self.lr = lr
 
-        self.student_backbone = backbone
-        self.student_head = DINOProjectionHead(
-            input_dim, 512, 64, 2048, freeze_last_layer=1
-        )
-        self.teacher_backbone = copy.deepcopy(backbone)
+        # --- Backbone & Projection Heads ---
+        backbone_name = self.config['encoder_type']
+        if backbone_name == "resnet18":
+            resnet = torchvision.models.resnet18(pretrained=False)
+            input_dim = 512
+        elif backbone_name == "resnet50":
+            resnet = torchvision.models.resnet50(pretrained=False)
+            input_dim = 2048
+        else:
+            raise ValueError(f"Unsupported backbone {backbone_name}")
+
+        self.student_backbone = nn.Sequential(*list(resnet.children())[:-1])
+        self.student_head = DINOProjectionHead(input_dim, 512, 64, 2048, freeze_last_layer=1)
+        self.teacher_backbone = copy.deepcopy(self.student_backbone)
         self.teacher_head = DINOProjectionHead(input_dim, 512, 64, 2048)
+
         deactivate_requires_grad(self.teacher_backbone)
         deactivate_requires_grad(self.teacher_head)
 
+        # --- Loss & Momentum Scheduling ---
         self.criterion = DINOLoss(output_dim=2048, warmup_teacher_temp_epochs=5)
+        self.best_loss = torch.tensor(float('inf'))
+        self.current_loss = torch.tensor(0.)
+        self.num_training_batches = 0
+
+    def update_lr(self, lr):
+        self.lr = lr
 
     def forward(self, x):
         y = self.student_backbone(x).flatten(start_dim=1)
@@ -248,33 +245,84 @@ class DINO(L.LightningModule):
         return z
 
     def common_step(self, batch, batch_idx):
-        momentum = cosine_schedule(self.current_epoch, 10, 0.996, 1)
+        # Cosine momentum schedule over full epochs
+        momentum = cosine_schedule(
+            step=self.current_epoch,
+            max_steps=self.config['epochs'],
+            end_value=0.996,
+            start_value=1.0
+        )
         update_momentum(self.student_backbone, self.teacher_backbone, m=momentum)
         update_momentum(self.student_head, self.teacher_head, m=momentum)
-        views = batch[0]
-        views = [view.to(self.device) for view in views]
-        global_views = views[:2]
-        teacher_out = [self.forward_teacher(view) for view in global_views]
-        student_out = [self.forward(view) for view in views]
+
+        views = [v.to(self.device) for v in batch[0]]
+        teacher_out = [self.forward_teacher(v) for v in views[:2]]
+        student_out = [self.forward(v) for v in views]
         loss = self.criterion(teacher_out, student_out, epoch=self.current_epoch)
         return loss
 
     def training_step(self, batch, batch_idx):
         loss = self.common_step(batch, batch_idx)
-        self.log('train_loss', loss)
+        self.log('train_loss', loss, prog_bar=True, on_step=True, on_epoch=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self.common_step(batch, batch_idx)
-        self.log('val_loss', loss)
+        self.log('val_loss', loss, on_epoch=True)
+        self.current_loss += loss
         return loss
 
     def on_after_backward(self):
         self.student_head.cancel_last_layer_gradients(current_epoch=self.current_epoch)
 
     def configure_optimizers(self):
-        optim = torch.optim.Adam(self.parameters(), lr=0.001)
-        return optim
+        print("Configuring optimizers")
+        # Ensure num_training_batches is set
+        if not hasattr(self, 'num_training_batches') or self.num_training_batches <= 0:
+            raise ValueError(
+                "`num_training_batches` must be set (via `set_num_training_batches()`) before configuring optimizers"
+            )
+
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        scheduler = OneCycleLR(
+            optimizer,
+            max_lr=self.lr,
+            epochs=self.config['epochs'],
+            steps_per_epoch=self.num_training_batches
+        )
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': scheduler,
+                'interval': 'step',  # update per batch
+                'frequency': 1
+            }
+        }
+
+    def on_train_epoch_end(self):
+        # Save only the latest checkpoint each epoch
+        latest_path = os.path.join(self.config['out_path'], 'latest.pth')
+        torch.save(self.state_dict(), latest_path)
+
+    def on_validation_start(self):
+        self.current_loss = torch.tensor(0.).to(self.device)
+
+    def on_validation_end(self):
+        # Always save latest after validation
+        latest_path = os.path.join(self.config['out_path'], 'latest.pth')
+        torch.save(self.state_dict(), latest_path)
+
+        # Save and log best model only if improved
+        if self.current_loss < self.best_loss:
+            self.best_loss = self.current_loss
+            wandb.run.summary['best_val_loss'] = self.best_loss
+            wandb.run.summary['best_val_epoch'] = self.current_epoch
+            best_path = os.path.join(self.config['out_path'], 'best_model.pth')
+            torch.save(self.state_dict(), best_path)
+            wandb.log({'epoch': self.current_epoch})
+
+    def set_num_training_batches(self, num_batches):
+        self.num_training_batches = num_batches
 
 
 class Autoencoder(L.LightningModule):

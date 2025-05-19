@@ -12,22 +12,8 @@ import random
 import numpy
 import torch
 
-
-def parse_args():
-    """
-    Parse the path to a YAML config file from the command line.
-    """
-    parser = argparse.ArgumentParser(
-        description="Run a single training job or a W&B sweep from a YAML config."
-    )
-    parser.add_argument(
-        "--config", "-c",
-        type=str,
-        required=True,
-        help="Path to the YAML config file defining parameters or sweeps"
-    )
-    return parser.parse_args()
-
+import shutil, sys
+from main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, read_config_parameter, get_sweep_parameter_names
 
 def _train(raw_cfg: dict):
     run = wandb.init(
@@ -38,6 +24,7 @@ def _train(raw_cfg: dict):
     # merge ds_cfg if needed…
     pipeline = TrainerPipeline(dict(run.config), run=run)
     pipeline.run()
+    run.finish()
 
 
 def _sweep_run():
@@ -55,38 +42,20 @@ def _sweep_run():
     # run your training
     pipeline = TrainerPipeline(cfg, run=run)
     pipeline.run()
+    run.finish()
 
 
-def read_config_parameter(config: dict, parameter: str):
-    if parameter in config:
-        return config[parameter]
-    if parameter in config["parameters"]:
-        param = config["parameters"][parameter]
-        if isinstance(param, dict) and "value" in param:
-            return param["value"]
-        if isinstance(param, dict) and "values" in param:
-            return param["values"]
-    raise ValueError(f"Parameter '{parameter}' not found in config.")
-
-
-def get_sweep_parameter_names(config: dict) -> list[str]:
-    return [
-        name
-        for name, param in config.get("parameters", {}).items()
-        if isinstance(param, dict) and "values" in param
-    ]
 
 
 def main():
     args = parse_args()
 
     # Load raw YAML (parameters block may contain 'value' or 'values')
-    with open(args.config, "r") as f:
-        raw_cfg = yaml.safe_load(f)
+    raw_cfg = parse_yaml_config(args.config)
 
     params = raw_cfg.get("parameters", {})
     # Detect if any parameter defines multiple 'values'
-    is_sweep = any(isinstance(p, dict) and "values" in p for p in params.values())
+    is_sweep = any(isinstance(param, dict) and "values" in param for param in params.values())
 
     if is_sweep:
         # Build sweep config automatically based on 'values'
@@ -103,6 +72,7 @@ def main():
         # Determine project and sweep directory
         project = sweep_config["project"] if not read_config_parameter(raw_cfg,"debug") else "debug_" + random.randbytes(4).hex()
 
+        ensure_free_disk_space(sweep_config["parameters"].get("out_path").get("value"))
         print(f"Project: {project}")
         sweep_dir = os.path.join("..", "wandb_sweep_ids", project, sweep_config["name"])
         os.makedirs(sweep_dir, exist_ok=True)
@@ -127,6 +97,7 @@ def main():
         for key, param in params.items():
             if isinstance(param, dict) and "value" in param:
                 cfg[key] = param["value"]
+        ensure_free_disk_space(cfg.get("out_path").get("value"))
         _train(cfg)
 
 
@@ -135,4 +106,5 @@ if __name__ == "__main__":
     print("numpy version:", numpy.version.version)
     print("torch version:", torch.__version__)
     print("cuda available:", torch.cuda.is_available())
+
     main()

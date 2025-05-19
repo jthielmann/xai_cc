@@ -18,7 +18,7 @@ from script.configs.dino_config import dino_config
 
 
 def train_model_sweep_dino(config=None):
-    model = DINO()
+    model = DINO(config)
 
     transform = DINOTransform()
     # we ignore object detection annotations by setting target_transform to return 0

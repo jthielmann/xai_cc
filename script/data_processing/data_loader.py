@@ -213,7 +213,7 @@ class NCT_CRC_Dataset(torch.utils.data.Dataset):
         self.classes = classes
         self.dataframe = pd.DataFrame(columns=["tile", "class"])
         for c in classes:
-            class_dir = data_dir + c
+            class_dir = data_dir + "/" + c
             if use_tiles_sub_dir:
                 class_dir += "/tiles/"
             for file in os.scandir(class_dir):

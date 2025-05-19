@@ -173,7 +173,6 @@ def generate_results2(model, device, data_dir, results_dir,patient=None, gene="R
 
 def get_dino_csv(split, data_dir):
     columns = ["tile", "type"]
-
     file_name_train = "train.csv"
     file_path_train = data_dir + file_name_train
     if os.path.exists(file_path_train):
@@ -194,9 +193,9 @@ def get_dino_csv(split, data_dir):
             local_files_train = []
             local_files_val = []
             local_file_list = []
-            for f in os.listdir(data_dir + d + "/tiles/"):
+            for f in os.listdir(data_dir + d):
                 if f.endswith(".tif"):
-                    local_file_list.append(d_path + "/tiles/" + f)
+                    local_file_list.append(d_path + "/" + f)
 
             len_train = int(len(local_file_list) * split)
             for f in local_file_list[:len_train]:

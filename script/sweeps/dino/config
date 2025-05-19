@@ -1,0 +1,62 @@
+project: dino
+name: train dino on NCT-CRC-HE-100K
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  log_to_wandb:
+    value: true
+  debug:
+    value: false
+
+  # Fixed parameters
+  epochs:
+    value: 40
+  dataset:
+    value: NCT-CRC-HE-100K
+  encoder_type:
+    value: resnet50
+  batch_size:
+    value: 32
+  error_metric_name:
+    value: DinoLoss
+  pretrained_out_dim:
+    value: 2048
+  middle_layer_features:
+    value: 200
+  num_workers:
+    value: 2
+  loss_fn_switch:
+    value: DinoLoss
+  image_size:
+    value: 224
+  out_path:
+    value: ../../models/dino/
+  generate_scatters:
+    value: true
+  local_crop_scale:
+    value: [0.05, 0.4]
+  n_local_views:
+    value: 6
+  freeze_pretrained:
+    value: true
+
+  # Augmentation-related sweeps
+  global_crop_scale:
+    values:
+      - [0.4, 1.0]
+      - [0.5, 1.0]
+      - [0.6, 1.0]
+
+  cj_strength:
+    values: [0.3, 0.5, 0.8]
+
+  gaussian_blur:
+    values:
+      - [1.0, 0.1, 0.1]  # heavy blur on global
+      - [1.0, 0.1, 0.5]
+
+  solarization_prob:
+    values: [0.0, 0.2]

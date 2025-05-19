@@ -36,7 +36,7 @@ parameters:
   image_size:
     value: 224
   out_path:
-    value: ../models/crc_base_label_normalizations_sweep/
+    value: ../../scratch/models/crc_base_label_normalizations_sweep/
   generate_scatters:
     value: true
 
