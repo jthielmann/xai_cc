@@ -1,7 +1,7 @@
 import argparse
 import wandb
 import yaml
-import sys
+import sys, traceback
 
 sys.path.insert(0, '..')
 from script.configs.dataset_config import get_dataset_cfg
@@ -106,5 +106,14 @@ if __name__ == "__main__":
     print("numpy version:", numpy.version.version)
     print("torch version:", torch.__version__)
     print("cuda available:", torch.cuda.is_available())
-
-    main()
+    run = wandb.init(project="xai", config={}, mode="online")
+    try:
+        main()
+    except Exception as e:
+        run.log({"crash/trace": traceback.format_exc()})
+        wandb.alert(
+            title="Run crashed",
+            text=f"{type(e).__name__}: {e}"
+        )
+        run.finish(exit_code=1)
+        raise

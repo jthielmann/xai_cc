@@ -39,7 +39,12 @@ parameters:
     value: ../../scratch/models/crc_base_label_normalizations_sweep/
   generate_scatters:
     value: true
-
+  use_early_stopping:
+    value: true
+  use_leaky_relu:
+    value: false
+  one_linear_out_layer:
+    value: false
   # hyperparams
   learning_rate:
     values: [0.1, 0.01, 0.001]

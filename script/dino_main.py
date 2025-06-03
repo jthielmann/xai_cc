@@ -19,7 +19,7 @@ def _train(cfg: dict):
     # Initialise W&B run
     run = wandb.init(
         project=cfg.get("project", "dino"),
-        config={**cfg},
+        config=cfg,
         mode="online" if cfg.get("log_to_wandb", False) else "disabled"
     )
 
@@ -50,7 +50,7 @@ def _train(cfg: dict):
     file_path_train, file_path_val = get_dino_csv(0.8, "../data/NCT-CRC-HE-100K/")
     debug = cfg.get("debug")
 
-    # make sure that we can run on 16GB ram
+    # make sure that we can debug on 16GB ram macbook
     if cfg.get("debug") and torch.backends.mps.is_available():
         cfg["batch_size"] = 32
 
@@ -60,16 +60,16 @@ def _train(cfg: dict):
     val_dataset = get_dino_dataset(csv_path=file_path_val, dino_transforms=transform,
                                    max_len=cfg.get("batch_size") if debug else None, bins=None, device_handling=False)
 
-    dataloader_train = torch.utils.data.DataLoader(train_dataset, batch_size=cfg.get("batch_size"), shuffle=True, drop_last=True, num_workers=0)
-    dataloader_val = torch.utils.data.DataLoader(val_dataset, batch_size=cfg.get("batch_size"), shuffle=True, drop_last=True, num_workers=0)
+    dataloader_train = torch.utils.data.DataLoader(train_dataset, batch_size=cfg.get("batch_size"), shuffle=True, drop_last=True, num_workers=cfg.get("num_workers", 0))
+    dataloader_val = torch.utils.data.DataLoader(val_dataset, batch_size=cfg.get("batch_size"), shuffle=False, drop_last=False, num_workers=cfg.get("num_workers", 0))
     accelerator = "gpu" if torch.cuda.is_available() or torch.backends.mps.is_available() else exit("No GPU available")
     trainer = L.Trainer(devices=1, accelerator=accelerator, logger=WandbLogger(run.project))
     model = DINO(cfg)
     model.set_num_training_batches(len(dataloader_train))
     tuner = Tuner(trainer)
 
-    if not debug:
-        # Use a smaller learning rate for debugging
+    if debug:
+        # Use fixed learning rate for debugging to avoid tuning time
         cfg["learning_rate"] = 1e-4
     else:
         lr_finder = tuner.lr_find(model, train_dataloaders=dataloader_train, num_training=300 if not debug else 30)
@@ -77,11 +77,19 @@ def _train(cfg: dict):
         cfg["learning_rate"] = suggested_lr
         print(f"Suggested LR: {lr_finder.suggestion()}")
     model.update_lr(cfg["learning_rate"])
-    trainer.fit_loop.max_epochs = cfg.get("epochs")
+    trainer.fit_loop.max_epochs = cfg.get("epochs") if not debug else 2
     trainer.fit(model=model, train_dataloaders=dataloader_train, val_dataloaders=dataloader_val)
 
-    run.finish()
+    wandb_run_id = run.id
+    best_ckpt = trainer.checkpoint_callback.best_model_path
 
+    artifact = wandb.Artifact("model-best", type="model")
+    artifact.add_file(best_ckpt, name="model.ckpt")
+    run.log_artifact(artifact)
+    run.summary["best_model_artifact"] = artifact.name
+
+    with open(cfg["out_path"] + "/" + "wandb_run_id.txt", "w") as f:
+        f.write(wandb_run_id)
 
 def _sweep_run():
     run = wandb.init()
