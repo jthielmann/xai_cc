@@ -112,7 +112,7 @@ def generate_hists_2(model, results_filename, out_file_appendix=""):
         ax.set_xlabel("output")
         ax.set_ylabel("target")
 
-        figures[gene] = fig  # ✅ store the figure object
+        figures[gene] = fig
 
     return figures
 

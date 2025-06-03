@@ -45,8 +45,6 @@ def _sweep_run():
     run.finish()
 
 
-
-
 def main():
     args = parse_args()
 
@@ -69,10 +67,14 @@ def main():
             "project": read_config_parameter(raw_cfg, "project"),
             "description": " ".join(get_sweep_parameter_names(raw_cfg))
         }
-        # Determine project and sweep directory
-        project = sweep_config["project"] if not read_config_parameter(raw_cfg,"debug") else "debug_" + random.randbytes(4).hex()
 
-        ensure_free_disk_space(sweep_config["parameters"].get("out_path").get("value"))
+        # need the target location to exist to check if there is enough space
+        out_path = sweep_config["parameters"].get("out_path").get("value")
+        if not os.path.exists(out_path):
+            os.makedirs(out_path, exist_ok=True)
+        ensure_free_disk_space(out_path)
+
+        project = sweep_config["project"] if not read_config_parameter(raw_cfg,"debug") else "debug_" + random.randbytes(4).hex()
         print(f"Project: {project}")
         sweep_dir = os.path.join("..", "wandb_sweep_ids", project, sweep_config["name"])
         os.makedirs(sweep_dir, exist_ok=True)
