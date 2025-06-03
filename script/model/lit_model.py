@@ -125,8 +125,7 @@ class LightiningNN(L.LightningModule):
         self.current_loss = 0.0
         self.y_hats = []
         self.ys = []
-        self.auroc.reset()
-        self.f1.reset()
+        self.pearson.reset()
 
     def on_validation_epoch_end(self):
         # Skip sanity check epoch
