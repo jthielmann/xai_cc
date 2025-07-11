@@ -1,3 +1,6 @@
+import sys, traceback
+
+sys.path.insert(0, '..')
 import os
 import random
 import wandb
@@ -67,16 +70,14 @@ def _train(cfg: dict):
     model = DINO(cfg)
     model.set_num_training_batches(len(dataloader_train))
     tuner = Tuner(trainer)
-
     if debug:
         # Use fixed learning rate for debugging to avoid tuning time
-        cfg["learning_rate"] = 1e-4
+        suggested_lr = 1e-4
     else:
         lr_finder = tuner.lr_find(model, train_dataloaders=dataloader_train, num_training=300 if not debug else 30)
         suggested_lr = lr_finder.suggestion()
-        cfg["learning_rate"] = suggested_lr
         print(f"Suggested LR: {lr_finder.suggestion()}")
-    model.update_lr(cfg["learning_rate"])
+    model.update_lr(suggested_lr)
     trainer.fit_loop.max_epochs = cfg.get("epochs") if not debug else 2
     trainer.fit(model=model, train_dataloaders=dataloader_train, val_dataloaders=dataloader_val)
 

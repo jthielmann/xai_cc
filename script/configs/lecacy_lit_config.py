@@ -96,40 +96,8 @@ else:
 
 if loss_fn_switch == "MSE":
     loss_fn = torch.nn.MSELoss()
-elif loss_fn_switch == "Weighted MSE":
-    def get_mse_weights(dataset):
-        if dataset == "CRC-N19":
-            mse_weights = [4.28082192e-04, 4.56933973e-05, 3.49601454e-05, 3.11390671e-05, 3.15159155e-05, 3.25563224e-05,
-                           7.15819613e-05, 9.69461949e-05, 1.11656990e-04, 1.13533152e-04, 1.17274540e-04, 1.70270730e-04,
-                           2.07555002e-04, 2.73448182e-04, 4.90918017e-04, 8.84955752e-04, 2.01612903e-03, 4.76190476e-03,
-                           2.50000000e-02, 2.50000000e-02, 2.56410256e-02, 2.63157895e-02, 2.85714286e-02, 6.25000000e-02,
-                           1, 1.00000000e+00, 1.00000000e+00, 1.00000000e+00, 1.00000000e+00, 1.00000000e+00, 1.00000000e+00]
-        elif dataset == "crc_base":
-            counts_after_smoothing = [6478,9043,9994,9530,6989,6769,4580,5883,5732,5595,5293,5827,4186,4467,4476,3725,3581,3262,2488,1912,1333,861,563,332,191,118,66,38,15,5,1]
-            sum_counts = sum(counts_after_smoothing)
-            mse_weights = [sum_counts / i if i != 0 else 1 for i in counts_after_smoothing]
-        elif dataset == "CRC-N19_2":
-            counts_after_smoothing = [2336,21885,28604,32114,31730,30716,13970,10315,8956,8808,8527,5873,4818,3657,2037,1130,496,210,40,40,39,38,35,16,0,1,1,1,1,1,1,]
-            sum_counts = sum(counts_after_smoothing)
-            mse_weights = [sum_counts / i if i != 0 else 1 for i in counts_after_smoothing]
-        else:
-            raise ValueError("dataset not implemented for get_mse_weights")
-        return torch.tensor(mse_weights)
-    print("using weighted mse loss")
+elif loss_fn_switch == "Weighted MSE" or "WMSE":
 
-
-    class weighted_mse_loss(nn.Module):
-        def __init__(self, weights):
-            super(weighted_mse_loss, self).__init__()
-            self.weights = weights
-
-        def forward(self, inputs, targets):
-            loss = (inputs - targets) ** 2
-            loss *= self.weights.expand_as(loss)
-            loss = torch.mean(loss)
-            return loss
-
-    loss_fn = weighted_mse_loss(get_mse_weights(dataset))
 def get_name(epochs,
              model_name,
              learning_rate,

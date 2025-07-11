@@ -1,5 +1,5 @@
-project: crc_base_label_normalizations_sweep_redo
-name: compare different preprocessing of the gene data
+project: wmse test6
+name: compare cms gene performance
 method: grid
 metric:
   name: valid_loss
@@ -14,13 +14,15 @@ parameters:
   epochs:
     value: 40
   dataset:
-    value: crc_base
+    value: CRC_N19
   encoder_type:
     value: dino
   batch_size:
-    value: 32
+    value: 64
   genes:
-    value: [RUBCNL]
+    value: [TNNT1, AQP5, RAMP1, ADGRG6, SECTM1, DPEP1, CHP2, RUBCNL, SLC9A3, VAV3, MUC2, PIGR, TFF1, KIAA1324, ZBTB7C, SERPINA1, SPOCK1, FBLN1, ANTXR1, TNS1, MYL9, HSPB8]
+  error_metric_name:
+    value: MSE
   pretrained_out_dim:
     value: 2048
   middle_layer_features:
@@ -28,13 +30,13 @@ parameters:
   num_workers:
     value: 2
   loss_fn_switch:
-    value: MSE
+    value: WMSE
   gene_data_filename:
-    values: [gene_data_log1p.csv, gene_data_ranknorm.csv,  gene_data_raw.csv]
+    values: [gene_data_log1p.csv, gene_data_ranknorm.csv]
   image_size:
     value: 224
   out_path:
-    value: ../../scratch/models/crc_base_label_normalizations_sweep/
+    value: ../models/crc_base_label_normalizations_sweep/
   generate_scatters:
     value: true
   use_early_stopping:
@@ -43,10 +45,11 @@ parameters:
     value: false
   one_linear_out_layer:
     value: false
+  lds_weight_csv:
+    values: [best_smoothings.csv]
+  weight_transform:
+    values: [inverse, sqrt-inverse, none]
+
   # hyperparams
-  learning_rate:
-    values: [0.1, 0.01, 0.001]
-  bins:
-    values: [1, 2, 3, 5, 8, 10]
   freeze_pretrained:
     value: true

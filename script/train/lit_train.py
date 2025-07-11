@@ -14,6 +14,7 @@ import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.profilers import PyTorchProfiler
+from lightning.pytorch.tuner.tuning import Tuner        # ➊  NEW
 
 # Local application imports
 from script.model.lit_model import get_model
@@ -59,7 +60,7 @@ def get_trainer(cfg: dict, logger: WandbLogger) -> L.Trainer:
         enable_checkpointing=cfg.get("enable_checkpointing", False),
         precision=16,
         callbacks=[EarlyStopping(
-            monitor=f"validation_{cfg['error_metric_name']}",
+            monitor=f"val_{cfg['loss_fn_switch']}",
             mode="min",
             patience=cfg.get("patience", 10)
         )] if cfg.get("use_early_stopping", False) else [],
@@ -84,24 +85,32 @@ def _determine_device() -> str:
 
 class TrainerPipeline:
     def __init__(self, config: dict, run: wandb.sdk.wandb_run.Run):
-        # 1) store the passed-in run & config
         self.wandb_run = run
         self.config    = config
-        self.project   = self.wandb_run.project
-        name = ", ".join(f"{k}: {self.config.get(k)}" for k in self.wandb_run.config.sweep_parameter_names)
-        self.wandb_run.name = name
-        self.wandb_run.notes = f"Training {self.wandb_run.name} on {self.wandb_run.project}"
-        # 2) build the Lightning logger off that run
-        self.logger = WandbLogger(
-            project=self.wandb_run.project,
-            name=name
-        )
+        self.debug     = self.config.get("debug")
 
-        # 3) the rest of your setup
+        self.is_sweep = hasattr(self.wandb_run.config, "sweep_parameter_names")
+
+        self.is_online = self.config.get("log_to_wandb")
+        if self.is_online:
+            self.project   = self.wandb_run.project
+            if self.is_sweep:
+                name = ", ".join(f"{k}: {self.config.get(k)}" for k in self.wandb_run.config.sweep_parameter_names)
+            else:
+                name = self.config["project"] + " " + self.config["name"]
+            self.wandb_run.name = name
+            self.wandb_run.notes = f"Training {self.wandb_run.name} on {self.wandb_run.project}"
+            self.logger = WandbLogger(
+                project=self.wandb_run.project,
+                name=name
+            )
+        else:
+            self.project = "local_run"
+            self.logger = None
         required = [
             "genes", "train_samples", "val_samples",
-            "data_dir", "batch_size", "epochs", "learning_rate",
-            "error_metric_name", "encoder_type", "pretrained_out_dim"
+            "data_dir", "batch_size", "epochs",
+            "loss_fn_switch", "encoder_type", "pretrained_out_dim"
         ]
         missing = [k for k in required if k not in config]
         if missing:
@@ -111,15 +120,10 @@ class TrainerPipeline:
         self.out_dir = self._prepare_output_dir()
 
     def _prepare_output_dir(self) -> str:
-        """
-        Create a directory for model checkpoints and summaries under:
-          ../models/{project}/{subdir}
-        Where subdir is either provided, 'lit_testing' in debug, or the run name.
-        """
         base = Path("..") / "models" / self.project
         subdir = self.config.get("subdir")
         if subdir is None:
-            subdir = "lit_testing" if self.config.get("debug", False) else self.wandb_run.name
+            subdir = self.wandb_run.name
         out_dir = os.path.join(base, subdir)
         os.makedirs(out_dir, exist_ok=True)
         log.info(
@@ -131,10 +135,6 @@ class TrainerPipeline:
         return out_dir
 
     def _create_trainer(self) -> L.Trainer:
-        """
-        Build and return a Lightning Trainer instance
-        using the stored logger, callbacks, precision, and devices.
-        """
         profiler = None
         if self.config.get("do_profile", False):
             profiler = PyTorchProfiler(
@@ -153,7 +153,7 @@ class TrainerPipeline:
             enable_checkpointing=self.config.get("enable_checkpointing", False),
             precision=16 if self.device == "gpu" else 32,
             callbacks=[EarlyStopping(
-                monitor=f"validation_{self.config['error_metric_name']}",
+                monitor=f"val_{self.config['loss_fn_switch']}",
                 mode="min",
                 patience=self.config.get("patience", 10)
             )] if self.config.get("use_early_stopping", False) else [],
@@ -163,41 +163,75 @@ class TrainerPipeline:
         )
         return trainer
 
+    def tune_learning_rate(
+        self,
+        trainer: L.Trainer,
+        model: L.LightningModule,
+        train_loader: torch.utils.data.DataLoader,
+    ) -> float:
+        if self.config.get("debug", False):
+            lr = self.config.get("learning_rate", 1e-4)
+            log.info("[LR-TUNER] Debug mode – using fixed lr = %.2e", lr)
+
+        else:
+            tuner      = Tuner(trainer)
+            lr_finder  = tuner.lr_find(
+                model,
+                train_dataloaders=train_loader,
+                num_training=self.config.get("lr_find_steps", 300),
+            )
+            lr = lr_finder.suggestion()
+            if lr is None:
+                raise ValueError("lr_finder did not find a solution")
+            log.info("[LR-TUNER] Suggested lr = %.2e", lr)
+
+        model.update_lr(lr)
+        self.config["learning_rate"] = lr
+
+        if self.wandb_run is not None:
+            self.wandb_run.log({"tuned_lr": lr})
+
+        return lr
+
     def run(self):
-        """
-        Execute the training steps:
-          1. Instantiate data module & loaders
-          2. Build trainer & model
-          3. Fit model (train/val)
-          4. Optionally test on test set
-          5. Cleanup and save summary JSON
-        """
-        # 1) Data
         data_module = get_data_module(self.config)
         data_module.setup("fit")
         train_loader = data_module.train_dataloader()
         val_loader = data_module.val_dataloader()
-
-        # 2) Trainer & Model
-        trainer = self._create_trainer()
+        self.config["out_dir"] = self.out_dir
         model = get_model(self.config)
         model.set_num_training_batches(len(train_loader))
 
-        # 3) Train
-        trainer.fit(
-            model=model,
-            train_dataloaders=train_loader,
-            val_dataloaders=val_loader
+        # learning rate tuning
+        self.config.setdefault("learning_rate", 1e-3) # init learning rate
+        tmp_trainer = L.Trainer(
+            accelerator="gpu", devices=self.config.get("devices", 1),
+            max_epochs=1, logger=False, enable_checkpointing=False
         )
+        lr_finder = Tuner(tmp_trainer).lr_find(
+            model, train_dataloaders=train_loader,
+            num_training=self.config.get("lr_find_steps", 300)
+        )
+        if self.debug:
+            new_lr = 0.001
+        else:
+            new_lr = lr_finder.suggestion()
+        if new_lr is None:
+            raise ValueError("lr_finder did not find a learning rate")
+        model.update_lr(new_lr)
+        self.config["learning_rate"] = new_lr
+        if self.is_online:
+            self.wandb_run.log({"tuned_lr": new_lr})
 
-        # 4) Test if provided
+        trainer = self._create_trainer()
+        trainer.fit(model, train_loader, val_loader)
+
         if self.config.get("test_samples"):
             trainer.test(
                 model=model,
                 dataloaders=data_module.test_dataloader()
             )
 
-        # 5) Cleanup & Save
         data_module.free_memory()
         self._save_summary()
         log.info("Finished training")

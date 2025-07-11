@@ -56,13 +56,67 @@ DATASETS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def get_dataset_cfg(name: str, debug: bool) -> Dict[str, Any]:
+def get_dataset_cfg(cfg: dict) -> Dict[str, Any]:
+    name = cfg["dataset"]
+    debug = cfg.get("debug", False)
+
     if name not in DATASETS:
         raise ValueError(f"Unknown dataset '{name}'")
 
     ds = DATASETS[name].copy()
-    train_all: List[str] = ds.pop("train_samples_all")
-    val_all:   List[str] = ds.pop("val_samples_all")
+
+    has_train = "train_samples" in cfg
+    has_val   = "val_samples"   in cfg
+
+    # If only one of the two keys is given, that’s a mis-configuration.
+    if has_train ^ has_val:
+        raise AttributeError(
+            "Both 'train_samples' and 'val_samples' must be provided together in cfg."
+        )
+
+    if has_train and has_val:
+        train_all: List[str] = cfg["train_samples"]
+        val_all:   List[str] = cfg["val_samples"]
+    else:  # neither key present – fall back to defaults in DATASETS
+        train_all = ds.pop("train_samples_all")
+        val_all   = ds.pop("val_samples_all")
+
+    ds["train_samples"] = train_all[:1] if debug else train_all
+    ds["val_samples"]   = val_all[:1]   if debug else val_all
+
+    return ds
+
+def get_dataset_data_dir(name: str) -> str:
+    if name not in DATASETS:
+        raise ValueError(f"Unknown dataset '{name}'")
+
+    return DATASETS[name]["data_dir"]
+
+
+def get_dataset_cfg_lds(cfg: dict) -> Dict[str, Any]:
+    name = cfg["dataset"].get("value")
+    debug = cfg.get("debug", False)
+
+    if name not in DATASETS:
+        raise ValueError(f"Unknown dataset '{name}'")
+
+    ds = DATASETS[name].copy()
+
+    has_train = "train_samples" in cfg
+    has_val   = "val_samples"   in cfg
+
+    # If only one of the two keys is given, that’s a mis-configuration.
+    if has_train ^ has_val:
+        raise AttributeError(
+            "Both 'train_samples' and 'val_samples' must be provided together in cfg."
+        )
+
+    if has_train and has_val:
+        train_all: List[str] = cfg["train_samples"]
+        val_all:   List[str] = cfg["val_samples"]
+    else:  # neither key present – fall back to defaults in DATASETS
+        train_all = ds.pop("train_samples_all")
+        val_all   = ds.pop("val_samples_all")
 
     ds["train_samples"] = train_all[:1] if debug else train_all
     ds["val_samples"]   = val_all[:1]   if debug else val_all

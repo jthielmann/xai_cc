@@ -21,6 +21,9 @@ class STDataModule(L.LightningDataModule):
 
         # Set up transforms based on config
         self.transforms = get_transforms(cfg)
+        self.train_dataset = None
+        self.val_dataset = None
+        self.test_dataset = None
 
     def setup(self, stage: str = None):
         # Determine max_len for debug mode
@@ -32,18 +35,20 @@ class STDataModule(L.LightningDataModule):
                 genes=self.cfg['genes'],
                 samples=self.cfg['train_samples'],
                 transforms=self.transforms,
-                bins=self.cfg['bins'],
+                bins=self.cfg.get("bins", 0),
                 gene_data_filename=self.cfg['gene_data_filename'],
-                max_len=max_len
+                max_len=max_len,
+                lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
             )
             self.val_dataset = get_dataset(
                 self.cfg['data_dir'],
                 genes=self.cfg['genes'],
                 samples=self.cfg['val_samples'],
                 transforms=self.transforms,
-                bins=self.cfg['bins'],
+                bins=self.cfg.get("bins", 0),
                 gene_data_filename=self.cfg['gene_data_filename'],
-                max_len=max_len
+                max_len=max_len,
+                lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
             )
         if stage in (None, 'test') and self.cfg.get('test_samples'):
             self.test_dataset = get_dataset(
@@ -51,9 +56,10 @@ class STDataModule(L.LightningDataModule):
                 genes=self.cfg['genes'],
                 samples=self.cfg['test_samples'],
                 transforms=self.transforms,
-                bins=self.cfg['bins'],
+                bins=self.cfg.get("bins", 0),
                 gene_data_filename=self.cfg['gene_data_filename'],
-                max_len=max_len
+                max_len=max_len,
+                lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
             )
 
     def train_dataloader(self):

@@ -1,3 +1,6 @@
+import sys
+sys.path.insert(0, '..')
+
 import wandb, argparse, os, torch, json
 from script.model.lit_model import load_model
 from script.evaluation.cluster_functions import cluster

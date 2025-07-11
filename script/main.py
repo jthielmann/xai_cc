@@ -1,9 +1,7 @@
-import argparse
-import wandb
-import yaml
-import sys, traceback
-
+import sys
 sys.path.insert(0, '..')
+
+import wandb
 from script.configs.dataset_config import get_dataset_cfg
 from script.train.lit_train import TrainerPipeline
 import os
@@ -12,34 +10,44 @@ import random
 import numpy
 import torch
 
-import shutil, sys
+import sys
 from main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, read_config_parameter, get_sweep_parameter_names
+from typing import Dict, Any
 
-def _train(raw_cfg: dict):
-    run = wandb.init(
-        project=raw_cfg.get("project", "xai"),
-        config={**raw_cfg},
-        mode="online" if raw_cfg.get("log_to_wandb", False) else "disabled"
+
+def _train(cfg: Dict[str, Any]) -> None:
+    ds_cfg = get_dataset_cfg(cfg
     )
-    # merge ds_cfg if needed…
-    pipeline = TrainerPipeline(dict(run.config), run=run)
+    cfg.update(ds_cfg)
+
+    # holds run variable in ca
+    run = None
+
+    use_wandb = cfg.get("log_to_wandb", False)
+    if use_wandb:
+        run = wandb.init(
+            project=cfg.get("project", "xai"),
+            config=cfg
+        )
+        cfg_for_pipeline = dict(run.config)
+    else:
+        cfg_for_pipeline = cfg
+
+    pipeline = TrainerPipeline(cfg_for_pipeline, run=run)
     pipeline.run()
-    run.finish()
+
+    if run is not None:
+        run.finish()
 
 
 def _sweep_run():
-    # (reinit=True can help if this function gets called multiple times
-    #  in the same process, but it's optional)
     run = wandb.init()
 
-    # now wandb.config is populated, so pull it into a plain dict:
     cfg = dict(run.config)
 
-    # merge in any dataset defaults
-    ds_cfg = get_dataset_cfg(cfg["dataset"], cfg.get("debug", False))
+    ds_cfg = get_dataset_cfg(cfg)
     cfg.update(ds_cfg)
 
-    # run your training
     pipeline = TrainerPipeline(cfg, run=run)
     pipeline.run()
     run.finish()
@@ -69,12 +77,12 @@ def main():
         }
 
         # need the target location to exist to check if there is enough space
-        out_path = sweep_config["parameters"].get("out_path").get("value")
+        project = sweep_config["project"] if not read_config_parameter(raw_cfg,"debug") else "debug_" + random.randbytes(4).hex()
+        out_path = "../models/" + project
         if not os.path.exists(out_path):
             os.makedirs(out_path, exist_ok=True)
         ensure_free_disk_space(out_path)
 
-        project = sweep_config["project"] if not read_config_parameter(raw_cfg,"debug") else "debug_" + random.randbytes(4).hex()
         print(f"Project: {project}")
         sweep_dir = os.path.join("..", "wandb_sweep_ids", project, sweep_config["name"])
         os.makedirs(sweep_dir, exist_ok=True)
@@ -99,7 +107,7 @@ def main():
         for key, param in params.items():
             if isinstance(param, dict) and "value" in param:
                 cfg[key] = param["value"]
-        ensure_free_disk_space(cfg.get("out_path").get("value"))
+        ensure_free_disk_space(cfg.get("out_path"))
         _train(cfg)
 
 
@@ -108,14 +116,5 @@ if __name__ == "__main__":
     print("numpy version:", numpy.version.version)
     print("torch version:", torch.__version__)
     print("cuda available:", torch.cuda.is_available())
-    run = wandb.init(project="xai", config={}, mode="online")
-    try:
-        main()
-    except Exception as e:
-        run.log({"crash/trace": traceback.format_exc()})
-        wandb.alert(
-            title="Run crashed",
-            text=f"{type(e).__name__}: {e}"
-        )
-        run.finish(exit_code=1)
-        raise
+
+    main()

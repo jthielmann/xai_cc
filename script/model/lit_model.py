@@ -11,7 +11,7 @@ import os
 from script.data_processing.process_csv import generate_results_patient_from_loader
 from script.train.generate_plots import generate_hists_2
 import matplotlib.pyplot as plt
-from script.data_processing.data_loader import get_dataset
+from script.data_processing.data_loader import get_dataset, load_best_smoothing, load_gene_weights
 from torch.utils.data import DataLoader
 import random
 
@@ -26,17 +26,17 @@ from io import BytesIO
 from PIL import Image
 from torch.optim.lr_scheduler import OneCycleLR
 sys.path.insert(0, '..')
+from script.model.loss_functions import MultiGeneWeightedMSE
 
 def load_model(path, config):
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 
-    encoder = get_encoder(config["encoder_type"])
     if "pretrained_out_dim" not in config:
         config["pretrained_out_dim"] = 1000
     if "middle_layer_features" not in config:
         config["middle_layer_features"] = 64
-    model = LightiningNN(config, encoder)
+    model = LightiningNN(config)
     model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
     return model
 
@@ -48,34 +48,45 @@ class LightiningNN(L.LightningModule):
         super().__init__()
 
         self.config = config
+        self.learning_rate = self.config.get("learning_rate", 1e-3)
         self.encoder = get_encoder(self.config["encoder_type"])
         self.freeze_pretrained = self.config['freeze_pretrained']
         if self.freeze_pretrained:
             for p in self.encoder.parameters(): p.requires_grad = False
 
         for gene in self.config['genes']:
-            relu = nn.LeakyReLU if self.config['use_leaky_relu'] else nn.ReLU
-            if self.config['one_linear_out_layer']:
-                setattr(self, gene,
-                        nn.Sequential(
-                            relu,
-                            nn.Linear(self.config['pretrained_out_dim'],1)))
-            else:
-                setattr(self, gene,
-                        nn.Sequential(nn.Linear(self.config['pretrained_out_dim'], self.config['middle_layer_features']),
-                                      relu,
-                                      nn.Linear(self.config['middle_layer_features'], 1)))
+            relu_type = nn.LeakyReLU if self.config.get('use_leaky_relu') else nn.ReLU
+            relu_instance = relu_type()
+
+            layer = (
+                nn.Sequential(relu_instance, nn.Linear(self.config['pretrained_out_dim'], 1))
+                if self.config['one_linear_out_layer']
+                else nn.Sequential(
+                    nn.Linear(self.config['pretrained_out_dim'], self.config['middle_layer_features']),
+                    relu_instance,
+                    nn.Linear(self.config['middle_layer_features'], 1),
+                )
+            )
+            setattr(self, gene, layer)
         self.genes = self.config['genes']
 
         self.pearson = torchmetrics.PearsonCorrCoef(num_outputs=len(self.genes))
-        self.loss_fn = nn.MSELoss()
+        if self.config["loss_fn_switch"] == "MSE":
+            self.loss_fn = nn.MSELoss()
+        elif self.config["loss_fn_switch"] == "WMSE" or self.config["loss_fn_switch"] == "weighted MSE":
+            weight_dir = self.config["lds_weight_csv"]
+            weights = load_gene_weights(weight_dir, self.genes)
+            self.loss_fn = MultiGeneWeightedMSE(weights)
 
         self.num_training_batches = 0
         self.current_loss = torch.tensor(0.).to(self.device)
         self.best_loss = torch.tensor(float('inf')).to(self.device)
+        self.is_online = self.config.get('log_to_wandb')
+
         if self.config.get('generate_scatters', False):
             self.table = wandb.Table(columns=["epoch","gene","lr","bins","scatter_plot"])
-        wandb.watch(self, log=None)
+        if self.is_online:
+            wandb.watch(self, log=None)
 
     def forward(self, x):
         x = self.encoder(x)
@@ -84,12 +95,12 @@ class LightiningNN(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss, _, _ = self._step(batch)
-        self.log('train_' + self.config['error_metric_name'], loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_' + self.config['loss_fn_switch'], loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss, y_hat, y = self._step(batch)
-        self.log('val_' + self.config['error_metric_name'], loss, on_epoch=True)
+        self.log('val_' + self.config['loss_fn_switch'], loss, on_epoch=True)
 
         self.y_hats.append(y_hat)
         self.ys.append(y)
@@ -103,7 +114,8 @@ class LightiningNN(L.LightningModule):
         return loss, y_hat, y
 
     def configure_optimizers(self):
-        params = [{'params': self.encoder.parameters(), 'lr': self.config['learning_rate']}]
+        lr = getattr(self, "learning_rate", 1e-3)
+        params = [{'params': self.encoder.parameters(), 'lr': lr}]
         for gene in self.genes:
             params.append({'params': getattr(self, gene).parameters(), 'lr': self.config['learning_rate']})
         optimizer = optim.AdamW(params)
@@ -121,6 +133,9 @@ class LightiningNN(L.LightningModule):
             }
         }
 
+    def on_fit_start(self):          # ← runs before the first batch
+        os.makedirs(self.config["out_dir"], exist_ok=True)
+
     def on_validation_epoch_start(self):
         self.current_loss = 0.0
         self.y_hats = []
@@ -132,26 +147,33 @@ class LightiningNN(L.LightningModule):
         if not hasattr(self, 'sanity_skipped'):
             self.sanity_skipped = True
             return
-        torch.save(self.state_dict(), os.path.join(self.config['out_path'], "latest.pth"))
+        torch.save(self.state_dict(), os.path.join(self.config['out_dir'], "latest.pth"))
         if self.current_loss < self.best_loss:
             self.best_loss = self.current_loss
-            wandb.run.summary["best_val_loss"] = self.best_loss
-            wandb.run.summary["best_val_epoch"] = self.current_epoch
             # Save the best model
-            best_model_path = os.path.join(self.config['out_path'], "best_model.pth")
+            best_model_path = os.path.join(self.config['out_dir'], "best_model.pth")
             torch.save(self.state_dict(), best_model_path)
-            wandb.save(best_model_path, base_path=self.config['out_path'])
-            wandb.log({"epoch": self.current_epoch})
+
+            if self.is_online:
+                wandb.run.summary["best_val_loss"] = self.best_loss
+                wandb.run.summary["best_val_epoch"] = self.current_epoch
+                #wandb.save(best_model_path, base_path=self.config['out_dir'])
+                wandb.log({"epoch": self.current_epoch})
         # Aggregate outputs
         y_hat = torch.cat(self.y_hats, dim=0)
         y_true = torch.cat(self.ys, dim=0)
         pearson = self.pearson(y_hat, y_true)
-        self.log(f"pearson_{self.genes[0] if len(self.genes)==1 else 'all'}", pearson)
+        if len(self.genes) > 1:
+            pearson_dict = {f"pearson_{g}": pearson[i] for i, g in enumerate(self.genes)}
+        else: # one gene
+            pearson_dict = {f"pearson_{self.genes[0]}": pearson}
+        if self.is_online:
+            self.log_dict(pearson_dict, on_epoch=True)
 
         # Generate scatter plots if requested
         if self.config.get('generate_scatters', False):
             model_name = f"ep_{self.current_epoch}"
-            results_file = os.path.join(self.config['out_path'], "_" + str(random.randbytes(4).hex()) + "_results.csv")
+            results_file = os.path.join(self.config['out_dir'], "_" + str(random.randbytes(4).hex()) + "_results.csv")
 
             # iterate patients
             for patient in self.config['val_samples']:
@@ -160,7 +182,7 @@ class LightiningNN(L.LightningModule):
                     genes=self.genes,
                     samples=[patient],
                     transforms=get_transforms(self.config),
-                    bins=self.config['bins'],
+                    bins=self.config.get("bins", 0),
                     gene_data_filename=self.config['gene_data_filename'],
                     max_len=100 if self.config.get('debug') else None
                 )
@@ -180,27 +202,34 @@ class LightiningNN(L.LightningModule):
                 fig.savefig(buf, format="png")
                 buf.seek(0)
                 img = Image.open(buf)
-                self.table.add_data(
-                    self.current_epoch,
-                    gene,
-                    self.config['learning_rate'],
-                    self.config['bins'],
-                    wandb.Image(img, caption=gene)
-                )
+                if self.is_online:
+
+                    self.table.add_data(
+                        self.current_epoch,
+                        gene,
+                        self.config['learning_rate'],
+                        self.config.get("bins", 0),
+                        wandb.Image(img, caption=gene)
+                    )
                 plt.close(fig)
             os.remove(results_file)
 
 
     def on_train_epoch_end(self):
-        torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
+        torch.save(self.state_dict(), self.config["out_dir"] + "/latest.pth")
 
     def on_train_end(self):
-        if hasattr(self, 'table'):
-            wandb.log({'scatter_table': self.table})
+        if self.is_online:
+            if hasattr(self, 'table'):
+                wandb.log({'scatter_table': self.table})
 
 
     def set_num_training_batches(self, num_batches):
         self.num_training_batches = num_batches
+
+
+    def update_lr(self, lr):
+        self.learning_rate = lr
 
 
 # adapted from https://docs.lightly.ai/self-supervised-learning/examples/dino.html#dino
@@ -232,6 +261,9 @@ class DINO(L.LightningModule):
         self.best_loss = torch.tensor(float('inf'))
         self.current_loss = torch.tensor(0.)
         self.num_training_batches = 0
+
+    def on_fit_start(self):
+        os.makedirs(self.config["out_dir"], exist_ok=True)
 
     def update_lr(self, lr):
         self.lr = lr
@@ -302,7 +334,7 @@ class DINO(L.LightningModule):
         }
 
     def on_train_epoch_end(self):
-        latest_path = os.path.join(self.config['out_path'], 'latest.pth')
+        latest_path = os.path.join(self.config['out_dir'], 'latest.pth')
         torch.save(self.state_dict(), latest_path)
 
     def on_validation_start(self):
@@ -310,7 +342,7 @@ class DINO(L.LightningModule):
 
     def on_validation_end(self):
         # Always save latest after validation
-        latest_path = os.path.join(self.config['out_path'], 'latest.pth')
+        latest_path = os.path.join(self.config['out_dir'], 'latest.pth')
         torch.save(self.state_dict(), latest_path)
 
         # Save and log best model only if improved
@@ -318,7 +350,7 @@ class DINO(L.LightningModule):
             self.best_loss = self.current_loss
             wandb.run.summary['best_val_loss'] = self.best_loss
             wandb.run.summary['best_val_epoch'] = self.current_epoch
-            best_path = os.path.join(self.config['out_path'], 'best_model.pth')
+            best_path = os.path.join(self.config['out_dir'], 'best_model.pth')
             torch.save(self.state_dict(), best_path)
             wandb.log({'epoch': self.current_epoch})
 
@@ -380,13 +412,16 @@ class Autoencoder(L.LightningModule):
 
     def training_step(self, batch, _):
         loss, _, _ = self._shared_step(batch)
-        self.log(f"train_{self.hparams.error_metric_name}", loss,
+        self.log(f"train_{self.hparams.loss_fn_switch}", loss,
                  on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
+    def on_fit_start(self):
+        os.makedirs(self.config["out_path"], exist_ok=True)
+
     def validation_step(self, batch, _):
         loss, y_hat, y = self._shared_step(batch)
-        self.log(f"val_{self.hparams.error_metric_name}", loss, on_epoch=True)
+        self.log(f"val_{self.hparams.loss_fn_switch}", loss, on_epoch=True)
         self.val_yhats.append(y_hat)
         self.val_ys.append(y)
         self.val_loss += loss
