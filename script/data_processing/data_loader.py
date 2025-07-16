@@ -160,6 +160,33 @@ def get_patient_loader(data_dir, patient, genes=None):
     loaded_train_dataset = STDataset(train_st_dataset)
     return loaded_train_dataset
 
+import torch, math
+from typing import Dict
+
+def make_weights(
+    raw: Dict[str, torch.Tensor],
+    *,
+    clip_max: float = 10.0,
+    r1: float = 20.0,
+    r2: float = 100.0,
+) -> Dict[str, torch.Tensor]:
+    scaled = {}
+    for g, w in raw.items():
+        w = w.float()
+        ratio = (w.max() / w.mean()).item()
+        if ratio <= r1:
+            alpha = 1.0
+        elif ratio >= r2:
+            alpha = 0.0
+        else:
+            t = (math.log10(ratio) - math.log10(r1)) / (math.log10(r2) - math.log10(r1))
+            alpha = 1.0 - t
+        w2 = torch.log1p(w) if alpha == 0.0 else (w / w.mean()) ** alpha
+        w2 = (w2 / w2.mean()).clamp(max=clip_max)
+        scaled[g] = w2.to(dtype=torch.float32)
+    return scaled
+
+
 
 # contains tile path and gene data
 def get_base_dataset(
@@ -173,6 +200,7 @@ def get_base_dataset(
     gene_data_filename: str = "gene_data.csv",
     lds_smoothing_csv: str | Path | None = None,      # <─ NOW one file, not a dir
     weight_transform: str = "inverse",
+    weight_clamp: int = 10
 ):
     """
     Build a single dataframe that optionally contains LDS-based weights.
@@ -197,8 +225,10 @@ def get_base_dataset(
     # 2) attach LDS weights -----------------------------------------------------
     if lds_smoothing_csv is not None:
         gene2weights = load_gene_weights(lds_smoothing_csv, genes=genes,weight_transform=weight_transform)
+        gene2weights = make_weights(gene2weights, clip_max=weight_clamp, r1=20, r2=100)
 
         for g in genes:
+            if g not in gene2weights: raise ValueError(f"No weights for {g}")
             w_vec  = gene2weights[g]                      # (K,)
             K      = len(w_vec)
 
@@ -233,8 +263,9 @@ def get_dataset(
     bins: int = 1,
     only_inputs: bool = False,
     gene_data_filename: str = "gene_data.csv",
-    lds_smoothing_csv: str | Path | None = None,   # ← one file, not a dir
-    weight_transform: str = "inverse",             # ← "inverse" | "sqrt-inverse" | "none"
+    lds_smoothing_csv: str | Path | None = None,
+    weight_transform: str = "inverse",
+    weight_clamp: int = 10
 ):
     """
     Wrapper that returns an STDataset whose dataframe optionally contains
@@ -254,7 +285,8 @@ def get_dataset(
         bins=bins,
         gene_data_filename=gene_data_filename,
         lds_smoothing_csv=lds_smoothing_csv,
-        weight_transform=weight_transform
+        weight_transform=weight_transform,
+        weight_clamp=weight_clamp
     )
 
     # create the PyTorch-compatible dataset
@@ -266,9 +298,6 @@ def get_dataset(
         use_weights=lds_smoothing_csv is not None,
     )
     return ds
-
-
-
 
 
 # returns imgs and tile paths

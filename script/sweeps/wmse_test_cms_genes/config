@@ -1,4 +1,4 @@
-project: wmse test6
+project: wmse test11 single gene WMSE clamp
 name: compare cms gene performance
 method: grid
 metric:
@@ -9,7 +9,7 @@ parameters:
   debug:
     value: false
   log_to_wandb:
-    value: true
+    value: false
   # fixed
   epochs:
     value: 40
@@ -20,9 +20,9 @@ parameters:
   batch_size:
     value: 64
   genes:
-    value: [TNNT1, AQP5, RAMP1, ADGRG6, SECTM1, DPEP1, CHP2, RUBCNL, SLC9A3, VAV3, MUC2, PIGR, TFF1, KIAA1324, ZBTB7C, SERPINA1, SPOCK1, FBLN1, ANTXR1, TNS1, MYL9, HSPB8]
+    value: [RUBCNL]
   error_metric_name:
-    value: MSE
+    value: WMSE
   pretrained_out_dim:
     value: 2048
   middle_layer_features:
@@ -30,9 +30,9 @@ parameters:
   num_workers:
     value: 2
   loss_fn_switch:
-    value: WMSE
+    values: [WMSE]
   gene_data_filename:
-    values: [gene_data_log1p.csv, gene_data_ranknorm.csv]
+    values: [gene_data_ranknorm.csv]
   image_size:
     value: 224
   out_path:
@@ -48,8 +48,12 @@ parameters:
   lds_weight_csv:
     values: [best_smoothings.csv]
   weight_transform:
-    values: [inverse, sqrt-inverse, none]
+    values: [inverse, sqrt-inverse]
+  weight_clamp:
+    values: [10, 20, 50, 100, 200, 500, 1000]
+
 
   # hyperparams
   freeze_pretrained:
     value: true
+

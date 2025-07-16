@@ -1,0 +1,30 @@
+name: lit
+channels:
+  - bioconda
+  - conda-forge
+  - pytorch
+  - nodefaults
+prefix: /Users/thielmann/miniforge3/envs/test
+dependencies:
+  - python
+  - pytorch
+  - torchvision
+  - tqdm
+  - onnx
+  - matplotlib
+  - numpy
+  - lightning
+  - scipy
+  - anndata
+  - umap-learn
+  - timm
+  - wandb
+  - lightly
+  - libgfortran5
+  - torchmetrics
+  - matplotlib
+  - protobuf
+  - pandas<2.0.0 # required by anndata
+  - pip
+  - pip:
+    - onnxscript

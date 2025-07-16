@@ -58,6 +58,7 @@ def get_trainer(cfg: dict, logger: WandbLogger) -> L.Trainer:
         logger=logger,
         log_every_n_steps=cfg.get("log_every_n_steps", 1),
         enable_checkpointing=cfg.get("enable_checkpointing", False),
+        default_root_dir="/tmp/lr_finder",
         precision=16,
         callbacks=[EarlyStopping(
             monitor=f"val_{cfg['loss_fn_switch']}",
@@ -172,7 +173,8 @@ class TrainerPipeline:
         if self.config.get("debug", False):
             lr = self.config.get("learning_rate", 1e-4)
             log.info("[LR-TUNER] Debug mode – using fixed lr = %.2e", lr)
-
+        elif self.config["loss_fn_switch"] in {"WMSE", "weighted MSE"}:
+            lr = self.config.get("learning_rate", 1e-3)  # don’t search
         else:
             tuner      = Tuner(trainer)
             lr_finder  = tuner.lr_find(
@@ -210,7 +212,8 @@ class TrainerPipeline:
         )
         lr_finder = Tuner(tmp_trainer).lr_find(
             model, train_dataloaders=train_loader,
-            num_training=self.config.get("lr_find_steps", 300)
+            num_training=self.config.get("lr_find_steps", 300),
+
         )
         if self.debug:
             new_lr = 0.001

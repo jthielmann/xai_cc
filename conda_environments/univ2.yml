@@ -1,0 +1,17 @@
+name: univ2
+channels:
+  - bioconda
+  - conda-forge
+  - pytorch
+  - nodefaults
+dependencies:
+  - pip
+  - python
+  - numpy
+  - pip:
+      - -r ../repos/plip/requirements.txt
+  - transformers
+  - pytorch
+  - torchvision
+  - timm
+  - huggingface_hub
