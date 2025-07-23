@@ -1,4 +1,4 @@
-project: wmse test11 single gene WMSE clamp
+project: unimodel
 name: compare cms gene performance
 method: grid
 metric:
@@ -9,7 +9,7 @@ parameters:
   debug:
     value: false
   log_to_wandb:
-    value: true
+    value: false
   # fixed
   epochs:
     value: 40
@@ -30,9 +30,9 @@ parameters:
   num_workers:
     value: 2
   loss_fn_switch:
-    values: [WMSE]
+    value: MSE
   gene_data_filename:
-    values: [gene_data_ranknorm.csv]
+    value: gene_data_ranknorm.csv
   image_size:
     value: 224
   out_path:
@@ -46,16 +46,10 @@ parameters:
   one_linear_out_layer:
     value: false
   lds_weight_csv:
-    values: [best_smoothings.csv]
+    value: best_smoothings.csv
   weight_transform:
-    values: [inverse, sqrt-inverse]
-  weight_clamp:
-    values: [10, 20, 50, 100, 200, 500, 1000]
-
+    value: inverse
 
   # hyperparams
-  fix_lerning_rate:
-    values: [1.0, 0.1, 0.01, 0.001]
   freeze_pretrained:
     value: true
-

@@ -28,6 +28,37 @@ from torch.optim.lr_scheduler import OneCycleLR
 sys.path.insert(0, '..')
 from script.model.loss_functions import MultiGeneWeightedMSE
 
+
+class TopKActivation(nn.Module):
+    def __init__(self, k):
+        super().__init__()
+        self.k = k
+
+    def forward(self, x):
+        _, topk_indices = torch.topk(x, self.k, dim=-1)
+        mask = torch.zeros_like(x)
+        mask.scatter_(-1, topk_indices, 1)
+        return x * mask
+
+
+class SparseAutoencoder(nn.Module):
+    def __init__(self, d_in, d_hidden, k):
+        super().__init__()
+        self.encoder = nn.Linear(d_in, d_hidden, bias=True)
+        self.topk_activation = TopKActivation(k)
+        self.decoder = nn.Linear(d_hidden, d_in, bias=True)
+        self.last_sparse = None
+        with torch.no_grad():
+            self.decoder.weight.data = self.encoder.weight.data.T
+
+    def forward(self, x):
+        encoded = self.encoder(x)
+        sparse = self.topk_activation(encoded)
+        self.last_sparse = sparse.detach()
+        decoded = self.decoder(sparse)
+        return decoded
+
+
 def load_model(path, config):
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
@@ -68,6 +99,29 @@ class LightiningNN(L.LightningModule):
                 )
             )
             setattr(self, gene, layer)
+        if config.get("sae", False):
+            pos = config.get("sae_position", "pre")
+            if pos == "pre":
+                # SAE on the *features* coming *out* of the CNN
+                d_in     = config["pretrained_out_dim"]
+                d_hidden = config["sae_hidden_dim"]
+                k        = config["sae_k"]
+                self.sae_pre  = SparseAutoencoder(d_in, d_hidden, k)
+                self.sae_post = None
+            elif pos == "post":
+                # SAE on the *final head outputs*
+                d_in     = len(config["genes"])
+                d_hidden = config["sae_hidden_dim"]
+                k        = config["sae_k"]
+                self.sae_pre  = None
+                self.sae_post = SparseAutoencoder(d_in, d_hidden, k)
+            else:
+                raise ValueError("sae_position must be 'pre' or 'post'")
+        else:
+            self.sae_pre  = None
+            self.sae_post = None
+
+
         self.genes = self.config['genes']
 
         self.pearson = torchmetrics.PearsonCorrCoef(num_outputs=len(self.genes))
@@ -89,9 +143,24 @@ class LightiningNN(L.LightningModule):
             wandb.watch(self, log=None)
 
     def forward(self, x):
-        x = self.encoder(x)
-        outs = [getattr(self, g)(x) for g in self.genes]
-        return outs[0] if len(outs) == 1 else torch.cat(outs, dim=1)
+        B = x.size(0)
+
+        # 1) CNN encoder always runs on the 4D image
+        z = self.encoder(x)  # z: (B, pretrained_out_dim)
+
+        # 2) PRE‐SAE: sparsify those features, if requested
+        if self.sae_pre:
+            z = self.sae_pre(z)
+
+        # 3) Gene‐heads
+        outs = [getattr(self, g)(z) for g in self.genes]
+        out  = outs[0] if len(outs)==1 else torch.cat(outs, dim=1)
+
+        # 4) POST‐SAE: sparsify the *final* head outputs
+        if self.sae_post:
+            out = self.sae_post(out)
+
+        return out
 
     def training_step(self, batch, batch_idx):
         loss, _, _ = self._step(batch)
@@ -134,7 +203,7 @@ class LightiningNN(L.LightningModule):
         }
 
     def on_fit_start(self):          # ← runs before the first batch
-        os.makedirs(self.config["out_dir"], exist_ok=True)
+        os.makedirs(self.config["out_path"], exist_ok=True)
 
     def on_validation_epoch_start(self):
         self.current_loss = 0.0
@@ -147,18 +216,20 @@ class LightiningNN(L.LightningModule):
         if not hasattr(self, 'sanity_skipped'):
             self.sanity_skipped = True
             return
-        torch.save(self.state_dict(), os.path.join(self.config['out_dir'], "latest.pth"))
-        if self.current_loss < self.best_loss:
-            self.best_loss = self.current_loss
-            # Save the best model
-            best_model_path = os.path.join(self.config['out_dir'], "best_model.pth")
-            torch.save(self.state_dict(), best_model_path)
 
-            if self.is_online:
-                wandb.run.summary["best_val_loss"] = self.best_loss
-                wandb.run.summary["best_val_epoch"] = self.current_epoch
-                #wandb.save(best_model_path, base_path=self.config['out_dir'])
-                wandb.log({"epoch": self.current_epoch})
+        if not self.config.get('debug'):
+            torch.save(self.state_dict(), os.path.join(self.config['out_path'], "latest.pth"))
+            if self.current_loss < self.best_loss:
+                self.best_loss = self.current_loss
+                # Save the best model
+                best_model_path = os.path.join(self.config['out_path'], "best_model.pth")
+                torch.save(self.state_dict(), best_model_path)
+
+                if self.is_online:
+                    wandb.run.summary["best_val_loss"] = self.best_loss
+                    wandb.run.summary["best_val_epoch"] = self.current_epoch
+                    #wandb.save(best_model_path, base_path=self.config['out_path'])
+                    wandb.log({"epoch": self.current_epoch})
         # Aggregate outputs
         y_hat = torch.cat(self.y_hats, dim=0)
         y_true = torch.cat(self.ys, dim=0)
@@ -173,7 +244,7 @@ class LightiningNN(L.LightningModule):
         # Generate scatter plots if requested
         if self.config.get('generate_scatters', False):
             model_name = f"ep_{self.current_epoch}"
-            results_file = os.path.join(self.config['out_dir'], "_" + str(random.randbytes(4).hex()) + "_results.csv")
+            results_file = os.path.join(self.config['out_path'], "_" + str(random.randbytes(4).hex()) + "_results.csv")
 
             # iterate patients
             for patient in self.config['val_samples']:
@@ -216,7 +287,8 @@ class LightiningNN(L.LightningModule):
 
 
     def on_train_epoch_end(self):
-        torch.save(self.state_dict(), self.config["out_dir"] + "/latest.pth")
+        if not self.config.get('debug'):
+            torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
 
     def on_train_end(self):
         if self.is_online:
@@ -263,7 +335,7 @@ class DINO(L.LightningModule):
         self.num_training_batches = 0
 
     def on_fit_start(self):
-        os.makedirs(self.config["out_dir"], exist_ok=True)
+        os.makedirs(self.config["out_path"], exist_ok=True)
 
     def update_lr(self, lr):
         self.lr = lr
@@ -334,23 +406,25 @@ class DINO(L.LightningModule):
         }
 
     def on_train_epoch_end(self):
-        latest_path = os.path.join(self.config['out_dir'], 'latest.pth')
-        torch.save(self.state_dict(), latest_path)
+        if not self.config.get('debug'):
+            latest_path = os.path.join(self.config['out_path'], 'latest.pth')
+            torch.save(self.state_dict(), latest_path)
 
     def on_validation_start(self):
         self.current_loss = torch.tensor(0.).to(self.device)
 
     def on_validation_end(self):
         # Always save latest after validation
-        latest_path = os.path.join(self.config['out_dir'], 'latest.pth')
-        torch.save(self.state_dict(), latest_path)
+        if not self.config.get('debug'):
+            latest_path = os.path.join(self.config['out_path'], 'latest.pth')
+            torch.save(self.state_dict(), latest_path)
 
         # Save and log best model only if improved
         if self.current_loss < self.best_loss:
             self.best_loss = self.current_loss
             wandb.run.summary['best_val_loss'] = self.best_loss
             wandb.run.summary['best_val_epoch'] = self.current_epoch
-            best_path = os.path.join(self.config['out_dir'], 'best_model.pth')
+            best_path = os.path.join(self.config['out_path'], 'best_model.pth')
             torch.save(self.state_dict(), best_path)
             wandb.log({'epoch': self.current_epoch})
 

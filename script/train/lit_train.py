@@ -14,7 +14,8 @@ import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.profilers import PyTorchProfiler
-from lightning.pytorch.tuner.tuning import Tuner        # ➊  NEW
+from lightning.pytorch.tuner.tuning import Tuner
+import itertools
 
 # Local application imports
 from script.model.lit_model import get_model
@@ -96,7 +97,27 @@ class TrainerPipeline:
         if self.is_online:
             self.project   = self.wandb_run.project
             if self.is_sweep:
-                name = ", ".join(f"{k}: {self.config.get(k)}" for k in self.wandb_run.config.sweep_parameter_names)
+                ABBR = {
+                    "learning_rate": "lr",
+                    "batch_size": "bs",
+                    "dropout_rate": "dr",
+                    "loss_fn_swtich": "loss",
+                    "encoder_type": "encdr",
+                    "middle_layer_features": "mfeatures",
+                    "gene_data_filename": "file",
+                    "freeze_pretrained": "f_encdr",
+                    "one_linear_out_layer": "1linLr",
+                    "use_leaky_relu": "lkReLu",
+                    "use_early_stopping": "eStop"
+                }
+
+                parts = []
+                for k in self.wandb_run.config.sweep_parameter_names:
+                    short = ABBR.get(k, k)
+                    val = self.config.get(k)
+                    parts.append(f"{short}={val}")
+
+                name = ", ".join(parts)
             else:
                 name = self.config["project"] + " " + self.config["name"]
             self.wandb_run.name = name
@@ -170,28 +191,30 @@ class TrainerPipeline:
         model: L.LightningModule,
         train_loader: torch.utils.data.DataLoader,
     ) -> float:
-        if self.config.get("debug", False):
-            lr = self.config.get("learning_rate", 1e-4)
-            log.info("[LR-TUNER] Debug mode – using fixed lr = %.2e", lr)
-        elif self.config["loss_fn_switch"] in {"WMSE", "weighted MSE"}:
-            lr = self.config.get("learning_rate", 1e-3)  # don’t search
-        else:
-            tuner      = Tuner(trainer)
-            lr_finder  = tuner.lr_find(
-                model,
-                train_dataloaders=train_loader,
-                num_training=self.config.get("lr_find_steps", 300),
-            )
-            lr = lr_finder.suggestion()
-            if lr is None:
-                raise ValueError("lr_finder did not find a solution")
-            log.info("[LR-TUNER] Suggested lr = %.2e", lr)
+        lr = self.config.get("fix_learning_Rate", None)
+        if lr is None:
+            if self.config.get("debug", False):
+                lr = self.config.get("learning_rate", 1e-4)
+                log.info("[LR-TUNER] Debug mode – using fixed lr = %.2e", lr)
+            elif self.config["loss_fn_switch"] in {"WMSE", "weighted MSE"}:
+                lr = self.config.get("learning_rate", 1e-3)  # don’t search
+            else:
+                tuner      = Tuner(trainer)
+                lr_finder  = tuner.lr_find(
+                    model,
+                    train_dataloaders=train_loader,
+                    num_training=self.config.get("lr_find_steps", 300),
+                )
+                lr = lr_finder.suggestion()
+                if lr is None:
+                    raise ValueError("lr_finder did not find a solution")
+                log.info("[LR-TUNER] Suggested lr = %.2e", lr)
 
-        model.update_lr(lr)
-        self.config["learning_rate"] = lr
+            model.update_lr(lr)
+            self.config["learning_rate"] = lr
 
-        if self.wandb_run is not None:
-            self.wandb_run.log({"tuned_lr": lr})
+            if self.wandb_run is not None:
+                self.wandb_run.log({"tuned_lr": lr})
 
         return lr
 
@@ -206,21 +229,37 @@ class TrainerPipeline:
 
         # learning rate tuning
         self.config.setdefault("learning_rate", 1e-3) # init learning rate
+        param_grid = {
+            "lr_find_steps": [1000],
+            "early_stop_threshold": [None],
+        }
+
+        # prepare the trainer (we'll reuse it each run)
         tmp_trainer = L.Trainer(
-            accelerator="gpu", devices=self.config.get("devices", 1),
-            max_epochs=1, logger=False, enable_checkpointing=False
+            accelerator="gpu",
+            devices=self.config.get("devices", 1),
+            max_epochs=1,
+            logger=False,
+            enable_checkpointing=False
         )
+
         lr_finder = Tuner(tmp_trainer).lr_find(
             model, train_dataloaders=train_loader,
             num_training=self.config.get("lr_find_steps", 300),
+            enable_checkpointing=False
 
         )
-        if self.debug:
-            new_lr = 0.001
-        else:
-            new_lr = lr_finder.suggestion()
+        # store all results here
+        new_lr = self.config.get("fix_learing_rate", None)
         if new_lr is None:
-            raise ValueError("lr_finder did not find a learning rate")
+            # loop over every combination of (steps, min_lr, max_lr, early_stop_threshold)
+            if self.debug:
+                new_lr = 0.01
+            else:
+                new_lr = lr_finder.suggestion()
+            if new_lr is None:
+                raise ValueError("lr_finder did not find a learning rate")
+        print(f"Using learning rate: {new_lr}")
         model.update_lr(new_lr)
         self.config["learning_rate"] = new_lr
         if self.is_online:
