@@ -15,6 +15,8 @@ from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.profilers import PyTorchProfiler
 from lightning.pytorch.tuner.tuning import Tuner
+from lightning.pytorch.callbacks import LearningRateMonitor
+
 import itertools
 
 # Local application imports
@@ -168,17 +170,21 @@ class TrainerPipeline:
                 )
             )
 
+        callbacks = []
+        if self.config.get("use_early_stopping", False):
+            callbacks.append([EarlyStopping(
+                    monitor=f"val_{self.config['loss_fn_switch']}",
+                    mode="min",
+                    patience=self.config.get("patience", 10)
+                )])
+        callbacks.append(LearningRateMonitor(logging_interval="step"))
         trainer = L.Trainer(
             max_epochs=self.config["epochs"] if not self.config.get("debug", False) else 2,
             logger=self.logger,
             log_every_n_steps=self.config.get("log_every_n_steps", 1),
             enable_checkpointing=self.config.get("enable_checkpointing", False),
             precision=16 if self.device == "gpu" else 32,
-            callbacks=[EarlyStopping(
-                monitor=f"val_{self.config['loss_fn_switch']}",
-                mode="min",
-                patience=self.config.get("patience", 10)
-            )] if self.config.get("use_early_stopping", False) else [],
+            callbacks=callbacks,
             profiler=profiler,
             accelerator="gpu",
             devices=self.config.get("devices", 1)
@@ -225,7 +231,6 @@ class TrainerPipeline:
         val_loader = data_module.val_dataloader()
         self.config["out_dir"] = self.out_dir
         model = get_model(self.config)
-        model.set_num_training_batches(len(train_loader))
 
         # learning rate tuning
         self.config.setdefault("learning_rate", 1e-3) # init learning rate
