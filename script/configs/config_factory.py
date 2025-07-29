@@ -3,7 +3,6 @@ from typing import Any, Dict, List
 
 # Load a YAML configuration file from the given path
 def load_user_config(path: str) -> Dict[str, Any]:
-    with open(path, 'r') as f:
         return yaml.safe_load(f)
 
 
