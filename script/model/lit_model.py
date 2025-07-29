@@ -29,22 +29,26 @@ sys.path.insert(0, '..')
 from script.model.loss_functions import MultiGeneWeightedMSE
 from lit_ae import SparseAutoencoder
 
-def load_model(path, config):
-    device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-
-
-    if "encoder_out_dim" not in config:
-        config["encoder_out_dim"] = 1000
-    if "middle_layer_features" not in config:
-        config["middle_layer_features"] = 64
-    model = LightiningNN(config)
-    model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
-    return model
+def load_model(path: str, config: Dict[str, Any]) -> L.LightningModule:
+    """
+    Load a encoder model checkpoint into a LightningModule for inference.
+    """
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
+    model = GeneExpressionRegressor(config)
+    state = torch.load(path, map_location=device)
+    model.load_state_dict(state, strict=False)
+    model.to(device).eval()
 
 def get_model(config):
-    return LightiningNN(config)
+    return GeneExpressionRegressor(config)
 
-class LightiningNN(L.LightningModule):
+class GeneExpressionRegressor(L.LightningModule):
     def __init__(self, config):
         super().__init__()
 
