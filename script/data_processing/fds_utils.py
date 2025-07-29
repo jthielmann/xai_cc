@@ -66,7 +66,7 @@ def query_yes_no(question):
 
 def prepare_folders(args):
     folders_util = [args.store_root, os.path.join(args.store_root, args.store_name)]
-    if os.path.exists(folders_util[-1]) and not args.resume and not args.pretrained and not args.evaluate:
+    if os.path.exists(folders_util[-1]) and not args.resume and not args.encoder and not args.evaluate:
         if query_yes_no('overwrite previous folder: {} ?'.format(folders_util[-1])):
             shutil.rmtree(folders_util[-1])
             print(folders_util[-1] + ' removed.')

@@ -21,10 +21,10 @@ class DINO(L.LightningModule):
 
         backbone_name = self.config['encoder_type']
         if backbone_name == "resnet18":
-            resnet = torchvision.models.resnet18(pretrained=False)
+            resnet = torchvision.models.resnet18(encoder=False)
             input_dim = 512
         elif backbone_name == "resnet50":
-            resnet = torchvision.models.resnet50(pretrained=False)
+            resnet = torchvision.models.resnet50(encoder=False)
             input_dim = 2048
         else:
             raise ValueError(f"Unsupported backbone {backbone_name}")

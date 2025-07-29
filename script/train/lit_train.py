@@ -6,7 +6,7 @@ import os
 import json
 import logging
 from pathlib import Path
-
+import copy
 # Third-party imports
 import torch
 import wandb
@@ -16,6 +16,10 @@ from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.profilers import PyTorchProfiler
 from lightning.pytorch.tuner.tuning import Tuner
 from lightning.pytorch.callbacks import LearningRateMonitor
+from wandb.wandb_run import Run
+from typing import Optional, cast, Any
+import numpy as np
+
 
 import itertools
 
@@ -89,7 +93,7 @@ def _determine_device() -> str:
 
 class TrainerPipeline:
     def __init__(self, config: dict, run: wandb.sdk.wandb_run.Run):
-        self.wandb_run = run
+        self.wandb_run: Optional[Run] = run
         self.config    = config
         self.debug     = self.config.get("debug")
 
@@ -107,7 +111,7 @@ class TrainerPipeline:
                     "encoder_type": "encdr",
                     "middle_layer_features": "mfeatures",
                     "gene_data_filename": "file",
-                    "freeze_pretrained": "f_encdr",
+                    "freeze_encoder": "f_encdr",
                     "one_linear_out_layer": "1linLr",
                     "use_leaky_relu": "lkReLu",
                     "use_early_stopping": "eStop"
@@ -134,7 +138,7 @@ class TrainerPipeline:
         required = [
             "genes", "train_samples", "val_samples",
             "data_dir", "batch_size", "epochs",
-            "loss_fn_switch", "encoder_type", "pretrained_out_dim"
+            "loss_fn_switch", "encoder_type", "encoder_out_dim"
         ]
         missing = [k for k in required if k not in config]
         if missing:
@@ -191,38 +195,101 @@ class TrainerPipeline:
         )
         return trainer
 
+    def _read_max_lr_from_finder(self, lr_finder):
+        lrs   = np.array(lr_finder.results["lr"])
+        loss  = np.array(lr_finder.results["loss"])
+
+
+        # replicate Lightning's notion of "diverging"
+        best_so_far = np.minimum.accumulate(loss)
+        thresh = 4.0  # match early_stop_threshold you used
+        diverge = loss > thresh * best_so_far
+
+        # index of first divergence; if none, fall back to last point
+        idx = np.argmax(diverge)
+        if not diverge.any() or idx == 0:
+            max_stable_lr = lrs[-1]
+        else:
+            max_stable_lr = lrs[idx-1]
+
+        return max_stable_lr.item()
+
     def tune_learning_rate(
         self,
         trainer: L.Trainer,
         model: L.LightningModule,
         train_loader: torch.utils.data.DataLoader,
-    ) -> float:
-        lr = self.config.get("fix_learning_Rate", None)
-        if lr is None:
-            if self.config.get("debug", False):
-                lr = self.config.get("learning_rate", 1e-4)
-                log.info("[LR-TUNER] Debug mode – using fixed lr = %.2e", lr)
-            elif self.config["loss_fn_switch"] in {"WMSE", "weighted MSE"}:
-                lr = self.config.get("learning_rate", 1e-3)  # don’t search
-            else:
-                tuner      = Tuner(trainer)
-                lr_finder  = tuner.lr_find(
-                    model,
-                    train_dataloaders=train_loader,
-                    num_training=self.config.get("lr_find_steps", 300),
-                )
-                lr = lr_finder.suggestion()
-                if lr is None:
-                    raise ValueError("lr_finder did not find a solution")
-                log.info("[LR-TUNER] Suggested lr = %.2e", lr)
+    ) -> dict[str, float]:
+        freeze_encoder = bool(self.config.get("freeze_encoder", False))
+        steps          = int(self.config.get("lr_find_steps", 300))
+        early_stop     = self.config.get("early_stop_threshold", None)
+        debug          = bool(self.config.get("debug", False))
 
-            model.update_lr(lr)
-            self.config["learning_rate"] = lr
+        # Build target groups
+        target_groups = []
+        if not freeze_encoder:
+            target_groups.append(
+                {"log_name": "encoder", "key": "encoder", "params": list(model.encoder.parameters())}
+            )
+        for g in self.config["genes"]:
+            target_groups.append(
+                {"log_name": f"head_{g}", "key": g, "params": list(getattr(model, g).parameters())}
+            )
+
+        # If a fixed LR is provided, return per-group LRs
+        fixed_lr_raw = self.config.get("fix_learning_Rate", -1)  # keep original key name
+        fixed_lr = float(fixed_lr_raw) if fixed_lr_raw is not None else -1.0
+        if fixed_lr != -1.0:
+            return {tg["key"]: fixed_lr for tg in target_groups}
+
+        # Lightweight temporary trainer just for LR finding
+        tmp_trainer = L.Trainer(accelerator="auto", devices=self.config.get("devices", 1), max_epochs=1, logger=False, enable_checkpointing=False)
+        # Save model weights so each group starts from the same state
+        base_state = copy.deepcopy(model.state_dict())
+
+        tuned_max_lrs: dict[str, float] = {}
+        for tg in target_groups:
+            name   = tg["log_name"]
+            key    = tg["key"]
+            params = tg["params"]
+
+            # Reset weights
+            model.load_state_dict(base_state)
+
+            # Freeze all, then unfreeze only the current group
+            for p in model.parameters():
+                p.requires_grad = False
+            for p in params:
+                p.requires_grad = True
+
+            # Find LR for this group
+            lr_finder = Tuner(tmp_trainer).lr_find(
+                model,
+                train_dataloaders=train_loader,
+                num_training=steps,
+                early_stop_threshold=early_stop# None means disabled
+            )
+            lr = lr_finder.suggestion()
+            if lr is None:
+                raise ValueError("no learning rate found")
+
+            max_lr = self._read_max_lr_from_finder(lr_finder)
+            scale = self.config["lr_scale"]
+            candidate_lr = max_lr * scale
+            tuned_max_lrs[key] = max_lr
 
             if self.wandb_run is not None:
-                self.wandb_run.log({"tuned_lr": lr})
+                run = cast(Run, self.wandb_run)
+                run.log(data={f"tuned_lr/{name}": float(lr), f"max_lr/{name}": float(max_lr)})
 
-        return lr
+            # Restore default requires_grad (respect freeze setting)
+            for p in model.parameters():
+                p.requires_grad = True
+            if freeze_encoder:
+                for p in model.encoder.parameters():
+                    p.requires_grad = False
+
+            return tuned_max_lrs
 
     def run(self):
         data_module = get_data_module(self.config)
@@ -250,8 +317,7 @@ class TrainerPipeline:
 
         lr_finder = Tuner(tmp_trainer).lr_find(
             model, train_dataloaders=train_loader,
-            num_training=self.config.get("lr_find_steps", 300),
-            enable_checkpointing=False
+            num_training=self.config.get("lr_find_steps", 300)
 
         )
         # store all results here

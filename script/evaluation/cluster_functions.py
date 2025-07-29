@@ -42,19 +42,19 @@ def cluster(model, data_dir, samples, genes, out_dir, debug=False):
 
 
 def get_composite_layertype_layername(model):
-    if type(model.pretrained).__name__ == "VGG":
+    if type(model.encoder).__name__ == "VGG":
         composite = EpsilonPlusFlat(canonizers=[VGGCanonizer()])
-        layer_type = model.pretrained.classifier[-1].__class__
-        print(model.pretrained.classifier[-1])
+        layer_type = model.encoder.classifier[-1].__class__
+        print(model.encoder.classifier[-1])
         layer_name = get_layer_names(model, [nn.Linear])[-3]
-    elif type(model.pretrained).__name__ == "encoder":
+    elif type(model.encoder).__name__ == "encoder":
         return None, None, None
         composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
-        layer_type = model.pretrained.encoder.encoder[-1][-1].conv2[0].__class__
+        layer_type = model.encoder.encoder.encoder[-1][-1].conv2[0].__class__
         layer_name = get_layer_names(model, [layer_type])[-1]
     else:
         composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
-        layer_type = model.pretrained.layer1[0].__class__
+        layer_type = model.encoder.layer1[0].__class__
         # select last bottleneck module
         layer_name = get_layer_names(model, [layer_type])[-1]
     return composite, layer_type, layer_name

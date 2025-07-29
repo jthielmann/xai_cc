@@ -33,8 +33,8 @@ def load_model(path, config):
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 
-    if "pretrained_out_dim" not in config:
-        config["pretrained_out_dim"] = 1000
+    if "encoder_out_dim" not in config:
+        config["encoder_out_dim"] = 1000
     if "middle_layer_features" not in config:
         config["middle_layer_features"] = 64
     model = LightiningNN(config)
@@ -51,8 +51,8 @@ class LightiningNN(L.LightningModule):
         self.config = config
         self.learning_rate = self.config.get("learning_rate", 1e-3)
         self.encoder = get_encoder(self.config["encoder_type"])
-        self.freeze_pretrained = self.config['freeze_pretrained']
-        if self.freeze_pretrained:
+        self.freeze_encoder = self.config['freeze_encoder']
+        if self.freeze_encoder:
             for p in self.encoder.parameters(): p.requires_grad = False
 
         for gene in self.config['genes']:
@@ -60,10 +60,10 @@ class LightiningNN(L.LightningModule):
             relu_instance = relu_type()
 
             layer = (
-                nn.Sequential(relu_instance, nn.Linear(self.config['pretrained_out_dim'], 1))
+                nn.Sequential(relu_instance, nn.Linear(self.config['encoder_out_dim'], 1))
                 if self.config['one_linear_out_layer']
                 else nn.Sequential(
-                    nn.Linear(self.config['pretrained_out_dim'], self.config['middle_layer_features']),
+                    nn.Linear(self.config['encoder_out_dim'], self.config['middle_layer_features']),
                     relu_instance,
                     nn.Linear(self.config['middle_layer_features'], 1),
                 )
@@ -73,7 +73,7 @@ class LightiningNN(L.LightningModule):
             pos = config.get("sae_position", "pre")
             if pos == "pre":
                 # SAE on the *features* coming *out* of the CNN
-                d_in     = config["pretrained_out_dim"]
+                d_in     = config["encoder_out_dim"]
                 d_hidden = config["sae_hidden_dim"]
                 k        = config["sae_k"]
                 self.sae_pre  = SparseAutoencoder(d_in, d_hidden, k)
@@ -116,7 +116,7 @@ class LightiningNN(L.LightningModule):
         B = x.size(0)
 
         # 1) CNN encoder always runs on the 4D image
-        z = self.encoder(x)  # z: (B, pretrained_out_dim)
+        z = self.encoder(x)  # z: (B, encoder_out_dim)
 
         # 2) PRE‐SAE: sparsify those features, if requested
         if self.sae_pre:

@@ -27,20 +27,20 @@ def get_encoder(encoder_type):
     if encoder_type == "dino":
         encoder = torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
     elif encoder_type == "resnet50random":
-        encoder = models.resnet50(pretrained=False)
+        encoder = models.resnet50(encoder=False)
     else:
         raise ValueError("encoder not found")
     return encoder
 
 
-def get_pretrained_output_dim(encoder_type):
+def get_encoder_output_dim(encoder_type):
     if encoder_type == "dino":
-        pretrained_out_dim = 2048
+        encoder_out_dim = 2048
     elif encoder_type == "resnet50random":
-        pretrained_out_dim = 1000
+        encoder_out_dim = 1000
     else:
         raise ValueError("encoder not found")
-    return pretrained_out_dim
+    return encoder_out_dim
 
 
 dino_config = {
@@ -59,7 +59,7 @@ dino_config = {
     "use_transforms_in_model": False,
     "mean": None,
     "std": None,
-    "pretrained_out_dim": get_pretrained_output_dim(encoder_type),
+    "encoder_out_dim": get_encoder_output_dim(encoder_type),
     "do_hist_generation": True,
     "bins": data_bins,
     "do_profile": False,

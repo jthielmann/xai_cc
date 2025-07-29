@@ -23,7 +23,7 @@ parameters:
     value: [IDO1, CD14, CPVL, C1QA, AIF1, S100A8, S100A9, IL1B, CD68, CD163, FCGR3A, BATF3, IRF8, CD19, MS4A1, CD79A, CD79B, FCRL5, CXCR5, BCL6, SDC1, CD38, CD27, CD3D, CCL5, SIRPG, CD40LG, CD4, TRAT1, CD69, RORA, CD8A, NKG7, GZMA, GZMB, GZMK, PRF1, FOXP3, IL2RA, TIGIT, CTLA4, CD226, TNFRSF18, VWA5A, LTC4S, PDCD1, CD274]
   error_metric_name:
     value: MSE
-  pretrained_out_dim:
+  encoder_out_dim:
     value: 2048
   middle_layer_features:
     value: 200
@@ -49,5 +49,5 @@ parameters:
   # hyperparams
   bins:
     values: [1, 2, 3, 5, 8, 10]
-  freeze_pretrained:
+  freeze_encoder:
     value: true

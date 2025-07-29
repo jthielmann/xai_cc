@@ -10,7 +10,7 @@ def get_encoder(encoder_type: str) -> nn.Module:
     if encoder_type == "dino":
         return torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
     if encoder_type == "resnet50random":
-        return models.resnet50(pretrained=False)
+        return models.resnet50(encoder=False)
     if encoder_type == "resnet50imagenet":
         return models.resnet50(weights="IMAGENET1K_V2")
     if encoder_type == "unimodel":
@@ -48,7 +48,7 @@ def load_uni_model():
     return model
 
 
-def get_pretrained_out_dim(encoder_type: str) -> int:
+def get_encoder_out_dim(encoder_type: str) -> int:
     return 2048 if encoder_type == "dino" else 1000
 
 

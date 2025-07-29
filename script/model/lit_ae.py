@@ -47,11 +47,11 @@ class Autoencoder(L.LightningModule):
         self.save_hyperparameters(config)          # ← logs to Lightning / W&B
 
         self.encoder = get_encoder(config["encoder_type"])
-        if config.get("freeze_pretrained", False):
+        if config.get("freeze_encoder", False):
             for p in self.encoder.parameters():
                 p.requires_grad = False
 
-        in_dim  = config["pretrained_out_dim"]
+        in_dim  = config["encoder_out_dim"]
         hid_dim = config.get("middle_layer_features", 256)
         out_dim = config["ae_out_features"]
 

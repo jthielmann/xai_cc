@@ -21,7 +21,7 @@ parameters:
     value: 32
   genes:
     value: [RUBCNL]
-  pretrained_out_dim:
+  encoder_out_dim:
     value: 2048
   middle_layer_features:
     value: 200
@@ -48,5 +48,5 @@ parameters:
     values: [0.1, 0.01, 0.001]
   bins:
     values: [1, 2, 3, 5, 8, 10]
-  freeze_pretrained:
+  freeze_encoder:
     value: true

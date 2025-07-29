@@ -23,7 +23,7 @@ parameters:
     value: [RUBCNL]
   error_metric_name:
     value: WMSE
-  pretrained_out_dim:
+  encoder_out_dim:
     value: 2048
   middle_layer_features:
     value: 200
@@ -54,5 +54,5 @@ parameters:
   sae_k:
     values: [16,32]
   # hyperparams
-  freeze_pretrained:
+  freeze_encoder:
     value: true

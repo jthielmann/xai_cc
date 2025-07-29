@@ -153,8 +153,8 @@ if __name__ == "__main__":
     import os
     from torchvision import models
 
-    # Load a pretrained ResNet50 and modify it to output features.
-    resnet50 = models.resnet50(pretrained=True)
+    # Load a encoder ResNet50 and modify it to output features.
+    resnet50 = models.resnet50(encoder=True)
     resnet50.fc = torch.nn.Identity()  # Remove final classification layer
     model_path = "../models/bins 10/ResNet_ep_40_lr_0.01_resnet50random_MSELoss_False_CRC_N19_32_RUBCNL/best_model.pth"
     config_path = "../models/bins 10/ResNet_ep_40_lr_0.01_resnet50random_MSELoss_False_CRC_N19_32_RUBCNL/config.json"
