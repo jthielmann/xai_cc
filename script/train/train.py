@@ -34,13 +34,13 @@ def seed_everything(seed=DEFAULT_RANDOM_SEED):
 seed_everything(seed=DEFAULT_RANDOM_SEED)
 
 
-def train_epoch(model, device, dataloader, criterion, optimizer, freeze_pretrained, error_metric):
+def train_epoch(model, device, dataloader, criterion, optimizer, freeze_encoder, error_metric):
     train_loss = 0.0
     batch_corr_train = 0.0
     model.train()
-    if freeze_pretrained:
-        model.pretrained.eval()
-        for param in model.pretrained.parameters():
+    if freeze_encoder:
+        model.encoder.eval()
+        for param in model.encoder.parameters():
             param.required_grad = False
     for images, labels, path in dataloader:
         images = images.to(device)
@@ -84,7 +84,7 @@ def valid_epoch(model, device, dataloader, criterion, error_metric):
 
 
 def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, learning_rate, batch_size, genes,
-             freeze_pretrained=False, pretrained_path=None,
+             freeze_encoder=False, encoder_path=None,
              error_metric=lambda a, b: stats.pearsonr(a[:, 0].cpu().detach().numpy(), b[:, 0].cpu().detach().numpy())[0],
              error_metric_name="pearson corr", meta_data_dir_name="meta_data", use_default_samples=True, debug=False,
              samples=None):
@@ -104,10 +104,10 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
     if not debug:
         with open(model_save_dir + "/settings.json", "w") as file:
             json_dict = {'model_type': model.model_type, 'data_dir': data_dir, 'random_weights': model.random_weights,
-                         'dropout': model.dropout, 'drop_out_rate': model.dropout_value, 'pretrained_out_dim': str(model.pretrained_out_dim),
+                         'dropout': model.dropout, 'drop_out_rate': model.dropout_value, 'encoder_out_dim': str(model.encoder_out_dim),
                          'loss_fn': str(loss_fn), 'learning_rate': learning_rate, 'batch_size': batch_size, 'genes': genes,
                          'epochs': epochs, 'optimizer': str(optimizer), 'scheduler': str(scheduler), 'device': device,
-                         'freeze_pretrained': freeze_pretrained, 'pretrained_path': str(pretrained_path)}
+                         'freeze_encoder': freeze_encoder, 'encoder_path': str(encoder_path)}
             json.dump(json_dict, file)
 
     # Defining training and validation history dictionary
@@ -129,7 +129,7 @@ def training_multi(model, data_dir, model_save_dir, epochs, loss_fn, optimizer, 
         # Load data into Dataloader
         print("train")
         training_loss, training_corr = train_epoch(model, device, train_loader, loss_fn, optimizer,
-                                                   freeze_pretrained, error_metric)
+                                                   freeze_encoder, error_metric)
         train_loss = (training_loss / len(train_loader.dataset)) * 1000
         train_corr = training_corr / len(train_loader)
         print("valid")

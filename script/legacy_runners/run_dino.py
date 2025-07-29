@@ -44,7 +44,7 @@ epochs = 40
 freeze_bool = [False, True]
 use_default_samples = False
 appendix = "_dino_imagenet"
-pretrained_path = "models/resnet50/dino_original/dino_resnet50_pretrain.pth"
+encoder_path = "models/resnet50/dino_original/dino_resnet50_pretrain.pth"
 debug = False
 for genes in gene_lists:
     dir_name_base = "/" + genes[0]
@@ -53,9 +53,9 @@ for genes in gene_lists:
         dir_name_base += "_" + gene
 
     for model_type in model_types:
-        for do_freeze_pretrained in freeze_bool:
+        for do_freeze_encoder in freeze_bool:
             dir_name = output_dir + model_type + dir_name_base
-            if do_freeze_pretrained:
+            if do_freeze_encoder:
                 dir_name += "_freeze"
             if appendix:
                 dir_name += appendix
@@ -69,12 +69,12 @@ for genes in gene_lists:
             if not debug:
                 os.makedirs(dir_name, exist_ok=True)
 
-            model = general_model(model_type, genes, pretrained_path=pretrained_path, pretrained_out_dim=2048, middel_layer_features=512)
+            model = general_model(model_type, genes, encoder_path=encoder_path, encoder_out_dim=2048, middel_layer_features=512)
             print(dir_name)
             print(len(dir_name))
 
             params = []
-            params.append({"params": model.pretrained.parameters(), "lr": learning_rate})
+            params.append({"params": model.encoder.parameters(), "lr": learning_rate})
             for gene in genes:
                 params.append({"params": getattr(model, gene).parameters(), "lr": learning_rate})
             losses = [nn.MSELoss()]
@@ -88,10 +88,10 @@ for genes in gene_lists:
                            learning_rate=learning_rate,
                            batch_size=128,
                            genes=genes,
-                           freeze_pretrained=do_freeze_pretrained,
+                           freeze_encoder=do_freeze_encoder,
                            error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
                            error_metric_name="MSE",
-                           pretrained_path=pretrained_path,
+                           encoder_path=encoder_path,
                            meta_data_dir_name=meta_data_dir,
                            use_default_samples=use_default_samples,
                            debug=debug,

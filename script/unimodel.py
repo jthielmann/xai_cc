@@ -50,17 +50,17 @@ if __name__ == "__main__":
     }
 
 
-    def build_model(pretrained: bool, **kwargs):
+    def build_model(encoder: bool, **kwargs):
         return timm.create_model(
             MODEL_ID,
-            pretrained=pretrained,
+            encoder=encoder,
             cache_dir=CACHE_DIR,
             **kwargs,
         )
 
     if os.path.exists(MODEL_FILE):
         print("loading model from local file")
-        model = build_model(pretrained=False, **timm_kwargs)  # no net access
+        model = build_model(encoder=False, **timm_kwargs)  # no net access
         state_dict = torch.load(MODEL_FILE, map_location="cpu")
         model.load_state_dict(state_dict)
     else:
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         login(token=token)
 
         model = build_model(
-            pretrained=True,
+            encoder=True,
             hf_hub_token=token,   # passed down to hf_hub_download
             **timm_kwargs,
         )

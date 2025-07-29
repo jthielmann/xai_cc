@@ -118,8 +118,7 @@ def main():
             "description": " ".join(get_sweep_parameter_names(raw_cfg))
         }
         # Determine project and sweep directory
-        project = sweep_config["project"] if not read_config_parameter(raw_cfg, "debug") else "debug_" + random.randbytes(
-            4).hex()
+        project = sweep_config["project"] if not read_config_parameter(raw_cfg, "debug") else "debug_" + random.randbytes(4).hex()
         outpath = sweep_config["parameters"].get("out_path").get("value")
         if not os.path.exists(outpath):
             os.makedirs(outpath)

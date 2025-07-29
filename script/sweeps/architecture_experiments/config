@@ -1,4 +1,4 @@
-project: architecture experiments with propper sae fix
+project: architecture experiments with propper sae fix 7
 name: compare cms gene performance
 method: grid
 metric:
@@ -16,15 +16,15 @@ parameters:
   dataset:
     value: CRC_N19
   encoder_type:
-    value: dino
+    value: unimodel
   batch_size:
     value: 64
   genes:
     value: [RUBCNL]
   error_metric_name:
-    value: WMSE
-  pretrained_out_dim:
-    value: 2048
+    value: MSE
+  encoder_out_dim:
+    value: 1536
   middle_layer_features:
     value: 200
   num_workers:
@@ -42,17 +42,17 @@ parameters:
   use_early_stopping:
     value: true
   use_leaky_relu:
-    values: [true, false]
+    value: false
   one_linear_out_layer:
-    values: [true, false]
+    value: true
   sae:
     value: true
   sae_position:
-    values: ["pre","post"]
+    value: 'pre'
   sae_hidden_dim:
     value: 64
   sae_k:
-    values: [16,32]
+    values: [32, 64]
   # hyperparams
-  freeze_pretrained:
-    value: true
+  freeze_encoder:
+    values: [true, false]

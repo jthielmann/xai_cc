@@ -54,7 +54,7 @@ class CRP_Dataset(torch.utils.data.Dataset):
             gene_val = float(row[j])
             gene_vals.append(gene_val)
         e = row["tile"]
-        # apply normalization transforms as for pretrained colon classifier
+        # apply normalization transforms as for encoder colon classifier
         a = self.transforms(a)
         a = a.to(self.device)
         return a, 0
@@ -80,8 +80,8 @@ for model, model_path in models:
     for path in img_paths:
         data = loader.open(path).unsqueeze(0)
         data.requires_grad_(True)
-        #print(type(model.pretrained))
-        if type(model.pretrained).__name__ == "VGG":
+        #print(type(model.encoder))
+        if type(model.encoder).__name__ == "VGG":
             composite = zen.composites.EpsilonPlusFlat(canonizers=[ztv.VGGCanonizer()])
         else:
             composite = zen.composites.EpsilonPlusFlat(canonizers=[ztv.ResNetCanonizer()])
@@ -89,12 +89,12 @@ for model, model_path in models:
         print("selected", type(composite.canonizers[0]).__name__, "for model", model_path)
         attribution = CondAttribution(model, no_param_grad=True)
         #print(model)
-        if type(model.pretrained).__name__ == "VGG":
-            layer_type = model.pretrained.classifier[-1].__class__
-            print(model.pretrained.classifier[-1])
+        if type(model.encoder).__name__ == "VGG":
+            layer_type = model.encoder.classifier[-1].__class__
+            print(model.encoder.classifier[-1])
             layer_name = get_layer_names(model, [nn.Linear])[-3]
         else:
-            layer_type = model.pretrained.layer1[0].__class__
+            layer_type = model.encoder.layer1[0].__class__
             # select last bottleneck module
             layer_name = get_layer_names(model, [layer_type])[-1]
         #print(layer_type)
@@ -123,7 +123,7 @@ for model, model_path in models:
         preprocessing =  T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=preprocessing, path=fv_path)
         saved_files = fv.run(composite, 0, len(dataset), 32, 100)
-        ref_c = fv.get_max_reference(concept_ids, "pretrained.layer4.1", "relevance", (0, 8), composite=composite, plot_fn=None)
+        ref_c = fv.get_max_reference(concept_ids, "encoder.layer4.1", "relevance", (0, 8), composite=composite, plot_fn=None)
 
         plot_grid(ref_c, figsize=(6, 9))
 

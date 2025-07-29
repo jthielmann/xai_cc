@@ -61,11 +61,11 @@ for genes in gene_lists:
         for learning_rate in learning_rates:
             dir_name = output_dir + model_type + dir_name_base
             for use_random_weights in random_weights_bool:
-                for do_freeze_pretrained in freeze_bool:
+                for do_freeze_encoder in freeze_bool:
                     dir_name = output_dir + model_type + dir_name_base
                     if use_random_weights:
                         dir_name += "_random"
-                    if do_freeze_pretrained:
+                    if do_freeze_encoder:
                         dir_name += "_freeze"
                     dir_name += "_lr_" + str(learning_rate)
                     if appendix:
@@ -79,12 +79,12 @@ for genes in gene_lists:
                         continue
                     os.makedirs(dir_name, exist_ok=True)
 
-                    model = general_model(model_type, genes, random_weights=use_random_weights, dropout=False, pretrained_out_dim=1000)
+                    model = general_model(model_type, genes, random_weights=use_random_weights, dropout=False, encoder_out_dim=1000)
                     print(dir_name)
                     print(len(dir_name))
 
                     params = []
-                    params.append({"params": model.pretrained.parameters(), "lr": learning_rate})
+                    params.append({"params": model.encoder.parameters(), "lr": learning_rate})
                     for gene in genes:
                         params.append({"params": getattr(model, gene).parameters(), "lr": learning_rate})
                     losses = [nn.MSELoss()]
@@ -98,7 +98,7 @@ for genes in gene_lists:
                                    learning_rate=learning_rate,
                                    batch_size=128,
                                    genes=genes,
-                                   freeze_pretrained=do_freeze_pretrained,
+                                   freeze_encoder=do_freeze_encoder,
                                    error_metric=lambda x, y: torchmetrics.functional.mean_squared_error(x, y).item(),
                                    error_metric_name="MSE",
                                    meta_data_dir_name=meta_data_dir,

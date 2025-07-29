@@ -27,7 +27,7 @@ class DINO(pl.LightningModule):
         input_dim = 512
         # instead of a resnet you can also use a vision transformer backbone as in the
         # original paper (you might have to reduce the batch size in this case):
-        # backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
+        # backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', encoder=False)
         # input_dim = backbone.embed_dim
 
         self.student_backbone = backbone

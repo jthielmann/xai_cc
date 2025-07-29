@@ -24,7 +24,7 @@ parameters:
     value: 32
   error_metric_name:
     value: DinoLoss
-  pretrained_out_dim:
+  encoder_out_dim:
     value: 2048
   middle_layer_features:
     value: 200

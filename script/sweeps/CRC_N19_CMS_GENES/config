@@ -23,7 +23,7 @@ parameters:
     values: [[TNNT1, AQP5, RAMP1, ADGRG6, SECTM1, DPEP1, CHP2, RUBCNL, SLC9A3, VAV3, MUC2, PIGR, TFF1, KIAA1324, ZBTB7C, SERPINA1, SPOCK1, FBLN1, ANTXR1, TNS1, MYL9, HSPB8], [RUBCNL]]
   error_metric_name:
     value: MSE
-  pretrained_out_dim:
+  encoder_out_dim:
     value: 2048
   middle_layer_features:
     value: 200
@@ -47,7 +47,7 @@ parameters:
     value: false
 
   # hyperparams
-  freeze_pretrained:
+  freeze_encoder:
     value: true
   bins:
     value: 5

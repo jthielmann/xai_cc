@@ -17,7 +17,7 @@ from torchvision.models import vgg13,    VGG13_Weights
 class MyNet(nn.Module):
     def __init__(self):
         super(MyNet, self).__init__()
-        self.pretrained = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        self.encoder = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         self.my_new_layers = nn.Sequential(nn.Linear(1000, 200),
                                            nn.ReLU(),
                                            nn.BatchNorm1d(200),
@@ -29,7 +29,7 @@ class MyNet(nn.Module):
         self.gene1 = nn.Sequential(nn.Linear(10, 5), nn.ReLU(), nn.Linear(5, 1))
 
     def forward(self, x):
-        x = self.pretrained(x)
+        x = self.encoder(x)
         x = self.my_new_layers(x)
         x = self.gene1(x)
         return x.squeeze()
@@ -45,11 +45,11 @@ def get_MyNet(path=None):
 class MyNet2(nn.Module):
     def __init__(self):
         super(MyNet2, self).__init__()
-        self.pretrained = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        self.encoder = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 def get_res50_mynet2(path=None):
@@ -60,15 +60,15 @@ def get_res50_mynet2(path=None):
 
 
 class Res50Dropout(nn.Module):
-    def __init__(self, pretrained=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)):
+    def __init__(self, encoder=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)):
         super(Res50Dropout, self).__init__()
-        self.pretrained = pretrained
+        self.encoder = encoder
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(),
                                    nn.ReLU(),
                                    nn.Linear(200, 1), nn.Dropout())
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 def get_res50_dropout(path=None):
@@ -81,9 +81,9 @@ def get_res50_dropout(path=None):
 # old model from jonas
 # path = "../../models/res50/10082023_RUBCNL_ST_absolute_single_64_NLR_loss_resnet50.pt"
 class MyNet3(nn.Module):
-    def __init__(self, my_pretrained_model):
+    def __init__(self, my_encoder_model):
         super(MyNet3, self).__init__()
-        self.pretrained = my_pretrained_model
+        self.encoder = my_encoder_model
 
         self.my_new_layers = nn.Sequential(nn.Linear(1000, 200),
                                            nn.ReLU(),
@@ -92,19 +92,19 @@ class MyNet3(nn.Module):
                                            nn.Linear(200, 1))
 
     def forward(self, x):
-        x = self.pretrained(x)
+        x = self.encoder(x)
         output = self.my_new_layers(x)
         return output
 
 
 class Res18_1000(nn.Module):
-    def __init__(self, pretrained=resnet18(weights=None)):
+    def __init__(self, encoder=resnet18(weights=None)):
         super(Res18_1000, self).__init__()
-        self.pretrained = pretrained
+        self.encoder = encoder
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 def get_res18_1000(path=None):
@@ -115,13 +115,13 @@ def get_res18_1000(path=None):
 
 
 class Res18(nn.Module):
-    def __init__(self, pretrained=resnet18(weights=None)):
+    def __init__(self, encoder=resnet18(weights=None)):
         super(Res18, self).__init__()
-        self.pretrained = pretrained
+        self.encoder = encoder
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 def load_res18_ciga(path):
@@ -179,48 +179,48 @@ def get_res18(path=None):
 
 
 def get_res18_random():
-    not_pretrained = models.resnet18()
-    return Res18_1000(pretrained=not_pretrained)
+    not_encoder = models.resnet18()
+    return Res18_1000(encoder=not_encoder)
 
 
 class Res50(nn.Module):
-    def __init__(self, pretrained=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)):
+    def __init__(self, encoder=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)):
         super(Res50, self).__init__()
-        self.pretrained = pretrained
+        self.encoder = encoder
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 class Res50_1000(nn.Module):
-    def __init__(self, pretrained=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)):
+    def __init__(self, encoder=resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)):
         super(Res50_1000, self).__init__()
-        self.pretrained = pretrained
+        self.encoder = encoder
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 def get_res50_random_1000():
-    not_pretrained = models.resnet50()
-    return Res50_1000(pretrained=not_pretrained)
+    not_encoder = models.resnet50()
+    return Res50_1000(encoder=not_encoder)
 
 
 def get_res50_random():
-    not_pretrained = models.resnet50()
-    return Res50_1000(pretrained=not_pretrained)
+    not_encoder = models.resnet50()
+    return Res50_1000(encoder=not_encoder)
 
 
 class Res18Dropout(nn.Module):
     def __init__(self, ciga=resnet18(weights=ResNet18_Weights.DEFAULT)):
         super(Res18Dropout, self).__init__()
-        self.pretrained = ciga
+        self.encoder = ciga
         self.gene1 = nn.Sequential(nn.Linear(512, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 def init_res18_dropout(path="../models/res18/tenpercent_resnet18.ckpt"):
@@ -231,11 +231,11 @@ def init_res18_dropout(path="../models/res18/tenpercent_resnet18.ckpt"):
 class Res18Dropout_1000(nn.Module):
     def __init__(self, ciga=resnet18(weights=ResNet18_Weights.DEFAULT)):
         super(Res18Dropout_1000, self).__init__()
-        self.pretrained = ciga
+        self.encoder = ciga
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 def get_res18_dropout_1000(path=None):
@@ -253,13 +253,13 @@ def get_res18_dropout(path=None):
 
 
 class VGG13(nn.Module):
-    def __init__(self, pretrained=models.vgg13(weights=VGG13_Weights.IMAGENET1K_V1)):
+    def __init__(self, encoder=models.vgg13(weights=VGG13_Weights.IMAGENET1K_V1)):
         super(VGG13, self).__init__()
-        self.pretrained = pretrained
+        self.encoder = encoder
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.ReLU(), nn.Linear(200, 1))
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 def get_vgg13(path=None):
@@ -270,18 +270,18 @@ def get_vgg13(path=None):
 
 
 def get_vgg13_random():
-    not_pretrained = models.vgg13()
-    return VGG13(pretrained=not_pretrained)
+    not_encoder = models.vgg13()
+    return VGG13(encoder=not_encoder)
 
 
 class VGG13_Dropout(nn.Module):
     def __init__(self):
         super(VGG13_Dropout, self).__init__()
-        self.pretrained = models.vgg13(weights=VGG13_Weights.IMAGENET1K_V1)
+        self.encoder = models.vgg13(weights=VGG13_Weights.IMAGENET1K_V1)
         self.gene1 = nn.Sequential(nn.Linear(1000, 200), nn.Dropout(), nn.ReLU(), nn.Linear(200, 1), nn.Dropout())
 
     def forward(self, x):
-        return self.gene1(self.pretrained(x))
+        return self.gene1(self.encoder(x))
 
 
 def get_vgg13_dropout(path=None):
@@ -539,52 +539,52 @@ def get_encoder(path):
 
 class general_model(nn.Module):
     def __init__(self, model_type, gene_list, random_weights=False, dropout=False, dropout_value=None,
-                 pretrained_path=None, pretrained_out_dim=1000, middel_layer_features=200):
+                 encoder_path=None, encoder_out_dim=1000, middel_layer_features=200):
         super(general_model, self).__init__()
-        if pretrained_path and random_weights:
-            print("cannot have pretrained_path and random_weights set in general_model")
+        if encoder_path and random_weights:
+            print("cannot have encoder_path and random_weights set in general_model")
             exit(1)
         if model_type == "vgg13":
             if random_weights:
                 weights = None
             else:
                 weights = VGG13_Weights.IMAGENET1K_V1
-            self.pretrained = models.vgg13(weights=weights)
+            self.encoder = models.vgg13(weights=weights)
         elif model_type == "resnet18":
             if random_weights:
                 weights = None
             else:
                 weights = ResNet18_Weights.IMAGENET1K_V1
-            self.pretrained = models.resnet18(weights=weights)
+            self.encoder = models.resnet18(weights=weights)
         elif model_type == "resnet50":
             if random_weights:
                 weights = None
             else:
                 weights = ResNet50_Weights.IMAGENET1K_V2
-            self.pretrained = models.resnet50(weights=weights)
+            self.encoder = models.resnet50(weights=weights)
         elif model_type == "resnet50d":
-            self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
+            self.encoder = timm.create_model(model_type, num_classes=encoder_out_dim)
         elif model_type == "resnet18d":
-            self.pretrained = timm.create_model(model_type, num_classes=pretrained_out_dim)
-        elif model_type == "pretrained_res18":
-            self.pretrained = get_encoder(pretrained_path)
+            self.encoder = timm.create_model(model_type, num_classes=encoder_out_dim)
+        elif model_type == "encoder_res18":
+            self.encoder = get_encoder(encoder_path)
         elif model_type == "resnet50dino":
-            self.pretrained = torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
+            self.encoder = torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
         else:
             print("model type", model_type, "not implemented")
             exit(1)
         for gene in gene_list:
-            setattr(self, gene, nn.Sequential(nn.Linear(pretrained_out_dim, middel_layer_features),nn.ReLU(), nn.Linear(middel_layer_features, 1)))
+            setattr(self, gene, nn.Sequential(nn.Linear(encoder_out_dim, middel_layer_features),nn.ReLU(), nn.Linear(middel_layer_features, 1)))
 
         self.gene_list = gene_list
         self.model_type = model_type
         self.random_weights = random_weights
         self.dropout = None
-        self.pretrained_out_dim = pretrained_out_dim
+        self.encoder_out_dim = encoder_out_dim
         self.dropout_value = dropout_value
 
     def forward(self, x):
-        x = self.pretrained(x)
+        x = self.encoder(x)
         out = []
         for gene in self.gene_list:
             out.append(getattr(self, gene)(x))
@@ -595,7 +595,7 @@ class general_model(nn.Module):
     def save(self, json_path):
         with open(json_path, "w") as f:
             json_dict = {"model_type": self.model_type, "random_weights": self.random_weights, 'gene_list': self.gene_list,
-                         "dropout": self.dropout, "pretrained_output_dim": self.pretrained_out_dim}
+                         "dropout": self.dropout, "encoder_output_dim": self.encoder_out_dim}
             json.dump(json_dict, f)
 
 
@@ -615,14 +615,14 @@ def load_model(model_dir, model_name, json_name="settings.json", log_json=False,
             dropout_value = d["dropout_value"]
         else:
             dropout_value = 0.5
-        pretrained_out_dim = int(d["pretrained_out_dim"])
+        encoder_out_dim = int(d["encoder_out_dim"])
         if "middel_layer_features" in d:
             middel_layer_features = d["middel_layer_features"]
         else:
             middel_layer_features = 200
     success = False
     model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value,
-                          pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
+                          encoder_out_dim=encoder_out_dim, middel_layer_features=middel_layer_features)
     try:
         res = model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
         success = True
@@ -634,7 +634,7 @@ def load_model(model_dir, model_name, json_name="settings.json", log_json=False,
     if not success:
         try:
             middel_layer_features = 512
-            model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
+            model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, encoder_out_dim=encoder_out_dim, middel_layer_features=middel_layer_features)
             res = model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
             success = True
             if not squelch:
@@ -644,7 +644,7 @@ def load_model(model_dir, model_name, json_name="settings.json", log_json=False,
     if not success:
         try:
             middel_layer_features = 1000
-            model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, pretrained_out_dim=pretrained_out_dim, middel_layer_features=middel_layer_features)
+            model = general_model(model_type, gene_list, random_weights, dropout, dropout_value=dropout_value, encoder_out_dim=encoder_out_dim, middel_layer_features=middel_layer_features)
             res = model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu'), weights_only=False))
             success = True
             if not squelch:

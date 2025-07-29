@@ -11,7 +11,7 @@ error_metric_name = loss_fn_switch
 batch_size = 32
 learning_rates = [0.01, 0.1, 0.001, 0.0001] if not debug else [0.01]
 epochs = [40 if not debug else 3]
-freeze_pretrained = True
+freeze_encoder = True
 encoder_type = "dino"
 image_size = 224
 data_bins = [1, 3, 5, 7, 9, 10]
@@ -21,7 +21,7 @@ def get_encoder(encoder_type):
     if encoder_type == "dino":
         encoder = torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
     elif encoder_type == "resnet50random":
-        encoder = models.resnet50(pretrained=False)
+        encoder = models.resnet50(encoder=False)
     elif encoder_type == "resnet50imagenet":
         encoder = models.resnet50(weights="IMAGENET1K_V2")
     else:
@@ -29,14 +29,14 @@ def get_encoder(encoder_type):
     return encoder
 
 
-def get_pretrained_output_dim(encoder_type):
+def get_encoder_output_dim(encoder_type):
     if encoder_type == "dino":
-        pretrained_out_dim = 2048
+        encoder_out_dim = 2048
     elif encoder_type == "resnet50random" or encoder_type == "resnet50imagenet":
-        pretrained_out_dim = 1000
+        encoder_out_dim = 1000
     else:
         raise ValueError("encoder not found")
-    return pretrained_out_dim
+    return encoder_out_dim
 
 
 if dataset == "CRC_N19":
@@ -103,7 +103,7 @@ def get_name(epochs,
              learning_rate,
              encoder_type,
              error_metric_name,
-             freeze_pretrained,
+             freeze_encoder,
              dataset,
              batch_size):
     name = model_name
@@ -111,7 +111,7 @@ def get_name(epochs,
     name += "_lr_" + str(learning_rate)
     name += "_" + encoder_type
     name += "_" + error_metric_name
-    name += "_" + str(freeze_pretrained)
+    name += "_" + str(freeze_encoder)
     name += "_" + dataset
     name += "_" + str(batch_size)
     for gene in genes:
@@ -124,7 +124,7 @@ lit_config = {
     "epochs": epochs,
     "batch_size": batch_size,
     "data_dir": data_dir,
-    "freeze_pretrained": freeze_pretrained,
+    "freeze_encoder": freeze_encoder,
     "train_samples": train_samples,
     "val_samples": val_samples,
     "test_samples": None,
@@ -140,7 +140,7 @@ lit_config = {
     "use_transforms_in_model": False,
     "mean": mean,
     "std": std,
-    "pretrained_out_dim": get_pretrained_output_dim(encoder_type),
+    "encoder_out_dim": get_encoder_output_dim(encoder_type),
     "do_hist_generation": True,
     "bins": data_bins,
     "do_profile": False,
