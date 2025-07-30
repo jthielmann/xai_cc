@@ -6,6 +6,7 @@ import os
 import json
 import logging
 from pathlib import Path
+import copy
 
 # Third-party imports
 import torch
@@ -19,7 +20,7 @@ from lightning.pytorch.callbacks import LearningRateMonitor
 from wandb.wandb_run import Run
 from typing import Optional, cast, Any
 import numpy as np
-
+import torch.nn as nn
 
 import itertools
 
@@ -215,12 +216,14 @@ class TrainerPipeline:
 
         callbacks = []
         if self.config.get("use_early_stopping", False):
-            callbacks.append([EarlyStopping(
+            callbacks.append(EarlyStopping(
                     monitor=f"val_{self.config['loss_fn_switch']}",
                     mode="min",
                     patience=self.config.get("patience", 10)
-                )])
+                ))
         callbacks.append(LearningRateMonitor(logging_interval="step"))
+        for cb in callbacks:
+            print(cb, type(cb))
         trainer = L.Trainer(
             max_epochs=self.config["epochs"] if not self.config.get("debug", False) else 2,
             logger=self.logger,
@@ -255,15 +258,15 @@ class TrainerPipeline:
 
     def tune_learning_rate(
         self,
-        trainer: L.Trainer,
         model: L.LightningModule,
         train_loader: torch.utils.data.DataLoader,
+        val_loader: torch.utils.data.DataLoader,
+        fixed_lr:float=-1
     ) -> dict[str, float]:
         freeze_encoder = bool(self.config.get("freeze_encoder", False))
         steps          = int(self.config.get("lr_find_steps", 300))
         early_stop     = self.config.get("early_stop_threshold", None)
-        debug          = bool(self.config.get("debug", False))
-
+        debug          = self.config.get("debug")
         # Build target groups
         target_groups = []
         if not freeze_encoder:
@@ -276,10 +279,10 @@ class TrainerPipeline:
             )
 
         # If a fixed LR is provided, return per-group LRs
-        fixed_lr_raw = self.config.get("fix_learning_Rate", -1)  # keep original key name
-        fixed_lr = float(fixed_lr_raw) if fixed_lr_raw is not None else -1.0
         if fixed_lr != -1.0:
             return {tg["key"]: fixed_lr for tg in target_groups}
+        if debug:
+            return {tg["key"]: 0.01 for tg in target_groups}
 
         # Lightweight temporary trainer just for LR finding
         tmp_trainer = L.Trainer(accelerator="auto", devices=self.config.get("devices", 1), max_epochs=1, logger=False, enable_checkpointing=False)
@@ -305,21 +308,22 @@ class TrainerPipeline:
             lr_finder = Tuner(tmp_trainer).lr_find(
                 model,
                 train_dataloaders=train_loader,
+                val_dataloaders=val_loader,
                 num_training=steps,
-                early_stop_threshold=early_stop# None means disabled
+                early_stop_threshold=early_stop,
+                attr_name=key+"_lr"
             )
-            lr = lr_finder.suggestion()
-            if lr is None:
+            suggestion = lr_finder.suggestion()
+            if suggestion is None:
                 raise ValueError("no learning rate found")
 
             max_lr = self._read_max_lr_from_finder(lr_finder)
-            scale = self.config["lr_scale"]
-            candidate_lr = max_lr * scale
-            tuned_max_lrs[key] = max_lr
+            candidate_lr = (max_lr + suggestion) / 2
+            tuned_max_lrs[key] = candidate_lr
 
             if self.wandb_run is not None:
                 run = cast(Run, self.wandb_run)
-                run.log(data={f"tuned_lr/{name}": float(lr), f"max_lr/{name}": float(max_lr)})
+                run.log(data={f"tuned_lr/{name}": float(suggestion), f"max_lr/{name}": float(max_lr), f"candidate_lr/{name}": candidate_lr})
 
             # Restore default requires_grad (respect freeze setting)
             for p in model.parameters():
@@ -328,7 +332,30 @@ class TrainerPipeline:
                 for p in model.encoder.parameters():
                     p.requires_grad = False
 
-            return tuned_max_lrs
+        model.load_state_dict(base_state)
+        return tuned_max_lrs
+
+    def tune_head_lrs(self, model, trainer, train_dl, steps=300, early_stop=None):
+        tuner = L.tuner.Tuner(trainer)
+        tuned = {}
+
+        lr_enc = tuner.lr_find(model, attr_name="encoder_lr",
+                               train_dataloaders=train_dl,
+                               num_training=steps,
+                               early_stop_threshold=early_stop)
+        model.encoder_lr = lr_enc.suggestion()
+        tuned["encoder"] = model.encoder_lr
+
+        for g in model.genes:
+            attr = f"{g}_lr"
+            lr_finder = tuner.lr_find(model, attr_name=attr,
+                                      train_dataloaders=train_dl,
+                                      num_training=steps,
+                                      early_stop_threshold=early_stop)
+            setattr(model, attr, lr_finder.suggestion())
+            tuned[g] = getattr(model, attr)
+
+        return tuned
 
     def run(self):
         data_module = get_data_module(self.config)
@@ -340,40 +367,14 @@ class TrainerPipeline:
 
         # learning rate tuning
         self.config.setdefault("learning_rate", 1e-3) # init learning rate
-        param_grid = {
-            "lr_find_steps": [1000],
-            "early_stop_threshold": [None],
-        }
 
-        # prepare the trainer (we'll reuse it each run)
-        tmp_trainer = L.Trainer(
-            accelerator="gpu",
-            devices=self.config.get("devices", 1),
-            max_epochs=1,
-            logger=False,
-            enable_checkpointing=False
-        )
-
-        lr_finder = Tuner(tmp_trainer).lr_find(
-            model, train_dataloaders=train_loader,
-            num_training=self.config.get("lr_find_steps", 300)
-
-        )
         # store all results here
-        new_lr = self.config.get("fix_learing_rate", None)
-        if new_lr is None:
-            # loop over every combination of (steps, min_lr, max_lr, early_stop_threshold)
-            if self.debug:
-                new_lr = 0.01
-            else:
-                new_lr = lr_finder.suggestion()
-            if new_lr is None:
-                raise ValueError("lr_finder did not find a learning rate")
-        print(f"Using learning rate: {new_lr}")
-        model.update_lr(new_lr)
-        self.config["learning_rate"] = new_lr
+        fixed = self.config.get("global_fix_learing_rate", -1)
+        lrs = self.tune_learning_rate(model, train_loader, val_loader, fixed)
+        print(f"Using learning rate: {lrs}")
+        model.update_lr(lrs)
         if self.is_online:
-            self.wandb_run.log({"tuned_lr": new_lr})
+            self.wandb_run.log({"tuned_lr": lrs})
 
         trainer = self._create_trainer()
         trainer.fit(model, train_loader, val_loader)

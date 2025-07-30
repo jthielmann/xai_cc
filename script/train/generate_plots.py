@@ -5,7 +5,7 @@ import os
 import torchmetrics
 
 import pandas as pd
-from script.model.model import load_model
+#from script.model.lit_model import load_model
 import json
 import matplotlib.pyplot as plt
 from io import BytesIO
@@ -144,7 +144,7 @@ def plot_hist_comparison(img_paths, width=4, subplot_size=10, gene=None, appendi
     plt.clf()
 
 
-def gather_genes_and_paths(frame):
+"""def gather_genes_and_paths(frame):
     genes = []
     image_paths_train = []
     image_paths_val = []
@@ -226,7 +226,7 @@ def generate_tile_maps(data_dir, patients, model_info, results_filename):
                 plt.ylabel('Y')
                 plt.title(model_dir + "\ndiff for patient " + patient + " for gene " + gene)
                 plt.savefig(out_put_dir + "/" + gene + "_" + patient + "_diff.png")
-                plt.clf()
+                plt.clf()"""
 
 
 """

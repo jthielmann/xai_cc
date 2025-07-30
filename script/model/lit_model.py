@@ -14,20 +14,15 @@ import matplotlib.pyplot as plt
 from script.data_processing.data_loader import get_dataset, load_best_smoothing, load_gene_weights
 from torch.utils.data import DataLoader
 import random
-
-import copy
-
-from lightly.loss import DINOLoss
-from lightly.models.modules import DINOProjectionHead
-from lightly.models.utils import deactivate_requires_grad, update_momentum
-from lightly.utils.scheduler import cosine_schedule
 import sys
 from io import BytesIO
 from PIL import Image
-from torch.optim.lr_scheduler import OneCycleLR
+from torch.optim.lr_scheduler import OneCycleLR, ChainedScheduler
 sys.path.insert(0, '..')
 from script.model.loss_functions import MultiGeneWeightedMSE
-from lit_ae import SparseAutoencoder
+from script.model.lit_ae import SparseAutoencoder
+from typing import Dict, Any
+
 
 def load_model(path: str, config: Dict[str, Any]) -> L.LightningModule:
     """
@@ -53,7 +48,8 @@ class GeneExpressionRegressor(L.LightningModule):
         super().__init__()
 
         self.config = config
-        self.learning_rate = self.config.get("learning_rate", 1e-3)
+        default_lr = self.config.get("head_lr", 1e-3)
+        self.lrs = None
         self.encoder = get_encoder(self.config["encoder_type"])
         self.freeze_encoder = self.config['freeze_encoder']
         if self.freeze_encoder:
@@ -98,6 +94,8 @@ class GeneExpressionRegressor(L.LightningModule):
 
         self.genes = self.config['genes']
 
+        for g in self.genes:
+            setattr(self, f"{g}_lr", default_lr)
         self.pearson = torchmetrics.PearsonCorrCoef(num_outputs=len(self.genes))
         if self.config["loss_fn_switch"] == "MSE":
             self.loss_fn = nn.MSELoss()
@@ -115,22 +113,22 @@ class GeneExpressionRegressor(L.LightningModule):
             self.table = wandb.Table(columns=["epoch","gene","lr","bins","scatter_plot"])
         if self.is_online:
             wandb.watch(self, log=None)
+        self.encoder_lr = self.config.get("encoder_lr", 1e-3)  # encoder
+        default_head_lr = self.config.get("head_lr", 1e-3)  # heads
+        for g in self.config["genes"]:
+            setattr(self, f"{g}_lr", default_head_lr)
 
     def forward(self, x):
         B = x.size(0)
 
-        # 1) CNN encoder always runs on the 4D image
         z = self.encoder(x)  # z: (B, encoder_out_dim)
 
-        # 2) PRE‐SAE: sparsify those features, if requested
         if self.sae_pre:
             z = self.sae_pre(z)
 
-        # 3) Gene‐heads
         outs = [getattr(self, g)(z) for g in self.genes]
         out  = outs[0] if len(outs)==1 else torch.cat(outs, dim=1)
 
-        # 4) POST‐SAE: sparsify the *final* head outputs
         if self.sae_post:
             out = self.sae_post(out)
 
@@ -157,15 +155,25 @@ class GeneExpressionRegressor(L.LightningModule):
         return loss, y_hat, y
 
     def configure_optimizers(self):
-        lr = getattr(self, "learning_rate", 1e-3)
-        params = [{'params': self.encoder.parameters(), 'lr': lr}]
-        for gene in self.genes:
-            params.append({'params': getattr(self, gene).parameters(), 'lr': self.config['learning_rate']})
-        opt = optim.AdamW(params)
-        total_steps = self.trainer.estimated_stepping_batches  # available in Lightning
-        sched = OneCycleLR(opt, max_lr=self.config["learning_rate"], total_steps=total_steps)
+        groups = []
+        if not self.freeze_encoder:
+            groups.append({
+                "params": self.encoder.parameters(),
+                "lr": self.encoder_lr
+            })
+        for g in self.genes:
+            groups.append({
+                "params": getattr(self, g).parameters(),
+                "lr": getattr(self, f"{g}_lr")
+            })
+        opt = torch.optim.AdamW(groups)
+        sched = torch.optim.lr_scheduler.OneCycleLR(
+            opt,
+            max_lr=[pg["lr"] for pg in groups],
+            total_steps=self.trainer.estimated_stepping_batches
+        )
         return {"optimizer": opt,
-            "lr_scheduler": {"scheduler": sched, "interval": "step"}}
+                "lr_scheduler": {"scheduler": sched, "interval": "step"}}
 
     def on_fit_start(self):          # ← runs before the first batch
         os.makedirs(self.config["out_path"], exist_ok=True)
@@ -239,7 +247,6 @@ class GeneExpressionRegressor(L.LightningModule):
                 buf.seek(0)
                 img = Image.open(buf)
                 if self.is_online:
-
                     self.table.add_data(
                         self.current_epoch,
                         gene,
@@ -260,8 +267,13 @@ class GeneExpressionRegressor(L.LightningModule):
             if hasattr(self, 'table'):
                 wandb.log({'scatter_table': self.table})
 
+    # to update after lr tuning
+    def update_lr(self, lrs):
+        self.lrs = lrs
+        if not self.freeze_encoder:
+            self.encoder_lr = lrs["encoder"]  # encoder
+        for g in self.config["genes"]:
+            setattr(self, f"{g}_lr", lrs[g])
 
-    def update_lr(self, lr):
-        self.learning_rate = lr
-
-
+    def get_lr(self, param_name):
+        return self.lrs[param_name]
