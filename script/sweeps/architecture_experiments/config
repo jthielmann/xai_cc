@@ -1,4 +1,4 @@
-project: architecture experiments with propper sae fix 7
+project: mem test all genes 4
 name: compare cms gene performance
 method: grid
 metric:
@@ -20,11 +20,9 @@ parameters:
   batch_size:
     value: 64
   genes:
-    values: [[TNNT1, AQP5, RAMP1, ADGRG6, SECTM1, DPEP1, CHP2, RUBCNL, SLC9A3, VAV3, MUC2, PIGR, TFF1, KIAA1324, ZBTB7C, SERPINA1, SPOCK1, FBLN1, ANTXR1, TNS1, MYL9, HSPB8], [RUBCNL]]
+    value: [TNNT1, AQP5, RAMP1, ADGRG6, SECTM1, DPEP1, CHP2, RUBCNL, SLC9A3, VAV3, MUC2, PIGR, TFF1, KIAA1324, ZBTB7C, SERPINA1, SPOCK1, FBLN1, ANTXR1, TNS1, MYL9, HSPB8]
   error_metric_name:
     value: MSE
-  encoder_out_dim:
-    value: 1536
   middle_layer_features:
     value: 200
   num_workers:
@@ -32,7 +30,7 @@ parameters:
   loss_fn_switch:
     value: MSE
   gene_data_filename:
-    values: [gene_data_ranknorm.csv, gene_data_log1p.csv]
+    values: [gene_data_ranknorm.csv] #gene_data_log1p.csv,
   image_size:
     value: 224
   out_path:
@@ -44,7 +42,7 @@ parameters:
   use_leaky_relu:
     value: false
   one_linear_out_layer:
-    value: true
+    value: false
   # hyperparams
   freeze_encoder:
-    values: [true, false]
+    values: [true]

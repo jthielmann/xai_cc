@@ -6,7 +6,7 @@ import torchmetrics
 import torch.optim as optim
 import wandb
 from script.data_processing.image_transforms import get_transforms
-from script.model.model_factory import get_encoder
+from script.model.model_factory import get_encoder, infer_encoder_out_dim
 import os
 from script.data_processing.process_csv import generate_results_patient_from_loader
 from script.train.generate_plots import generate_hists_2
@@ -43,6 +43,17 @@ def load_model(path: str, config: Dict[str, Any]) -> L.LightningModule:
 def get_model(config):
     return GeneExpressionRegressor(config)
 
+def get_encoder_output_dim(encoder_type):
+    if encoder_type == "dino":
+        encoder_out_dim = 2048
+    elif encoder_type == "resnet50random" or encoder_type == "resnet50imagenet":
+        encoder_out_dim = 1000
+    elif encoder_type == "unimodel":
+        encoder_out_dim = 1536
+    else:
+        raise ValueError("encoder not found")
+    return encoder_out_dim
+
 class GeneExpressionRegressor(L.LightningModule):
     def __init__(self, config):
         super().__init__()
@@ -54,16 +65,16 @@ class GeneExpressionRegressor(L.LightningModule):
         self.freeze_encoder = self.config['freeze_encoder']
         if self.freeze_encoder:
             for p in self.encoder.parameters(): p.requires_grad = False
-
+        out_dim_encoder = infer_encoder_out_dim(self.encoder)
         for gene in self.config['genes']:
             relu_type = nn.LeakyReLU if self.config.get('use_leaky_relu') else nn.ReLU
             relu_instance = relu_type()
 
             layer = (
-                nn.Sequential(relu_instance, nn.Linear(self.config['encoder_out_dim'], 1))
+                nn.Sequential(relu_instance, nn.Linear(get_encoder_output_dim(self.config['encoder_type']), 1))
                 if self.config['one_linear_out_layer']
                 else nn.Sequential(
-                    nn.Linear(self.config['encoder_out_dim'], self.config['middle_layer_features']),
+                    nn.Linear(out_dim_encoder, self.config['middle_layer_features']),
                     relu_instance,
                     nn.Linear(self.config['middle_layer_features'], 1),
                 )

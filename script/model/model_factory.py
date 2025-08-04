@@ -3,19 +3,39 @@ import torch.nn as nn
 import torchvision.models as models
 from script.configs.config_factory import get_dataset_cfg
 import timm
-import os
-from huggingface_hub import login
+from typing import Tuple
 
 def get_encoder(encoder_type: str) -> nn.Module:
     if encoder_type == "dino":
         return torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
     if encoder_type == "resnet50random":
-        return models.resnet50(encoder=False)
+        return models.resnet50(weights=False)
     if encoder_type == "resnet50imagenet":
         return models.resnet50(weights="IMAGENET1K_V2")
     if encoder_type == "unimodel":
         return load_uni_model()
     raise ValueError(f"Unknown encoder {encoder_type}")
+
+
+def infer_encoder_out_dim(encoder: nn.Module,
+                          input_size: Tuple[int,int,int]=(3,224,224),
+                          device: torch.device=None) -> int:
+    was_training = encoder.training
+    encoder.eval()
+    if device is None:
+        device = next(encoder.parameters()).device
+    dummy = torch.zeros(1, *input_size, device=device)
+    with torch.no_grad():
+        out = encoder(dummy)
+
+    # If encoder outputs spatial maps, flatten them:
+    if out.ndim > 2:
+        out = torch.flatten(out, 1)
+
+    # restore original mode
+    if was_training:
+        encoder.train()
+    return out.size(1)
 
 
 def build_model(**kwargs):

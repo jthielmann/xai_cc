@@ -34,6 +34,8 @@ def get_encoder_output_dim(encoder_type):
         encoder_out_dim = 2048
     elif encoder_type == "resnet50random" or encoder_type == "resnet50imagenet":
         encoder_out_dim = 1000
+    elif encoder_type == "unimodel":
+        encoder_out_dim = 1536
     else:
         raise ValueError("encoder not found")
     return encoder_out_dim

@@ -178,7 +178,7 @@ class TrainerPipeline:
         required = [
             "genes", "train_samples", "val_samples",
             "data_dir", "batch_size", "epochs",
-            "loss_fn_switch", "encoder_type", "encoder_out_dim"
+            "loss_fn_switch", "encoder_type"
         ]
         missing = [k for k in required if k not in config]
         if missing:
@@ -256,6 +256,11 @@ class TrainerPipeline:
 
         return max_stable_lr.item()
 
+    def report_mem(self, msg=""):
+        print(f"{msg} — allocated: "
+              f"{torch.cuda.memory_allocated() / 1e9:.2f} GB, "
+              f"reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
+
     def tune_learning_rate(
         self,
         model: L.LightningModule,
@@ -263,6 +268,7 @@ class TrainerPipeline:
         val_loader: torch.utils.data.DataLoader,
         fixed_lr:float=-1
     ) -> dict[str, float]:
+        self.report_mem("start tuning")
         freeze_encoder = bool(self.config.get("freeze_encoder", False))
         steps          = int(self.config.get("lr_find_steps", 300))
         early_stop     = self.config.get("early_stop_threshold", None)
@@ -287,8 +293,9 @@ class TrainerPipeline:
         # Lightweight temporary trainer just for LR finding
         tmp_trainer = L.Trainer(accelerator="auto", devices=self.config.get("devices", 1), max_epochs=1, logger=False, enable_checkpointing=False)
         # Save model weights so each group starts from the same state
-        base_state = copy.deepcopy(model.state_dict())
-
+        self.report_mem("before deep copy")
+        base_state = model.cpu().state_dict(keep_vars=True)
+        self.report_mem("after deep copy")
         tuned_max_lrs: dict[str, float] = {}
         for tg in target_groups:
             name   = tg["log_name"]
@@ -331,8 +338,12 @@ class TrainerPipeline:
             if freeze_encoder:
                 for p in model.encoder.parameters():
                     p.requires_grad = False
+            self.report_mem("end for loop iteration")
 
+        self.report_mem("end for loop")
         model.load_state_dict(base_state)
+        self.report_mem("end tuning")
+
         return tuned_max_lrs
 
     def tune_head_lrs(self, model, trainer, train_dl, steps=300, early_stop=None):
@@ -371,7 +382,7 @@ class TrainerPipeline:
         # store all results here
         fixed = self.config.get("global_fix_learing_rate", -1)
         lrs = self.tune_learning_rate(model, train_loader, val_loader, fixed)
-        print(f"Using learning rate: {lrs}")
+        print(f"Tuned learning rates: {lrs}")
         model.update_lr(lrs)
         if self.is_online:
             self.wandb_run.log({"tuned_lr": lrs})
@@ -390,10 +401,6 @@ class TrainerPipeline:
         log.info("Finished training")
 
     def _save_summary(self):
-        """
-        Dump a JSON summary of the final config (with status='completed')
-        into out_dir/config.json for record-keeping.
-        """
         serializable_cfg = {k: v for k, v in self.config.items() \
                             if isinstance(v, (str, int, float, bool, list, dict, type(None)))}
         summary = serializable_cfg
