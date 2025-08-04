@@ -15,13 +15,6 @@ import torch.nn.functional as F
 
 class ImageDataset(Dataset):
     def __init__(self, image_paths, transform, image_size=224):
-        """
-        A dataset that loads images from file paths and applies a transform.
-
-        Parameters:
-            image_paths (list): List of file paths to images.
-            transform (callable): Transform to apply to each image.
-        """
         self.image_paths = image_paths
         self.transform = transform
         self.image_size = image_size
@@ -40,22 +33,6 @@ class ImageDataset(Dataset):
 
 
 def create_umap_embedding_efficient(model, loader, batch_size=32, device='cuda', components=2, n_neighbors=15):
-    """
-    Processes images in batches from a list of image file paths to extract features
-    using the provided model, and then computes a 2D UMAP embedding of those features.
-
-    This method is more memory efficient because it doesn't load all images at once.
-
-    Parameters:
-        model (torch.nn.Module): A ResNet50 (or similar) model that outputs feature vectors.
-        image_paths (list): List of image file paths.
-        batch_size (int): Number of images per batch.
-        device (str): 'cuda' or 'cpu'.
-
-    Returns:
-        embedding (np.ndarray): 2D UMAP embedding array of shape (N, 2).
-        originals (list): List of original images (numpy arrays) corresponding to each embedding.
-    """
     model = model.to(device)
     model.eval()
 
@@ -79,15 +56,6 @@ def create_umap_embedding_efficient(model, loader, batch_size=32, device='cuda',
 
 
 def plot_umap_with_images(embedding, tile_paths, title, zoom=0.1, output_path="../out/", components=2):
-    """
-    Plots a 2D UMAP embedding using the input images as markers.
-
-    Parameters:
-        embedding (np.ndarray): 2D array (N, 2) of UMAP coordinates.
-        images (iterable): Iterable of images corresponding to each embedding point.
-                           Each image should be in a format that matplotlib can display.
-        zoom (float): Zoom factor for displaying each image.
-    """
     fig, ax = plt.subplots(figsize=(10, 10))
 
     if components == 2:

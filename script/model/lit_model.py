@@ -252,10 +252,7 @@ class GeneExpressionRegressor(L.LightningModule):
 
 
             figures = generate_hists_2(self, results_file, out_file_appendix="_" + model_name)
-            for gene, fig in figures.items():
-                buf = BytesIO()
-                fig.savefig(buf, format="png")
-                buf.seek(0)
+            for gene, buf in figures.items():
                 img = Image.open(buf)
                 if self.is_online:
                     self.table.add_data(

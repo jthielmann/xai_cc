@@ -111,8 +111,11 @@ def generate_hists_2(model, results_filename, out_file_appendix=""):
         ax.legend(loc="lower right")
         ax.set_xlabel("output")
         ax.set_ylabel("target")
-
-        figures[gene] = fig
+        buf = BytesIO()
+        fig.savefig(buf, format="png")
+        plt.close(fig)
+        buf.seek(0)
+        figures[gene] = buf
 
     return figures
 
