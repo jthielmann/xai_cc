@@ -1,4 +1,4 @@
-project: CD4, CD8A tuning unimodel
+project: t cell genes unimodel after tune update
 name: compare cms gene performance
 method: grid
 metric:
@@ -12,15 +12,15 @@ parameters:
     value: true
   # fixed
   epochs:
-    value: 20
+    value: 40
   dataset:
     value: CRC_N19
   encoder_type:
-    value: unimodel
+    value: dino
   batch_size:
     value: 64
   genes:
-    value: [CD4, CD8A] #[CD3D,CCL5,SIRPG,CD40LG,CD4,TRAT1,CD69,RORA,CD8A,NKG7,GZMA,GZMB,GZMK,PRF1]
+    value: [CD3D,CCL5,SIRPG,CD40LG,CD4,TRAT1,CD69,RORA,CD8A,NKG7,GZMA,GZMB,GZMK,PRF1]#[CD4, CD8A]
   error_metric_name:
     value: MSE
   middle_layer_features:

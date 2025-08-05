@@ -1,4 +1,4 @@
-project: RUBCNL basic test N19
+project: one_linear_out_layer
 name: compare cms gene performance
 method: grid
 metric:
@@ -16,11 +16,11 @@ parameters:
   dataset:
     value: CRC_N19
   encoder_type:
-    value: unimodel
+    value: dino
   batch_size:
     value: 64
   genes:
-    value: [RUBCNL]#[TNNT1, AQP5, RAMP1, ADGRG6, SECTM1, DPEP1, CHP2, RUBCNL, SLC9A3, VAV3, MUC2, PIGR, TFF1, KIAA1324, ZBTB7C, SERPINA1, SPOCK1, FBLN1, ANTXR1, TNS1, MYL9, HSPB8]
+    value: [RUBCNL]#[CD3D,CCL5,SIRPG,CD40LG,CD4,TRAT1,CD69,RORA,CD8A,NKG7,GZMA,GZMB,GZMK,PRF1]#[CD4, CD8A]
   error_metric_name:
     value: MSE
   middle_layer_features:
@@ -30,7 +30,7 @@ parameters:
   loss_fn_switch:
     value: MSE
   gene_data_filename:
-    values: [gene_data_log1p.csv] #gene_data_log1p.csv, gene_data_ranknorm.csv
+    values: [gene_data_log1p.csv,gene_data_ranknorm.csv] #gene_data_log1p.csv, gene_data_ranknorm.csv
   image_size:
     value: 224
   out_path:
@@ -42,9 +42,7 @@ parameters:
   use_leaky_relu:
     value: false
   one_linear_out_layer:
-    value: false
+    values: [true, false]
   # hyperparams
-  global_fix_learning_rate:
-    values: [0.1, 0.01, 0.001]
   freeze_encoder:
-    values: [true]
+    value: true

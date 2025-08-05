@@ -261,48 +261,32 @@ class TrainerPipeline:
               f"{torch.cuda.memory_allocated() / 1e9:.2f} GB, "
               f"reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
 
-    def tune_head_lrs(self,
+    def tune_component_lr(self,
             model: L.LightningModule,
+            key: str,
             trainer: L.Trainer,
             train_dl: torch.utils.data.DataLoader,
             steps: int = 300,
             early_stop: Optional[float] = None
-    ) -> Dict[str, float]:
+    ) -> float:
         tuner = Tuner(trainer)
-        tuned: Dict[str, float] = {}
 
-        enc_finder = tuner.lr_find(
+        attr = f"{str}_lr"
+        finder = tuner.lr_find(
             model,
             train_dataloaders=train_dl,
             num_training=steps,
             early_stop_threshold=early_stop,
-            attr_name="encoder_lr"
+            attr_name=attr
         )
-        suggestion = enc_finder.suggestion()
+        suggestion = finder.suggestion()
         if suggestion is None:
-            raise ValueError("no learning rate found for encoder")
-        max_lr = self._read_max_lr_from_finder(enc_finder)
-        tuned["encoder"] = (max_lr + suggestion) / 4
-        enc_finder = None
-        # Heads LR
-        for g in model.genes:
-            attr = f"{g}_lr"
-            head_finder = tuner.lr_find(
-                model,
-                train_dataloaders=train_dl,
-                num_training=steps,
-                early_stop_threshold=early_stop,
-                attr_name=attr
-            )
-            suggestion = head_finder.suggestion()
-            if suggestion is None:
-                raise ValueError(f"no learning rate found for head {g}")
-            max_lr = self._read_max_lr_from_finder(head_finder)
-            tuned[g] = (max_lr + suggestion) / 2
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        return tuned
+            raise ValueError(f"no learning rate found for {g}")
+        max_lr = self._read_max_lr_from_finder(finder)
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return max_lr + suggestion / 4
 
     def tune_learning_rate(
             self,
@@ -311,26 +295,22 @@ class TrainerPipeline:
             val_loader: torch.utils.data.DataLoader,
             fixed_lr: float = -1
     ) -> Dict[str, float]:
-        self.report_mem("start tuning")
         freeze_encoder = bool(self.config.get("freeze_encoder", False))
         steps = int(self.config.get("lr_find_steps", 300))
         early_stop = self.config.get("early_stop_threshold", None)
         debug = self.config.get("debug")
 
-        # Build target group keys for return ordering
         target_keys: List[str] = []
         if not freeze_encoder:
             target_keys.append("encoder")
         for g in self.config["genes"]:
             target_keys.append(g)
 
-        # Short-circuit fixed or debug
         if fixed_lr != -1.0:
             return {k: fixed_lr for k in target_keys}
         if debug:
             return {k: 0.01 for k in target_keys}
 
-        # Setup temporary Lightning trainer
         tmp_trainer = L.Trainer(
             accelerator="auto",
             devices=self.config.get("devices", 1),
@@ -339,60 +319,37 @@ class TrainerPipeline:
             enable_checkpointing=False
         )
 
-        # Snapshot model state and original requires_grad flags
-        self.report_mem("before state snapshot")
         base_state = model.cpu().state_dict(keep_vars=True)
         orig_requires = [p.requires_grad for p in model.parameters()]
-        self.report_mem("after state snapshot")
 
-        # Optionally warm up CUDA context
-        if torch.cuda.is_available():
-            torch.cuda.current_device()
-            _ = torch.tensor([0.], device="cuda")
-            self.report_mem("after CUDA warm-up")
-
-        # Loop over groups: restore weights, apply freeze/unfreeze, then call helper
         tuned_max_lrs: Dict[str, float] = {}
 
         for key in target_keys:
-            # restore full state
             model.load_state_dict(base_state)
-            for p, req in zip(model.parameters(), orig_requires):
-                p.requires_grad = req
-
-            # freeze all, then unfreeze only this group
             for p in model.parameters():
                 p.requires_grad = False
-            if key == "encoder":
-                for p in model.encoder.parameters():
-                    p.requires_grad = True
-            else:
-                for p in getattr(model, key).parameters():
-                    p.requires_grad = True
+            for p in getattr(model, key).parameters():
+                p.requires_grad = True
 
-            # use helper to find LRs for this single group
-            # helper returns all, but we only need this key
-            group_lr_map = self.tune_head_lrs(model, tmp_trainer, train_loader, steps, early_stop)
-            tuned_max_lrs[key] = group_lr_map[key]
+            tuned_max_lrs[key] = self.tune_component_lr(model, key, tmp_trainer, train_loader, steps, early_stop)
 
-            # Optional W&B logging
             if self.wandb_run is not None:
                 run = cast(Run, self.wandb_run)
                 run.log(data={f"tuned_lr/{key}": tuned_max_lrs[key]})
 
-            self.report_mem(f"finished tuning group {key}")
+
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-        # restore model to original state
+        # restore model to train state
         model.load_state_dict(base_state)
         for p, req in zip(model.parameters(), orig_requires):
             p.requires_grad = req
 
-        self.report_mem("end tuning")
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+        self.report_mem(f"finished tuning")
         return tuned_max_lrs
 
     def run(self):
@@ -408,6 +365,7 @@ class TrainerPipeline:
 
         # store all results here
         fixed = self.config.get("global_fix_learing_rate", -1)
+        # build lr dict from either tuning or fixed if provided
         lrs = self.tune_learning_rate(model, train_loader, val_loader, fixed)
 
         print(f"Tuned learning rates: {lrs}")
