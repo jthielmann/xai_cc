@@ -35,8 +35,6 @@ parameters:
     values: [gene_data_ranknorm.csv] #gene_data_log1p.csv,
   image_size:
     value: 224
-  out_path:
-    value: ../models/crc_base_label_normalizations_sweep/
   generate_scatters:
     value: true
   use_early_stopping:

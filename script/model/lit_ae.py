@@ -7,7 +7,7 @@ import torch.optim as optim
 import torchmetrics
 from torch.optim.lr_scheduler import OneCycleLR
 
-from script.model.model_factory import get_encoder
+from script.model.model_factory import get_encoder, infer_encoder_out_dim
 
 
 class TopKActivation(nn.Module):
@@ -31,6 +31,7 @@ class SparseAutoencoder(nn.Module):
     """
     def __init__(self, config):
         super().__init__()
+
         self.encoder = nn.Linear(config.get("d_in"), config.get("d_hidden"), bias=True)
         self.topk_activation = TopKActivation(config.get("k"))
         self.decoder = nn.Linear(config.get("d_hidden"), config.get("d_in"), bias=True)

@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import lightning as L
 import torch.nn as nn
@@ -22,37 +23,19 @@ sys.path.insert(0, '..')
 from script.model.loss_functions import MultiGeneWeightedMSE
 from script.model.lit_ae import SparseAutoencoder
 from typing import Dict, Any
-
+from torchmetrics.functional import pearson_corrcoef
+import scipy
 
 def load_model(path: str, config: Dict[str, Any]) -> L.LightningModule:
-    """
-    Load a encoder model checkpoint into a LightningModule for inference.
-    """
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
+    device = "cpu"
     model = GeneExpressionRegressor(config)
     state = torch.load(path, map_location=device)
     model.load_state_dict(state, strict=False)
     model.to(device).eval()
+    return model
 
 def get_model(config):
     return GeneExpressionRegressor(config)
-
-def get_encoder_output_dim(encoder_type):
-    if encoder_type == "dino":
-        encoder_out_dim = 2048
-    elif encoder_type == "resnet50random" or encoder_type == "resnet50imagenet":
-        encoder_out_dim = 1000
-    elif encoder_type == "unimodel":
-        encoder_out_dim = 1536
-    else:
-        raise ValueError("encoder not found")
-    return encoder_out_dim
 
 class GeneExpressionRegressor(L.LightningModule):
     def __init__(self, config):
@@ -71,7 +54,7 @@ class GeneExpressionRegressor(L.LightningModule):
             relu_instance = relu_type()
 
             layer = (
-                nn.Sequential(relu_instance, nn.Linear(get_encoder_output_dim(self.config['encoder_type']), 1))
+                nn.Sequential(relu_instance, nn.Linear(out_dim_encoder, 1))
                 if self.config['one_linear_out_layer']
                 else nn.Sequential(
                     nn.Linear(out_dim_encoder, self.config['middle_layer_features']),
@@ -79,35 +62,19 @@ class GeneExpressionRegressor(L.LightningModule):
                     nn.Linear(self.config['middle_layer_features'], 1),
                 )
             )
+
             setattr(self, gene, layer)
-        if config.get("sae", False):
-            pos = config.get("sae_position", "pre")
-            if pos == "pre":
-                # SAE on the *features* coming *out* of the CNN
-                d_in     = config["encoder_out_dim"]
-                d_hidden = config["sae_hidden_dim"]
-                k        = config["sae_k"]
-                self.sae_pre  = SparseAutoencoder(d_in, d_hidden, k)
-                self.sae_post = None
-            elif pos == "post":
-                # SAE on the *final head outputs*
-                d_in     = len(config["genes"])
-                d_hidden = config["sae_hidden_dim"]
-                k        = config["sae_k"]
-                self.sae_pre  = None
-                self.sae_post = SparseAutoencoder(d_in, d_hidden, k)
-            else:
-                raise ValueError("sae_position must be 'pre' or 'post'")
+        if self.config.get("sae", False):
+            self.config["d_in"] = out_dim_encoder
+            self.sae  = SparseAutoencoder(self.config)
         else:
-            self.sae_pre  = None
-            self.sae_post = None
+            self.sae = None
 
 
         self.genes = self.config['genes']
 
         for g in self.genes:
             setattr(self, f"{g}_lr", default_lr)
-        self.pearson = torchmetrics.PearsonCorrCoef(num_outputs=len(self.genes))
         if self.config["loss_fn_switch"] == "MSE":
             self.loss_fn = nn.MSELoss()
         elif self.config["loss_fn_switch"] == "WMSE" or self.config["loss_fn_switch"] == "weighted MSE":
@@ -117,7 +84,7 @@ class GeneExpressionRegressor(L.LightningModule):
 
         self.num_training_batches = 0
         self.current_loss = torch.tensor(0.).to(self.device)
-        self.best_loss = torch.tensor(float('inf')).to(self.device)
+        self.best_loss = float("inf")
         self.is_online = self.config.get('log_to_wandb')
 
         if self.config.get('generate_scatters', False):
@@ -129,41 +96,6 @@ class GeneExpressionRegressor(L.LightningModule):
         for g in self.config["genes"]:
             setattr(self, f"{g}_lr", default_head_lr)
 
-    def forward(self, x):
-        B = x.size(0)
-
-        z = self.encoder(x)  # z: (B, encoder_out_dim)
-
-        if self.sae_pre:
-            z = self.sae_pre(z)
-
-        outs = [getattr(self, g)(z) for g in self.genes]
-        out  = outs[0] if len(outs)==1 else torch.cat(outs, dim=1)
-
-        if self.sae_post:
-            out = self.sae_post(out)
-
-        return out
-
-    def training_step(self, batch, batch_idx):
-        loss, _, _ = self._step(batch)
-        self.log('train_' + self.config['loss_fn_switch'], loss, on_step=True, on_epoch=True, prog_bar=True)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        loss, y_hat, y = self._step(batch)
-        self.log('val_' + self.config['loss_fn_switch'], loss, on_epoch=True)
-
-        self.y_hats.append(y_hat)
-        self.ys.append(y)
-        self.current_loss += loss
-        return loss
-
-    def _step(self, batch):
-        x,y = batch
-        y_hat = self(x)
-        loss = self.loss_fn(y_hat, y)
-        return loss, y_hat, y
 
     def configure_optimizers(self):
         groups = []
@@ -193,7 +125,46 @@ class GeneExpressionRegressor(L.LightningModule):
         self.current_loss = 0.0
         self.y_hats = []
         self.ys = []
-        self.pearson.reset()
+
+    def forward(self, x):
+        B = x.size(0)
+
+        z = self.encoder(x)  # z: (B, encoder_out_dim)
+
+        if self.sae:
+            z = self.sae(z)
+
+        outs = [getattr(self, g)(z) for g in self.genes]
+        out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=1)
+
+        if self.sae:
+            out = self.sae(out)
+
+        return out
+
+    def training_step(self, batch, batch_idx):
+        loss, _, _ = self._step(batch)
+        self.log('train_' + self.config['loss_fn_switch'], loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss, y_hat, y = self._step(batch)
+        self.log('val_' + self.config['loss_fn_switch'], loss, on_epoch=True)
+
+        self.y_hats.append(y_hat.detach().float().cpu())
+        self.ys.append(y.detach().float().cpu())
+        self.current_loss += loss.detach().item()
+        return loss
+
+    def _step(self, batch):
+        x, y = batch
+        y_hat = self(x)
+        if y.dim() == 1:
+            y = y.unsqueeze(1)
+        if y_hat.shape != y.shape:
+            raise ValueError(f"Shape mismatch: {y_hat.shape} vs {y.shape}")
+        loss = self.loss_fn(y_hat, y)
+        return loss, y_hat, y
 
     def on_validation_epoch_end(self):
         # Skip sanity check epoch
@@ -217,56 +188,107 @@ class GeneExpressionRegressor(L.LightningModule):
         # Aggregate outputs
         y_hat = torch.cat(self.y_hats, dim=0)
         y_true = torch.cat(self.ys, dim=0)
-        pearson = self.pearson(y_hat, y_true)
-        if len(self.genes) > 1:
-            pearson_dict = {f"pearson_{g}": pearson[i] for i, g in enumerate(self.genes)}
-        else: # one gene
-            pearson_dict = {f"pearson_{self.genes[0]}": pearson}
+        pred_std = y_hat.std(dim=0)
         if self.is_online:
-            self.log_dict(pearson_dict, on_epoch=True)
+            per_gene_r = [
+                pearson_corrcoef(y_hat[:, i].float(), y_true[:, i].float()).item()
+                for i in range(y_hat.shape[1])
+            ]
+            self.log_dict({f"pearson_{g}": float(r) for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
 
-        # Generate scatter plots if requested
-        if self.config.get('generate_scatters', False):
-            model_name = f"ep_{self.current_epoch}"
-            results_file = os.path.join(self.config['out_path'], "_" + str(random.randbytes(4).hex()) + "_results.csv")
+            # Generate scatter plots if requested
+            if self.config.get('generate_scatters', False):
+                for i, gene in enumerate(self.genes):
+                    results_file = os.path.join(self.config['out_path'], "_" + str(random.randbytes(4).hex()) + "_results.csv")
+                    yhat_g  = y_hat[:, i]
+                    ytrue_g = y_true[:, i]
+                    result = self.loss_fn(yhat_g, ytrue_g)
+                    pearson = float(pearson_corrcoef(yhat_g, ytrue_g))
+                    fig, ax = plt.subplots()
+                    ax.text(x=-2, y=3, s="MSE: " + str(round(result.item(), 2)))
+                    ax.text(x=-2, y=1, s="Pearson: " + str(pearson))
+                    ax.plot([-2, 3], [-2, 3], color='red')
+                    ABBR = {
+                        "learning_rate": "lr",
+                        "batch_size": "bs",
+                        "dropout_rate": "dr",
+                        "loss_fn_swtich": "loss",
+                        "encoder_type": "encdr",
+                        "middle_layer_features": "mfeatures",
+                        "gene_data_filename": "file",
+                        "freeze_encoder": "f_encdr",
+                        "one_linear_out_layer": "1linLr",
+                        "use_leaky_relu": "lkReLu",
+                        "use_early_stopping": "eStop"
+                    }
 
-            # iterate patients
-            for patient in self.config['val_samples']:
-                val_ds = get_dataset(
-                    self.config['data_dir'],
-                    genes=self.genes,
-                    samples=[patient],
-                    transforms=get_transforms(self.config),
-                    bins=self.config.get("bins", 0),
-                    gene_data_filename=self.config['gene_data_filename'],
-                    max_len=100 if self.config.get('debug') else None
-                )
-                loader = DataLoader(
-                    val_ds,
-                    batch_size=self.config['batch_size'],
-                    shuffle=False,
-                    num_workers=self.config.get('num_workers', 0),
-                    pin_memory=False
-                )
-                generate_results_patient_from_loader(self, loader, results_file, patient)
+                    sweep_keys = getattr(getattr(self, "wandb_run", None), "config", {}).get("sweep_parameter_names", [])
+                    appendix_parts = []
+                    for k in sweep_keys:
+                        short = ABBR.get(k, k)
+                        val = self.config.get(k)
+                        appendix_parts.append(f"{short}={val}")
+                    out_file_appendix = " | ".join(appendix_parts)
 
+                    for i, gene in enumerate(self.genes):
+                        yhat_t = y_hat[:, i].reshape(-1).float()
+                        ytrue_t = y_true[:, i].reshape(-1).float()
 
-            figures = generate_hists_2(self, results_file, out_file_appendix="_" + model_name)
-            for gene, buf in figures.items():
-                img = Image.open(buf)
-                if self.is_online:
-                    self.table.add_data(
-                        self.current_epoch,
-                        gene,
-                        self.config['learning_rate'],
-                        self.config.get("bins", 0),
-                        wandb.Image(img, caption=gene)
-                    )
-                plt.close(fig)
-            os.remove(results_file)
+                        if (yhat_t.std(unbiased=False) == 0) or (ytrue_t.std(unbiased=False) == 0):
+                            r_value = float('nan')
+                        else:
+                            r_value = float(pearson_corrcoef(yhat_t, ytrue_t))
+                        loss = float(self.loss_fn(yhat_t, ytrue_t))
 
+                        yhat_g = yhat_t.detach().cpu().numpy()
+                        ytrue_g = ytrue_t.detach().cpu().numpy()
+
+                        lo = float(np.minimum(yhat_g.min(), ytrue_g.min()))
+                        hi = float(np.maximum(yhat_g.max(), ytrue_g.max()))
+                        if lo == hi: # padding if identity
+                            lo, hi = lo - 1.0, hi + 1.0
+
+                        fig, ax = plt.subplots()
+                        ax.scatter(yhat_g, ytrue_g, s=8)
+                        ax.plot([lo, hi], [lo, hi], linewidth=1)
+
+                        ax.text(0.02, 0.98, f"loss: {loss:.3f}\nr: {r_value:.3f}",
+                                transform=ax.transAxes, va="top", ha="left", fontsize="small")
+
+                        title_bits = [f"ep {self.current_epoch}", gene]
+                        if out_file_appendix:
+                            title_bits.append(out_file_appendix)
+                        ax.set_title(" — ".join(title_bits))
+                        ax.set_xlabel("output")
+                        ax.set_ylabel("target")
+                        ax.set_aspect('equal', adjustable='box')
+
+                        buf = BytesIO()
+                        fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+                        plt.close(fig)
+                        buf.seek(0)
+
+                        img = Image.open(buf)
+                        if getattr(self, "is_online", False) and getattr(self, "table", None) is not None:
+                            self.table.add_data(
+                                self.current_epoch,
+                                gene,
+                                self.config.get('learning_rate'),
+                                self.config.get("bins", 0),
+                                wandb.Image(img, caption=gene),
+                            )
+                        buf.close()
 
     def on_train_epoch_end(self):
+        lrs = [g["lr"] for g in self.trainer.optimizers[0].param_groups]
+        for idx, lr in enumerate(lrs):
+            # Logs: lr_group_0, lr_group_1, …
+            self.log(f"lr_group_{idx}", lr, on_epoch=True, prog_bar=False)
+
+        for g in self.genes:
+            w_norm = getattr(self, g)[-1].weight.norm()
+            self.log(f"{g}_w_norm", w_norm, on_epoch=True, prog_bar=False)
+
         if not self.config.get('debug'):
             torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
 

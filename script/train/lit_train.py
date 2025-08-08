@@ -266,12 +266,14 @@ class TrainerPipeline:
             key: str,
             trainer: L.Trainer,
             train_dl: torch.utils.data.DataLoader,
-            steps: int = 300,
-            early_stop: Optional[float] = None
+            steps: int = 100,
+            early_stop: Optional[float] = None,
+            use_lr_find: bool = True,
+            suggestion_scale_factor: float = None
     ) -> float:
         tuner = Tuner(trainer)
 
-        attr = f"{str}_lr"
+        attr = f"{key}_lr"
         finder = tuner.lr_find(
             model,
             train_dataloaders=train_dl,
@@ -282,6 +284,10 @@ class TrainerPipeline:
         suggestion = finder.suggestion()
         if suggestion is None:
             raise ValueError(f"no learning rate found for {g}")
+        if use_lr_find:
+            if suggestion_scale_factor:
+                suggestion *= suggestion_scale_factor
+            return suggestion
         max_lr = self._read_max_lr_from_finder(finder)
         gc.collect()
         if torch.cuda.is_available():
@@ -292,12 +298,13 @@ class TrainerPipeline:
             self,
             model: L.LightningModule,
             train_loader: torch.utils.data.DataLoader,
-            val_loader: torch.utils.data.DataLoader,
-            fixed_lr: float = -1
+            fixed_lr: float = -1,
+            use_lr_find: bool = True,
+            suggestion_scale_factor: float = None
     ) -> Dict[str, float]:
         freeze_encoder = bool(self.config.get("freeze_encoder", False))
         steps = int(self.config.get("lr_find_steps", 300))
-        early_stop = self.config.get("early_stop_threshold", None)
+        early_stop = self.config.get("early_stop_threshold", 4.0)
         debug = self.config.get("debug")
 
         target_keys: List[str] = []
@@ -331,7 +338,7 @@ class TrainerPipeline:
             for p in getattr(model, key).parameters():
                 p.requires_grad = True
 
-            tuned_max_lrs[key] = self.tune_component_lr(model, key, tmp_trainer, train_loader, steps, early_stop)
+            tuned_max_lrs[key] = self.tune_component_lr(model, key, tmp_trainer, train_loader, steps, early_stop, use_lr_find)
 
             if self.wandb_run is not None:
                 run = cast(Run, self.wandb_run)
@@ -364,9 +371,14 @@ class TrainerPipeline:
         self.config.setdefault("learning_rate", 1e-3) # init learning rate
 
         # store all results here
-        fixed = self.config.get("global_fix_learing_rate", -1)
+        fixed = self.config.get("global_fix_learning_rate", -1)
+        use_lr_find = self.config.get("use_lr_find", True)
+        if use_lr_find:
+            suggestion_scale_factor = self.config.get("suggestion_scale_factor", 1.0)
+        else:
+            suggestion_scale_factor = None
         # build lr dict from either tuning or fixed if provided
-        lrs = self.tune_learning_rate(model, train_loader, val_loader, fixed)
+        lrs = self.tune_learning_rate(model, train_loader, fixed, use_lr_find, suggestion_scale_factor)
 
         print(f"Tuned learning rates: {lrs}")
         model.update_lr(lrs)

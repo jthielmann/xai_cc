@@ -34,8 +34,6 @@ parameters:
     value: DinoLoss
   image_size:
     value: 224
-  out_path:
-    value: ../models/dino/
   generate_scatters:
     value: true
   local_crop_scale:

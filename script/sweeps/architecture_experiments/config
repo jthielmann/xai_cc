@@ -1,4 +1,4 @@
-project: one_linear_out_layer
+project: RUNCNL N19 suggestion_scale_factor bins unimodel
 name: compare cms gene performance
 method: grid
 metric:
@@ -20,7 +20,7 @@ parameters:
   batch_size:
     value: 64
   genes:
-    value: [RUBCNL]#[CD3D,CCL5,SIRPG,CD40LG,CD4,TRAT1,CD69,RORA,CD8A,NKG7,GZMA,GZMB,GZMK,PRF1]#[CD4, CD8A]
+    values: [[RUBCNL]]#, [CD4, CD8A], [CD163]]#[CD3D,CCL5,SIRPG,CD40LG,CD4,TRAT1,CD69,RORA,CD8A,NKG7,GZMA,GZMB,GZMK,PRF1]#[CD4, CD8A]
   error_metric_name:
     value: MSE
   middle_layer_features:
@@ -30,11 +30,9 @@ parameters:
   loss_fn_switch:
     value: MSE
   gene_data_filename:
-    values: [gene_data_log1p.csv,gene_data_ranknorm.csv] #gene_data_log1p.csv, gene_data_ranknorm.csv
+    values: [gene_data_log1p.csv, gene_data_log1p.csv] #gene_data_log1p.csv, gene_data_ranknorm.csv
   image_size:
     value: 224
-  out_path:
-    value: ../models/crc_base_label_normalizations_sweep/
   generate_scatters:
     value: true
   use_early_stopping:
@@ -42,7 +40,15 @@ parameters:
   use_leaky_relu:
     value: false
   one_linear_out_layer:
-    values: [true, false]
+    value: false
   # hyperparams
   freeze_encoder:
-    value: true
+    value: [true, false]
+  bins:
+    values: [3, 5, 7, 10]
+  use_lr_find:
+    values: [true]
+  suggestion_scale_factor:
+    values: [1.0, 2.0, 5.0, 10.0, 100.0]
+
+

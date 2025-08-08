@@ -1,4 +1,4 @@
-project: N19 suggestion_scale_factor unimodel 2
+project: histogram crc_base
 name: compare cms gene performance
 method: grid
 metric:
@@ -10,47 +10,11 @@ parameters:
     value: false
   log_to_wandb:
     value: true
-  # fixed
-  epochs:
-    value: 40
   dataset:
-    value: CRC_N19
-  encoder_type:
-    value: dino
-  batch_size:
-    value: 64
-  genes:
-    values: [[RUBCNL], [CD4, CD8A], [CD163]]#[CD3D,CCL5,SIRPG,CD40LG,CD4,TRAT1,CD69,RORA,CD8A,NKG7,GZMA,GZMB,GZMK,PRF1]#[CD4, CD8A]
-  error_metric_name:
-    value: MSE
-  middle_layer_features:
-    value: 200
-  num_workers:
-    value: 2
-  loss_fn_switch:
-    value: MSE
+    value: crc_base
   gene_data_filename:
     values: [gene_data_log1p.csv, gene_data_log1p.csv] #gene_data_log1p.csv, gene_data_ranknorm.csv
   image_size:
     value: 224
-  out_path:
-    value: ../models/crc_base_label_normalizations_sweep/
-  generate_scatters:
-    value: true
-  use_early_stopping:
-    value: true
-  use_leaky_relu:
-    value: false
-  one_linear_out_layer:
-    value: false
-  # hyperparams
-  freeze_encoder:
-    value: true
   bins:
-    values: [1]
-  use_lr_find:
-    values: [true]
-  suggestion_scale_factor:
-    values: [1.0, 2.0, 5.0, 10.0, 100.0]
-
-
+    value: 100
