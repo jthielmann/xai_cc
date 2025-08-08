@@ -16,8 +16,7 @@ from typing import Dict, Any
 
 
 def _train(cfg: Dict[str, Any]) -> None:
-    ds_cfg = get_dataset_cfg(cfg
-    )
+    ds_cfg = get_dataset_cfg(cfg)
     cfg.update(ds_cfg)
 
     # holds run variable in ca
@@ -82,6 +81,7 @@ def main():
         if not os.path.exists(out_path):
             os.makedirs(out_path, exist_ok=True)
         ensure_free_disk_space(out_path)
+        sweep_config["parameters"]["out_path"] = {"value": out_path}
 
         print(f"Project: {project}")
         sweep_dir = os.path.join("..", "wandb_sweep_ids", project, sweep_config["name"])
