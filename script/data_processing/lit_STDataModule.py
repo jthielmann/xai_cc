@@ -7,9 +7,6 @@ from script.data_processing.data_loader import get_dataset
 
 
 def get_data_module(cfg):
-    """
-    Instantiate the STDataModule using a single config dict.
-    """
     return STDataModule(cfg)
 
 

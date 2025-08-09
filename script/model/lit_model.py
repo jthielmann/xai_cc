@@ -127,18 +127,12 @@ class GeneExpressionRegressor(L.LightningModule):
         self.ys = []
 
     def forward(self, x):
-        B = x.size(0)
-
-        z = self.encoder(x)  # z: (B, encoder_out_dim)
-
+        z = self.encoder(x)
         if self.sae:
             z = self.sae(z)
 
-        outs = [getattr(self, g)(z) for g in self.genes]
-        out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=1)
-
-        if self.sae:
-            out = self.sae(out)
+        outs = [getattr(self, g)(z) for g in self.genes]  # each (B, 1)
+        out = torch.cat(outs, dim=1)
 
         return out
 
@@ -157,12 +151,19 @@ class GeneExpressionRegressor(L.LightningModule):
         return loss
 
     def _step(self, batch):
-        x, y = batch
+        if isinstance(batch, (list, tuple)) and len(batch) == 3:
+            x, y, _ = batch
+        else:
+            x, y = batch
+
         y_hat = self(x)
+
         if y.dim() == 1:
             y = y.unsqueeze(1)
+
         if y_hat.shape != y.shape:
             raise ValueError(f"Shape mismatch: {y_hat.shape} vs {y.shape}")
+
         loss = self.loss_fn(y_hat, y)
         return loss, y_hat, y
 

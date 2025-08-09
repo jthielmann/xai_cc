@@ -1,16 +1,35 @@
+from __future__ import annotations
+
 import os
 import random
 import numpy as np
 import torch
 import torch.nn.functional
-import pandas as pd
 from torchvision import transforms
 from PIL import Image
 from script.data_processing.image_transforms import get_transforms
 from typing import List, Literal
 from pathlib import Path
-
+from pathlib import Path
+from typing import Dict, List, Literal, Optional
+import json
+import pandas as pd
+import torch
 DEFAULT_RANDOM_SEED = 42
+
+import numpy as np
+from typing import Tuple, Optional, Sequence
+import matplotlib.pyplot as plt
+from scipy.ndimage import convolve1d, gaussian_filter1d
+from scipy.signal.windows import triang
+from scipy.stats import entropy, wasserstein_distance
+from script.main_utils import parse_yaml_config, parse_args
+from script.configs.dataset_config import get_dataset_data_dir
+
+import pandas as pd
+import os
+from pathlib import Path
+import torch
 
 
 def seed_basic(seed=DEFAULT_RANDOM_SEED):
@@ -40,55 +59,88 @@ def log_training(date, training_log):
             date + " Resnet50 - single gene\top: AdamW\telrs: 0.9\tlfn: MSE Loss\n")  # Adapt to model and gene name(s) getting trained
 
 
-class STDataset(torch.utils.data.Dataset):
-    def __init__(self, df, *, image_transforms=None,
-                 inputs_only=False, genes=None, use_weights=False):
-        self.df   = df.reset_index(drop=True)
-        self.genes = genes
+import torch
+from torch.utils.data import Dataset
+from PIL import Image
+from typing import List, Optional
+
+class STDataset(Dataset):
+    def __init__(
+        self,
+        df,
+        *,
+        image_transforms=None,
+        inputs_only: bool = False,
+        genes: Optional[List[str]] = None,
+        use_weights: bool = False,              # if True, return (img, y, w)
+    ):
+        self.df = df.reset_index(drop=True)
         self.transforms = image_transforms
         self.inputs_only = inputs_only
 
-
-        if use_weights and genes:
-            w_col = f"{genes[0]}_lds_w"
-            if w_col in self.df.columns:
-                self.weights = torch.tensor(self.df[w_col].values,
-                                            dtype=torch.float32)
-            else:                               # weights asked but missing
-                raise ValueError(
-                    f"Column {w_col} not found – "
-                    "did you forget lds_weight_dir?"
-                )
+        # Determine gene columns explicitly (stable order)
+        if genes is None:
+            # auto-detect genes = all numeric columns except 'tile' and *_lds_w
+            candidates = [c for c in self.df.columns if c != "tile" and not str(c).endswith("_lds_w")]
+            if not candidates:
+                raise ValueError("Could not infer gene columns; please pass `genes`.")
+            self.genes = list(candidates)
         else:
-            self.weights = torch.ones(len(self.df), dtype=torch.float32)
+            missing = [g for g in genes if g not in self.df.columns]
+            if missing:
+                raise ValueError(f"Genes missing in DataFrame: {missing}")
+            self.genes = list(genes)
+
+        self.G = len(self.genes)
+
+        # Optional per-gene weights: try to read a vector w[g] per sample
+        self.use_weights = use_weights
+        if self.use_weights:
+            # For each gene, we expect a column f"{gene}_lds_w"
+            missing_w = [g for g in self.genes if f"{g}_lds_w" not in self.df.columns]
+            if missing_w:
+                raise ValueError(
+                    f"Weight columns not found for genes: {missing_w}. "
+                    "Did you generate LDS weights or set lds_weight_dir?"
+                )
 
     def __len__(self):
         return len(self.df)
 
-    def get_tilename(self, index):
+    def get_tilename(self, index: int) -> str:
         return self.df.iloc[index]["tile"]
 
-    def __getitem__(self, index):
-        cols = list(self.df)[:-1]
-        gene_names = [c for c in cols if 'tile' not in c and '_lds_w' not in c]
-        row = self.df.iloc[index]
-        img = Image.open(row["tile"]).convert("RGB")
-        # print(x.size)
+    def _load_image(self, path: str):
+        img = Image.open(path).convert("RGB")
         if self.transforms:
             img = self.transforms(img)
-        # clustering uses crp which currently only supports classification tasks. therefore we take class 0 as a hack
-        # as we only have one gene output in clustering because we cluster each gene separately
-        if self.inputs_only:
-            return img, 0
-        gene_vals = []
-        for j in gene_names:
-            #gene_vals.append(float(row[j]))
-            #mps:
-            gene_val = torch.tensor(float(row[j]), dtype=torch.float32)
-            #gene_val = torch.tensor(float(row[j]))
-            gene_vals.append(gene_val)
+        return img
 
-        return img, torch.stack(gene_vals)
+    def _row_to_target(self, row) -> torch.Tensor:
+        # Always return shape (G,), even if G == 1
+        vals = [float(row[g]) for g in self.genes]
+        return torch.tensor(vals, dtype=torch.float32)
+
+    def _row_to_weights(self, row) -> torch.Tensor:
+        # Always return shape (G,), even if G == 1
+        w_vals = [float(row[f"{g}_lds_w"]) for g in self.genes]
+        return torch.tensor(w_vals, dtype=torch.float32)
+
+    def __getitem__(self, index):
+        row = self.df.iloc[index]
+        img = self._load_image(row["tile"])
+
+        if self.inputs_only:
+            # Return image only; caller can ignore targets entirely
+            return img
+
+        y = self._row_to_target(row)             # shape (G,)
+
+        if self.use_weights:
+            w = self._row_to_weights(row)        # shape (G,)
+            return img, y, w
+
+        return img, y
 
 
 class STDataset_umap(STDataset):
@@ -267,15 +319,9 @@ def get_dataset(
     weight_transform: str = "inverse",
     weight_clamp: int = 10
 ):
-    """
-    Wrapper that returns an STDataset whose dataframe optionally contains
-    <gene>_lds_w columns built from best_smoothings.csv.
-    """
-    # discover patients if the caller did not supply them
     if samples is None:
         samples = [f.name for f in os.scandir(data_dir) if f.is_dir()]
 
-    # build the dataframe (adds LDS weights if csv provided)
     df = get_base_dataset(
         data_dir,
         genes,
@@ -399,29 +445,8 @@ class label_dataset(torch.utils.data.Dataset):
 
 
 
-import numpy as np
-from typing import Tuple, Optional, Sequence
-import matplotlib.pyplot as plt
-from scipy.ndimage import convolve1d, gaussian_filter1d
-from scipy.signal.windows import triang
-from scipy.stats import entropy, wasserstein_distance
-from script.main_utils import parse_yaml_config, parse_args
-from script.configs.dataset_config import get_dataset_data_dir
-
-# NEW: lightweight caching of the best parameters
-import pandas as pd
-import os
-from pathlib import Path
-import torch
 
 
-"""
-    LDS –  Light Distribution Smoother
-    ---------------------------------
-    Added capability to cache the best smoothing parameters (bins, kernel_size, sigma_idx, loo_ll)
-    for each gene in a simple CSV file. On the next run, the script will re‑use the cached values
-    and skip the expensive leave‑one‑out search unless a gene is missing from the cache.
-"""
 
 class LDS:
     EPS: float = 1e-12
@@ -733,32 +758,39 @@ def load_best_smoothing(csv_path: str | Path, gene: str) -> Dict[str, Any]:
     }
     return best
 
+
 def load_gene_weights(
     csv_path: str | Path,
     genes: List[str],
-    weight_transform: str = "inverse",
+    *,
+    weight_transform: Literal["inverse", "sqrt-inverse", "none"] = "inverse",
+    selection_metric: str = "js",
+    mode: Literal["min", "max"] = "min",
     eps: float = 1e-12,
+    renorm_mean1: bool = True,
+    clip_max: Optional[float] = None,
 ) -> Dict[str, torch.Tensor]:
     """
-    Read the CSV produced by LDS and build {gene: weight_tensor}.
+    Build {gene: weight_tensor} from the LDS CSV.
 
     Parameters
     ----------
-    csv_path : str | Path
-        CSV with columns …, weights_json.
-    weight_transform : {"inverse", "sqrt-inverse", "none"}
-        How to turn a probability vector p into weights w:
-        * "inverse"      -> w = 1 / p
-        * "sqrt-inverse" -> w = 1 / sqrt(p)
-        * "none"         -> w = p  (use the smoothing itself as weights)
-    eps : float
-        Small constant to avoid division by zero.
+    csv_path : path to CSV with columns ["gene", "weights_json", selection_metric, ...]
+    genes : list of genes to load
+    weight_transform :
+        - "inverse"       -> w = 1 / p
+        - "sqrt-inverse"  -> w = 1 / sqrt(p)
+        - "none"          -> w = p
+      (p is the smoothed distribution; we always re-normalize p to sum=1 first.)
+    selection_metric : column name to choose the best row per gene (default: "js")
+    mode : "min" or "max" depending on the metric direction (JS uses "min")
+    eps : numerical floor for stability
+    renorm_mean1 : if True, scale weights so mean(w) == 1 (keeps loss scale stable)
+    clip_max : optional upper bound to clip extreme weights
 
     Returns
     -------
-    Dict[str, torch.Tensor]
-        Each tensor has dtype=float32 and shape (K,), where K==bins
-        for that gene, ready to feed into MultiGeneWeightedMSE.
+    Dict[str, torch.Tensor] mapping gene -> 1D float32 tensor of length == bins.
     """
     csv_path = Path(csv_path)
     if not csv_path.is_file():
@@ -766,28 +798,55 @@ def load_gene_weights(
 
     df = pd.read_csv(csv_path)
 
-    # take the row with the best LOO-LL for each gene
-    best_rows = df.loc[df.groupby("gene")["loo_ll"].idxmax()]
+    # restrict to requested genes early
+    df = df[df["gene"].isin(genes)].copy()
+    if df.empty:
+        raise ValueError("No rows found in CSV for the requested genes.")
+
+    if selection_metric not in df.columns:
+        raise ValueError(
+            f"selection_metric '{selection_metric}' not found in CSV. "
+            f"Available: {sorted(df.columns)}"
+        )
+
+    # choose best row per gene by the specified metric
+    if mode == "min":
+        idx = df.groupby("gene")[selection_metric].idxmin()
+    elif mode == "max":
+        idx = df.groupby("gene")[selection_metric].idxmax()
+    else:
+        raise ValueError("mode must be 'min' or 'max'.")
+
+    best_rows = df.loc[idx].set_index("gene")
 
     gene2weights: Dict[str, torch.Tensor] = {}
+    for gene in genes:
+        if gene not in best_rows.index:
+            continue  # skip genes not present in CSV
+        row = best_rows.loc[gene]
+        p = torch.tensor(json.loads(row["weights_json"]), dtype=torch.float32)
 
-    for _, row in best_rows.iterrows():
-        gene   = row["gene"]
-        if gene not in genes:
-            continue
-        p      = torch.tensor(json.loads(row["weights_json"]), dtype=torch.float32)
+        # Normalize to a proper probability vector (sum=1)
+        p_sum = torch.clamp(p.sum(), min=eps)
+        p = p / p_sum
 
-        # normalise to a proper probability vector (∑1)
-        p /= p.sum().clamp_min(eps)
-
+        # Transform to weights
         if weight_transform == "inverse":
-            w = 1.0 / p.clamp_min(eps)
+            w = 1.0 / torch.clamp(p, min=eps)
         elif weight_transform == "sqrt-inverse":
-            w = 1.0 / p.clamp_min(eps).sqrt()
+            w = 1.0 / torch.clamp(p, min=eps).sqrt()
         elif weight_transform == "none":
             w = p.clone()
         else:
             raise ValueError(f"Unknown weight_transform: {weight_transform}")
+
+        # Optional clipping to tame tail bins
+        if clip_max is not None:
+            w = torch.clamp(w, max=float(clip_max))
+
+        # Normalize weights to mean 1 (helps keep loss magnitudes comparable)
+        if renorm_mean1:
+            w = w / torch.clamp(w.mean(), min=eps)
 
         gene2weights[gene] = w
 

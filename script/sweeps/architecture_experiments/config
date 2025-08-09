@@ -50,5 +50,7 @@ parameters:
     values: [true]
   suggestion_scale_factor:
     values: [1.0, 2.0, 5.0, 10.0, 100.0]
+  lds_weight_csv:
+    value: best_smoothing.csv
 
 

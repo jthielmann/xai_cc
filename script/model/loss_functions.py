@@ -60,10 +60,9 @@ class MultiGeneWeightedMSE(nn.Module):
             self.register_buffer(f"{gene}_weights", w_tensor)
 
     def _get_pred_tgt(self, x, gene, idx):
-        """Return (tensor for this gene) for the two possible input layouts."""
         if isinstance(x, dict):
             return x[gene].view(-1)  # (B,)
-        else:  # assume matrix layout (B, G)
+        else:
             return x[:, idx].view(-1)
 
     def _sample_weights(self, t: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
