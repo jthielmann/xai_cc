@@ -1,173 +1,232 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from itertools import product
+from pathlib import Path
+from typing import Dict, Iterable, List, Tuple
+
 import numpy as np
-from lds_helpers import LDS        # assumes utils.py is on PYTHONPATH or same folder
-from data_loader import label_dataset
+import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import entropy
 
-# may return None
-def _get_smoothing(gene, dataset, method):
-    if method not in {"gaussian", "triang", "laplace", "silverman"}:
-        raise ValueError("smoothing method not implemented")
+from scipy.ndimage import convolve1d
+from scipy.stats import entropy, iqr
 
-    try:
-        labels = np.asarray(dataset[gene], dtype=float).ravel()
-    except Exception as err:
-        raise KeyError(f"Gene '{gene}' not found in dataset") from err
-
-    bins_space = [b for b in range(5, 35)]
-    ks_space   = [k for k in range(3, 11, 2)]
-
-    best_js = -np.inf
-    best_set = None
-
-    kind = "gaussian" if method == "silverman" else method
-    sigma = None if method in {"gaussian", "silverman"} else 2.0
-    for bins_i in bins_space:
-        for ks in ks_space:
-            lds = LDS(bins=bins_i, ks=ks, kind=kind, sigma=sigma)
-            js = lds.compare(labels, metric="js")
-
-            if np.isfinite(js) and js > best_js:
-                best_js = js
-                best_hist, best_edges = lds(labels)
-                best_set = (best_hist, best_edges, ks, sigma, bins_i, gene, method)
-
-    # no default return because that is not that helpful and would be hard to distinguish
-    # therefore can return None
-
-    return best_set
-
-def get_smoothings(genes, dataset, method):
-    results = []
-    for gene in genes:
-        result = _get_smoothing(gene, dataset, method)
-        assert(result is not None)
-        results.append(result)
-    return results
-
-def prepare_weights(cfg):
-    filenames = cfg["gene_data_filename"]
-    for filename in filenames:
-        dataset = label_dataset(cfg["datadir"], cfg["genes"][0], cfg["train_samples"], filename)
-        results = get_smoothings(cfg["genes"], dataset, cfg["method"])
-        for result in results:
-            if result is not None:
-                best_hist, best_edges, ks, sigma, bins_i, gene, method = result
+from script.data_processing.data_loader import label_dataset
+from script.main_utils import parse_yaml_config, parse_args
+from script.configs.dataset_config import get_dataset_data_dir, get_dataset_cfg_lds
 
 
-
-                plt.hist()
-                plt.title("ks: " + str(ks) + " sigma: " + str(sigma))
-                plt.stairs(eff_label_dist, edges=bin_edges)
-                plt.show()
-
-
-
-from typing import Iterable, Tuple, Optional
-
-import numpy as np
-from scipy.ndimage import convolve1d, gaussian_filter1d
-from scipy.signal.windows import triang
-from scipy.stats import entropy, wasserstein_distance
+@dataclass(frozen=True)
+class LDSParams:
+    bins: int
+    kernel_size: int
+    sigma: float
 
 
 class LDS:
+    """Label Distribution Smoothing utility with cached labels/histograms."""
     EPS = 1e-12
-    def __init__(
-        self,
-        binspace: int = 30,
-        kspace: int = 5,
-        kind: str = "gaussian",
-        sigma: Optional[float] = 2.0,
-    ) -> None:
-        if ks % 2 == 0:
-            raise ValueError("`ks` must be odd.")
-        if kind not in {"gaussian", "triang", "laplace"}:
-            raise ValueError("Unsupported kernel type.")
-        self.bins, self.ks, self.kind, self.sigma = bins, ks, kind, sigma
 
-    # ---------------------------------------------------------------------
-    # internals
-    # ---------------------------------------------------------------------
-    def _kernel(self, sigma: float) -> np.ndarray:
-        half = (self.ks - 1) // 2
-        if self.kind == "gaussian":
-            base = np.zeros(self.ks, dtype=np.float32)
-            base[half] = 1.0  # impulse
-            k = gaussian_filter1d(base, sigma, mode="constant")
-        elif self.kind == "triang":
-            k = triang(self.ks).astype(np.float32)
-        else:  # laplace
+    def __init__(self, kernel_type: str, dataset):
+        """
+        dataset must support:
+          - __len__()
+          - __getitem__(i) -> label (float)
+          - set_gene(gene: str)
+        """
+        self.kernel_type = kernel_type
+        self.dataset = dataset
+        self._label_cache: Dict[str, np.ndarray] = {}
+        self._hist_cache: Dict[Tuple[str, int], Tuple[np.ndarray, np.ndarray]] = {}
+
+    # ---------- internals ----------
+    @staticmethod
+    def _ensure_odd(n: int) -> int:
+        n = max(int(n), 3)
+        return n if (n % 2 == 1) else n + 1
+
+    def _labels_for_gene(self, gene: str) -> np.ndarray:
+        if gene not in self._label_cache:
+            self.dataset.set_gene(gene)
+            # pulling labels once per gene is much faster than per-try
+            labels = np.asarray([self.dataset[i] for i in range(len(self.dataset))],
+                                dtype=np.float32)
+            self._label_cache[gene] = labels
+        return self._label_cache[gene]
+
+    def _empirical(self, gene: str, bins: int) -> Tuple[np.ndarray, np.ndarray]:
+        key = (gene, bins)
+        if key not in self._hist_cache:
+            labels = self._labels_for_gene(gene)
+            self._hist_cache[key] = np.histogram(labels, bins=bins)
+        return self._hist_cache[key]
+
+    def _kernel(self, kernel_size: int, sigma_idx: float) -> np.ndarray:
+        ks = self._ensure_odd(kernel_size)
+
+        if self.kernel_type in {"gaussian", "silverman"}:
+            half = (ks - 1) // 2
             x = np.arange(-half, half + 1, dtype=np.float32)
-            k = np.exp(-np.abs(x) / sigma)
+            k = np.exp(-0.5 * (x / max(sigma_idx, self.EPS)) ** 2)
+        elif self.kernel_type == "triang":
+            from scipy.signal.windows import triang
+            k = triang(ks).astype(np.float32)
+        elif self.kernel_type == "laplace":
+            half = (ks - 1) // 2
+            x = np.arange(-half, half + 1, dtype=np.float32)
+            k = np.exp(-np.abs(x) / max(sigma_idx, self.EPS))
+        else:
+            raise ValueError(f"Unsupported kernel type '{self.kernel_type}'")
 
-        k /= k.max()  # safe: k.max()>0
-        return k
+        s = k.sum()
+        return k if s == 0 else (k / s)
+
+    def _sigma_to_bin_units(self, gene: str, bins: int, sigma: float) -> float:
+        """If kernel_type == 'silverman', convert continuous bandwidth to bin units."""
+        if self.kernel_type != "silverman":
+            return float(sigma)
+
+        labels = self._labels_for_gene(gene)
+        if labels.size < 2:
+            return 1.0  # fallback
+
+        std = float(labels.std(ddof=1))
+        spread = min(std, float(iqr(labels)) / 1.34)
+        bw = 0.9 * spread * (labels.size ** (-1 / 5))  # Silverman’s rule of thumb
+        # Convert to bin indices
+        lo, hi = float(labels.min()), float(labels.max())
+        bin_width = max((hi - lo) / bins, self.EPS)
+        return max(bw / bin_width, 1e-3)
+
+    # ---------- public API ----------
+    def get_smoothing(self, gene: str, params: LDSParams) -> np.ndarray:
+        emp_hist, _ = self._empirical(gene, params.bins)
+        sigma_idx = self._sigma_to_bin_units(gene, params.bins, params.sigma)
+        kernel = self._kernel(params.kernel_size, sigma_idx)
+        smoothed = convolve1d(emp_hist.astype(np.float32), kernel, mode="reflect")
+        return smoothed
 
     @staticmethod
-    def _silverman_sigma(labels: np.ndarray) -> float:
-        n = labels.size
-        std = labels.std(ddof=1)
-        iqr = np.subtract(*np.percentile(labels, [75, 25]))
-        return 0.9 * min(std, iqr / 1.34) * n ** (-1 / 5)
+    def js_divergence(p: np.ndarray, q: np.ndarray) -> float:
+        p = np.maximum(p.astype(np.float64), 0)
+        q = np.maximum(q.astype(np.float64), 0)
+        ps = p.sum()
+        qs = q.sum()
+        if ps <= LDS.EPS or qs <= LDS.EPS:
+            return 0.0  # degenerate but defined
+        p /= ps
+        q /= qs
+        m = 0.5 * (p + q)
+        return 0.5 * (entropy(p, m) + entropy(q, m))
 
-    def _smooth(self, hist: np.ndarray, sigma: float) -> np.ndarray:
-        return convolve1d(hist.astype(np.float32), self._kernel(sigma), mode="constant")
+    def compare_plot(self, gene: str, params: LDSParams, weights: np.ndarray, out_dir: Path):
+        emp_hist, edges = self._empirical(gene, params.bins)
+        centres = 0.5 * (edges[:-1] + edges[1:])
+        p = emp_hist / max(emp_hist.sum(), self.EPS)
+        q = weights / max(weights.sum(), self.EPS)
 
-    def __call__(self, labels: Iterable[float]) -> Tuple[np.ndarray, np.ndarray]:
-        labels = np.asarray(labels, dtype=float).ravel()
-        hist, edges = np.histogram(labels, bins=self.bins)
+        plt.figure()
+        plt.step(centres, p, where="mid", label="empirical")
+        plt.step(centres, q, where="mid", label="smoothed")
+        plt.xlabel("Value")
+        plt.ylabel("Probability")
+        plt.title(f"{gene} (bins={params.bins}, ks={params.kernel_size}, sigma={params.sigma})")
+        plt.legend()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out_dir / f"{gene}_comparison.png", dpi=150, bbox_inches="tight")
+        plt.close()
 
-        if self.ks <= 1:
-            return hist.astype(np.float32), edges
 
-        sigma = (
-            self.sigma
-            if self.sigma is not None
-            else (self._silverman_sigma(labels) if self.kind == "gaussian" else 1.0)
+def grid_search_lds(
+    lds: LDS,
+    genes: Iterable[str],
+    bin_space: Iterable[int],
+    ks_space: Iterable[int],
+    sigma_space: Iterable[float],
+) -> pd.DataFrame:
+    """Return best params per gene (by JS divergence) + weights as JSON."""
+    records: List[Dict] = []
+
+    for gene in genes:
+        best_js = float("inf")
+        best_row: Dict | None = None
+
+        # cache labels/hists once per (gene,bins)
+        _ = lds._labels_for_gene(gene)  # ensure cache
+        for bins in bin_space:
+            emp_hist, _ = lds._empirical(gene, bins)
+            for ks, sigma in product(ks_space, sigma_space):
+                params = LDSParams(bins=bins, kernel_size=ks, sigma=sigma)
+                weights = lds.get_smoothing(gene, params)
+                js = lds.js_divergence(emp_hist, weights)
+                if js < best_js:
+                    best_js = js
+                    best_row = dict(
+                        gene=gene,
+                        bins=bins,
+                        kernel_size=LDS._ensure_odd(ks),
+                        sigma=float(sigma),
+                        js=float(js),
+                        weights=weights.astype(float).tolist(),
+                    )
+
+        assert best_row is not None, "No best row found (empty search space?)"
+        records.append(best_row)
+
+    df = pd.DataFrame.from_records(records)
+    df["weights_json"] = df["weights"].apply(json.dumps)
+    return df
+
+
+def main():
+    args = parse_args()
+    cfg = parse_yaml_config(args.config)
+    ds_cfg = get_dataset_cfg_lds(cfg.get("parameters", {}))
+    cfg.get("parameters", {}).update(ds_cfg)
+    params = cfg.get("parameters", {})
+
+    data_dir = get_dataset_data_dir(params["dataset"].get("value"))
+    dataset = label_dataset(
+        data_dir=data_dir,
+        samples=params["train_samples"],
+        gene_data_filename=params["gene_data_filename"].get("values")[0],
+        max_len=100 if params.get("debug", {}).get("value") else None,
+    )
+
+    # ---- config you likely tweak ----
+    kernel_type = "gaussian"  # {"gaussian","silverman","triang","laplace"}
+    genes = [
+        "TNNT1", "AQP5", "RAMP1", "ADGRG6", "SECTM1", "DPEP1", "CHP2",
+        "RUBCNL", "SLC9A3", "VAV3", "MUC2", "PIGR", "TFF1", "KIAA1324",
+        "ZBTB7C", "SERPINA1", "SPOCK1", "FBLN1", "ANTXR1", "TNS1",
+        "MYL9", "HSPB8"
+    ]
+    bin_space = [20, 30, 40, 50, 100]
+    ks_space = [7, 9, 11]
+    sigma_space = [0.8, 1.0, 1.2, 1.5, 2.0]
+
+    out_csv = Path("best_smoothing.csv")
+    out_plots = Path("lds_plots")
+
+    lds = LDS(kernel_type=kernel_type, dataset=dataset)
+    df = grid_search_lds(lds, genes, bin_space, ks_space, sigma_space)
+
+    # keep only what you need in CSV
+    df_out = df.drop(columns=["weights"]).copy()
+    df_out.to_csv(out_csv, index=False)
+
+    # generate plots (optional)
+    for _, row in df.iterrows():
+        params = LDSParams(
+            bins=int(row["bins"]),
+            kernel_size=int(row["kernel_size"]),
+            sigma=float(row["sigma"]),
         )
-        return self._smooth(hist, sigma), edges
+        weights = np.array(json.loads(row["weights_json"]), dtype=np.float32)
+        lds.compare_plot(str(row["gene"]), params, weights, out_dir=out_plots)
 
-    smooth = __call__  # convenience alias
 
-    def compare(self, labels: Iterable[float], metric: str, show_plot: bool = True) -> float:
-        labels = np.asarray(labels, dtype=float).ravel()
-        empirical, edges = np.histogram(labels, bins=self.bins)
-        smoothed, _ = self(labels)
-
-        if empirical.sum() == 0 or smoothed.sum() == 0:
-            return float("nan")
-
-        p = np.maximum(empirical / empirical.sum(), self.EPS)
-        q = np.maximum(smoothed / smoothed.sum(), self.EPS)
-        p /= p.sum()
-        q /= q.sum()
-
-        if show_plot:
-            import matplotlib.pyplot as plt
-
-            centers = 0.5 * (edges[:-1] + edges[1:])
-            fig, ax = plt.subplots()
-
-            ax.step(centers, p, where="mid", label="empirical", lw=1.5)
-            ax.step(centers, q, where="mid", label="smoothed",  lw=1.5)
-            ax.set_xlabel("bin centre")
-            ax.set_ylabel("probability")
-            ax.set_title(f"LDS smoothing (bins={self.bins}, ks={self.ks})")
-            ax.legend()
-            if ax is None:  # created a fresh fig -> show it
-                plt.show()
-
-        metric = metric.lower()
-        if metric == "js":  # Jensen–Shannon
-            m = 0.5 * (p + q)
-            return 0.5 * (entropy(p, m) + entropy(q, m))
-        if metric == "kl":  # Kullback–Leibler
-            return entropy(p, q)
-        if metric == "wass":  # 1-Wasserstein / EMD
-            centers = 0.5 * (edges[:-1] + edges[1:])
-            return wasserstein_distance(
-                centers.tolist(), centers.tolist(), p.tolist(), q.tolist()
-            )
-        raise ValueError("metric must be 'js', 'kl', or 'wass'")
-
+if __name__ == "__main__":
+    main()
