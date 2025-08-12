@@ -240,6 +240,9 @@ def make_weights(
 
 
 
+def get_all_genes():
+    pass
+
 # contains tile path and gene data
 def get_base_dataset(
     data_dir: str | Path,
@@ -254,27 +257,18 @@ def get_base_dataset(
     weight_transform: str = "inverse",
     weight_clamp: int = 10
 ):
-    """
-    Build a single dataframe that optionally contains LDS-based weights.
-
-    Returns
-    -------
-    pd.DataFrame
-        Columns: tile, <gene>, …, <gene>_lds_w (if weights requested)
-    """
-    columns_of_interest = ["tile"] + (genes or [])
+    columns_of_interest = ["tile"] + (genes or []) if genes else None
     dfs = []
 
-    # 1) gather per-patient CSVs ------------------------------------------------
     for patient in samples:
         fp = os.path.join(data_dir, patient, meta_data_dir.lstrip("/"), gene_data_filename)
         df = pd.read_csv(fp, usecols=columns_of_interest, nrows=max_len)
         df["tile"] = df["tile"].apply(lambda t: os.path.join(data_dir, patient, "tiles", t))
+        df["patient"] = patient
         dfs.append(df)
 
     base_df = pd.concat(dfs, ignore_index=True)
 
-    # 2) attach LDS weights -----------------------------------------------------
     if lds_smoothing_csv is not None:
         gene2weights = load_gene_weights(lds_smoothing_csv, genes=genes,weight_transform=weight_transform)
         gene2weights = make_weights(gene2weights, clip_max=weight_clamp, r1=20, r2=100)
@@ -290,7 +284,6 @@ def get_base_dataset(
             idx    = np.clip(np.searchsorted(edges, vals, side="right") - 1, 0, K - 1)
             base_df[f"{g}_lds_w"] = w_vec[idx]
 
-    # 3) optional equal-bin resampling -----------------------------------------
     if bins > 1:
         gene_values = base_df[genes[0]]
         gene_bins   = pd.cut(gene_values, bins)
@@ -303,6 +296,58 @@ def get_base_dataset(
     return base_df
 
 
+def plot_gene_histograms_per_patient(
+    df,
+    genes,
+    patients=None,
+    bins=50,
+    density=False,
+    log=False,
+    save_dir=None,
+    show=True
+):
+    if patients is None:
+        patients = sorted(df["patient"].unique())
+
+    out_paths = []
+
+    for g in genes:
+        for p in patients:
+            vals = df.loc[df["patient"] == p, g].dropna().to_numpy()
+            if vals.size == 0:
+                continue
+
+            plt.figure()
+            plt.hist(vals, bins=bins, density=density, log=log)
+            plt.title(f"Histogram — patient={p} · gene={g}")
+            plt.xlabel(g)
+            plt.ylabel("density" if density else "count")
+
+            if save_dir:
+                os.makedirs(save_dir, exist_ok=True)
+                out = os.path.join(save_dir, f"hist_{g}_patient_{p}.png")
+                plt.savefig(out, dpi=150, bbox_inches="tight")
+                out_paths.append(out)
+
+            if show:
+                plt.show()
+
+            plt.close()
+
+    return out_paths
+
+def overlay_patient_hists_for_gene(df, gene, patients=None, bins=50, density=True, log=False):
+    if patients is None:
+        patients = sorted(df["patient"].unique())
+    plt.figure()
+    for p in patients:
+        vals = df.loc[df["patient"] == p, gene].dropna().to_numpy()
+        if vals.size == 0:
+            continue
+        plt.hist(vals, bins=bins, alpha=0.4, density=density, log=log)  # alpha helps visibility
+    plt.title(f"Overlayed histograms — {gene}")
+    plt.xlabel(gene); plt.ylabel("density" if density else "count")
+    plt.show(); plt.close()
 
 def get_dataset(
     data_dir: str | Path,
@@ -852,3 +897,69 @@ def load_gene_weights(
 
     return gene2weights
 
+
+class PlottingDataset(torch.utils.data.Dataset):
+    def __init__(self, dataframe, device,
+                 transforms=transforms.Compose([
+                     transforms.Resize((224, 224)),
+                     transforms.ToTensor(),
+                     # mean and std of the whole dataset
+                     transforms.Normalize([0.7406, 0.5331, 0.7059],
+                                          [0.1651, 0.2174, 0.1574])
+                 ])):
+        self.dataframe = dataframe
+        self.transforms = transforms
+        self.device = device
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, index):
+        gene_names = list(self.dataframe)[1:]
+        gene_vals = []
+        row = self.dataframe.iloc[index]
+        a = Image.open(row["tile"]).convert("RGB")
+        for j in gene_names:
+            gene_val = float(row[j])
+            gene_vals.append(gene_val)
+        e = row["tile"]
+        # apply normalization transforms as for pretrained colon classifier
+        a = self.transforms(a)
+        a = a.to(self.device)
+        return a, 0
+
+
+# has the labels set to 0 because that makes it easier to work with the frameworks written for classification
+# the idea is that they filter the attribution by the chosen class, but as we only have one output we always choose y=0
+def get_dataset_for_plotting(data_dir, genes, samples=None,
+                             device="cuda" if torch.cuda.is_available() else
+                             "mps" if torch.backends.mps.is_available() else "cpu"):
+
+    if samples is None:
+        samples = []
+        for subdir in os.listdir(data_dir):
+            if os.path.isdir(data_dir + "/" + subdir):
+                samples.append(subdir)
+
+    columns_of_interest = ["tile"]
+    for gene in genes:
+        columns_of_interest.append(gene)
+    dataset = pd.DataFrame(columns=columns_of_interest)
+
+    # generate training dataframe with all training samples
+    for i in samples:
+        st_dataset = pd.read_csv(data_dir + "/" + i + "/meta_data/gene_data.csv", index_col=-1)
+        st_dataset["tile"] = st_dataset.index
+        st_dataset["tile"] = st_dataset["tile"].apply(
+            lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x)
+        )
+        if dataset.empty:
+            dataset = st_dataset[columns_of_interest]
+        else:
+            # concat
+            dataset = pd.concat([dataset, st_dataset[columns_of_interest]])
+
+    # reset index of dataframes
+    dataset.reset_index(drop=True, inplace=True)
+
+    return PlottingDataset(dataset, device=device)

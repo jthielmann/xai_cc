@@ -29,7 +29,7 @@ result_paths = cluster(model=model,
                   data_dir  = cfg["data_dir"],
                   samples   = cfg["val_samples"],
                   genes     = cfg["genes"],
-                  out_dir   = "../crp_out/",
+                  out_path   = "../crp_out/",
                   debug     = False)
 
 from pathlib import Path

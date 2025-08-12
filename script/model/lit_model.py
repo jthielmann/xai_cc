@@ -34,6 +34,14 @@ def load_model(path: str, config: Dict[str, Any]) -> L.LightningModule:
     model.to(device).eval()
     return model
 
+def load_model2(config: Dict[str, Any], model_name = "/best_model.pth") -> L.LightningModule:
+    device = "cpu"
+    model = GeneExpressionRegressor(config)
+    state = torch.load(config["out_path"] + model_name, map_location=device)
+    model.load_state_dict(state, strict=False)
+    model.to(device).eval()
+    return model
+
 def get_model(config):
     return GeneExpressionRegressor(config)
 
@@ -173,20 +181,19 @@ class GeneExpressionRegressor(L.LightningModule):
             self.sanity_skipped = True
             return
 
-        if not self.config.get('debug'):
-            torch.save(self.state_dict(), os.path.join(self.config['out_path'], "latest.pth"))
-            if self.current_loss < self.best_loss:
-                self.best_loss = self.current_loss
-                # Save the best model
-                best_model_path = os.path.join(self.config['out_path'], "best_model.pth")
-                torch.save(self.state_dict(), best_model_path)
+        torch.save(self.state_dict(), os.path.join(self.config['out_path'], "latest.pth"))
+        if self.current_loss < self.best_loss:
+            self.best_loss = self.current_loss
+            # Save the best model
+            best_model_path = os.path.join(self.config['out_path'], "best_model.pth")
+            torch.save(self.state_dict(), best_model_path)
 
-                if self.is_online:
-                    wandb.run.summary["best_val_loss"] = self.best_loss
-                    wandb.run.summary["best_val_epoch"] = self.current_epoch
-                    #wandb.save(best_model_path, base_path=self.config['out_path'])
-                    wandb.log({"epoch": self.current_epoch})
-        # Aggregate outputs
+            if self.is_online:
+                wandb.run.summary["best_val_loss"] = self.best_loss
+                wandb.run.summary["best_val_epoch"] = self.current_epoch
+                #wandb.save(best_model_path, base_path=self.config['out_path'])
+                wandb.log({"epoch": self.current_epoch})
+
         y_hat = torch.cat(self.y_hats, dim=0)
         y_true = torch.cat(self.ys, dim=0)
         pred_std = y_hat.std(dim=0)
@@ -297,6 +304,7 @@ class GeneExpressionRegressor(L.LightningModule):
         if self.is_online:
             if hasattr(self, 'table'):
                 wandb.log({'scatter_table': self.table})
+
 
     # to update after lr tuning
     def update_lr(self, lrs):

@@ -11,7 +11,7 @@ parameters:
   log_to_wandb:
     value: true
   dataset:
-    value: crc_base
+    value: CRC_N19
   gene_data_filename:
     values: [gene_data_log1p.csv, gene_data_log1p.csv] #gene_data_log1p.csv, gene_data_ranknorm.csv
   image_size:

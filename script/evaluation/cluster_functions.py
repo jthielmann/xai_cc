@@ -34,9 +34,9 @@ from crp.image import imgify
 
 import torchvision
 
-def cluster(model, data_dir, samples, genes, out_dir, debug=False):
+def cluster(model, data_dir, samples, genes, out_path, debug=False):
     print("clustering start")
-    results_paths = cluster_explanations_genes_loop(model, data_dir, out_dir, genes=genes, debug=debug, samples=samples)
+    results_paths = cluster_explanations_genes_loop(model, data_dir, out_path, genes=genes, debug=debug, samples=samples)
 
     return results_paths
 
@@ -60,9 +60,9 @@ def get_composite_layertype_layername(model):
     return composite, layer_type, layer_name
 
 
-def get_composite_layertype_layername_lightning(model):
+def get_composite_layertype_layername_lightning(model, target_layer_name="encoder"):
     composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
-    layer_type = model.encoder.layer1[0].__class__
+    layer_type = model.get_attr(target_layer_name).layer1[0].__class__
     # select last bottleneck module
     layer_name = get_layer_names(model, [layer_type])[-1]
     return composite, layer_type, layer_name
@@ -249,10 +249,10 @@ def get_umaps(attr, act, model_dir):
     return embedding_attr, embedding_act, X_attr, X_act
 
 # debug fully loads the dataset but then only uses the first few samples for testing purposes
-def cluster_explanations_genes_loop(model, data_dir, out_path, genes, debug=False, samples=None):
+def cluster_explanations_genes_loop(model, data_dir, out_path, genes, target_layer_name, debug=False, samples=None):
     results_paths = []
     os.makedirs(out_path, exist_ok=True) # later we check if it is already calculated before we fill this dir
-    composite, layer_type, layer_name = get_composite_layertype_layername_lightning(model)
+    composite, layer_type, layer_name = get_composite_layertype_layername_lightning(model, target_layer_name)
     print("target layer type:", layer_type)
     print("target layer:", layer_name)
     model.eval()

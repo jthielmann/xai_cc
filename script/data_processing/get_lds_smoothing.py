@@ -33,7 +33,7 @@ def main(cfg_path: str):
     bins      = int(cfg.get("lds_bins",   30))
     ks        = int(cfg.get("lds_ks",     5))
     sigma     = cfg.get("lds_sigma")           # None → Silverman
-    out_dir   = ensure_dir(cfg.get("out_dir", "./lds_tables"))
+    out_path   = ensure_dir(cfg.get("out_path", "./lds_tables"))
 
     # dataset metadata (patients list, data dir, …)
     ds_cfg        = get_dataset_cfg(cfg)
@@ -62,16 +62,16 @@ def main(cfg_path: str):
         )
 
         # 3) save artefacts
-        np.savez(os.path.join(out_dir, f"{gene}_hist_edges.npz"),
+        np.savez(os.path.join(out_path, f"{gene}_hist_edges.npz"),
                  eff_hist=eff_hist, edges=edges)
 
         # optional per-tile weights
         idx      = np.clip(np.digitize(labels, edges[:-1]) - 1, 0, bins - 1)
         weights  = 1.0 / np.maximum(eff_hist[idx], 1e-12)
         weightdf = pd.DataFrame({"tile": df["tile"], f"{gene}_lds_w": weights})
-        weightdf.to_csv(os.path.join(out_dir, f"{gene}_lds_weights.csv"), index=False)
+        weightdf.to_csv(os.path.join(out_path, f"{gene}_lds_weights.csv"), index=False)
 
-    print("Finished; outputs in →", out_dir)
+    print("Finished; outputs in →", out_path)
 
 
 if __name__ == "__main__":

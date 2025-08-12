@@ -1,4 +1,4 @@
-project: crc_base_label_normalizations_sweep
+project: RUBCNL sanity base 2
 name: compare different preprocessing of the gene data
 method: grid
 metric:
@@ -30,7 +30,7 @@ parameters:
   loss_fn_switch:
     value: MSE
   gene_data_filename:
-    values: [gene_data_log1p.csv, gene_data_ranknorm.csv,  gene_data_raw.csv]
+    values: [gene_data_log1p.csv, gene_data_ranknorm.csv]
   image_size:
     value: 224
   generate_scatters:

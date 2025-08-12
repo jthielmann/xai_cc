@@ -9,7 +9,7 @@ import random
 
 import numpy
 import torch
-
+import yaml
 import sys
 from main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, read_config_parameter, get_sweep_parameter_names
 from typing import Dict, Any
@@ -31,6 +31,8 @@ def _train(cfg: Dict[str, Any]) -> None:
         cfg_for_pipeline = dict(run.config)
     else:
         cfg_for_pipeline = cfg
+    with open(cfg_for_pipeline["out_path"] + "/config", "w") as f:
+        yaml.safe_dump(cfg_for_pipeline, f, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
     pipeline = TrainerPipeline(cfg_for_pipeline, run=run)
     pipeline.run()
@@ -46,7 +48,6 @@ def _sweep_run():
 
     ds_cfg = get_dataset_cfg(cfg)
     cfg.update(ds_cfg)
-
     pipeline = TrainerPipeline(cfg, run=run)
     pipeline.run()
     run.finish()
@@ -77,16 +78,16 @@ def main():
 
         # need the target location to exist to check if there is enough space
         project = sweep_config["project"] if not read_config_parameter(raw_cfg,"debug") else "debug_" + random.randbytes(4).hex()
-        out_path = "../models/" + project
-        if not os.path.exists(out_path):
-            os.makedirs(out_path, exist_ok=True)
-        ensure_free_disk_space(out_path)
-        sweep_config["parameters"]["out_path"] = {"value": out_path}
+        sweep_dir = "../models/" + project
+        if not os.path.exists(sweep_dir):
+            os.makedirs(sweep_dir, exist_ok=True)
+        ensure_free_disk_space(sweep_dir)
+        sweep_config["parameters"]["sweep_dir"] = {"value": sweep_dir}
 
         print(f"Project: {project}")
-        sweep_dir = os.path.join("..", "wandb_sweep_ids", project, sweep_config["name"])
-        os.makedirs(sweep_dir, exist_ok=True)
-        sweep_id_file = os.path.join(sweep_dir, "sweep_id.txt")
+        sweep_id_dir = os.path.join("..", "wandb_sweep_ids", project, sweep_config["name"])
+        os.makedirs(sweep_id_dir, exist_ok=True)
+        sweep_id_file = os.path.join(sweep_id_dir, "sweep_id.txt")
 
         # Load or create sweep ID
         if os.path.exists(sweep_id_file):

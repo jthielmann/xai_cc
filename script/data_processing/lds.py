@@ -121,7 +121,7 @@ class LDS:
         m = 0.5 * (p + q)
         return 0.5 * (entropy(p, m) + entropy(q, m))
 
-    def compare_plot(self, gene: str, params: LDSParams, weights: np.ndarray, out_dir: Path):
+    def compare_plot(self, gene: str, params: LDSParams, weights: np.ndarray, out_path: Path):
         emp_hist, edges = self._empirical(gene, params.bins)
         centres = 0.5 * (edges[:-1] + edges[1:])
         p = emp_hist / max(emp_hist.sum(), self.EPS)
@@ -134,8 +134,8 @@ class LDS:
         plt.ylabel("Probability")
         plt.title(f"{gene} (bins={params.bins}, ks={params.kernel_size}, sigma={params.sigma})")
         plt.legend()
-        out_dir.mkdir(parents=True, exist_ok=True)
-        plt.savefig(out_dir / f"{gene}_comparison.png", dpi=150, bbox_inches="tight")
+        out_path.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out_path / f"{gene}_comparison.png", dpi=150, bbox_inches="tight")
         plt.close()
 
 
@@ -225,7 +225,7 @@ def main():
             sigma=float(row["sigma"]),
         )
         weights = np.array(json.loads(row["weights_json"]), dtype=np.float32)
-        lds.compare_plot(str(row["gene"]), params, weights, out_dir=out_plots)
+        lds.compare_plot(str(row["gene"]), params, weights, out_path=out_plots)
 
 
 if __name__ == "__main__":
