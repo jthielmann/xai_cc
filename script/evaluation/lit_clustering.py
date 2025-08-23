@@ -56,18 +56,20 @@ def find_output_layer_name(model: nn.Module, example_input):
 
     # Prefer the last module with parameters; fallback to last module of any kind
     return last_with_params or last_any
-def cluster(model, data_dir, samples, genes, out_path, debug=False, target_layer_name=None):
+
+def cluster(cfg, model, data_dir, samples, genes, out_path, debug=False, target_layer_name=None):
+    dataset = get_dataset(data_dir, genes=genes, samples=samples, transforms=get_transforms(cfg),
+                                max_len=1, only_inputs=False)
     if target_layer_name is None:
         # create or fetch a single example batch (X, y) -> take X
         # ensure it's on the same device as the model
         device = next(model.parameters()).device
-        example_x = get_dataset(data_dir, genes=genes, samples=samples, transforms=get_transforms(),
-                                max_len=1, only_inputs=True)[0].unsqueeze(0).to(device)
+        example_x = dataset[0][0].unsqueeze(0).to(device)
         target_layer_name = find_output_layer_name(model, example_x)
 
     print("clustering start; target layer:", target_layer_name)
     results_paths = cluster_explanations_genes_loop(
-        model, data_dir, out_path,
+        cfg, model, data_dir, out_path,
         target_layer_name=target_layer_name,
         genes=genes, debug=debug, samples=samples
     )
@@ -82,7 +84,7 @@ config_string = "config"
 cfg = parse_yaml_config(base_path + config_string)
 
 flat_params = {
-    k: (v["value"] if isinstance(v, dict) and "value" in v else v)
+    k: (v["value"] if isinstance(v, dict) and "value" in v else v["values"])
     for k, v in cfg.get("parameters", {}).items()
 }
 
@@ -91,16 +93,16 @@ out_path = "../crp_out/" + project
 if not os.path.exists(out_path):
     os.makedirs(out_path, exist_ok=True)
 ensure_free_disk_space(out_path)
-cfg["parameters"]["out_path"] = {"value": out_path}
+flat_params["out_path"] = out_path
 
-debug = read_config_parameter(cfg, "debug")
+debug = read_config_parameter(flat_params, "debug")
 ds_cfg = get_dataset_cfg(flat_params["dataset"], debug=debug)
-cfg.update(ds_cfg)
-data_dir = read_config_parameter(cfg, "data_dir")
-out_path = read_config_parameter(cfg, "out_path")
-train_samples = read_config_parameter(cfg, "train_samples")
-genes = read_config_parameter(cfg, "genes")
-cluster(model, data_dir, train_samples, genes, out_path, debug)
+flat_params.update(ds_cfg)
+data_dir = read_config_parameter(flat_params, "data_dir")
+out_path = read_config_parameter(flat_params, "out_path")
+train_samples = read_config_parameter(flat_params, "train_samples")
+genes = read_config_parameter(flat_params, "genes")
+cluster(flat_params, model, data_dir, train_samples, genes, out_path, debug)
 
 exit(0)
 

@@ -72,16 +72,25 @@ class STDataset(Dataset):
         image_transforms=None,
         inputs_only: bool = False,
         genes: Optional[List[str]] = None,
-        use_weights: bool = False,              # if True, return (img, y, w)
+        use_weights: bool = False,
+        return_floats: bool = False
     ):
         self.df = df.reset_index(drop=True)
         self.transforms = image_transforms
         self.inputs_only = inputs_only
+        self.return_floats = return_floats
 
         # Determine gene columns explicitly (stable order)
         if genes is None:
             # auto-detect genes = all numeric columns except 'tile' and *_lds_w
-            candidates = [c for c in self.df.columns if c != "tile" and not str(c).endswith("_lds_w")]
+            candidates = []
+            for c in self.df.columns:
+                if c == "tile" or str(c).endswith("_lds_w"):
+                    continue
+                # keep only numeric columns
+                if pd.api.types.is_numeric_dtype(self.df[c]):
+                    candidates.append(c)
+
             if not candidates:
                 raise ValueError("Could not infer gene columns; please pass `genes`.")
             self.genes = list(candidates)
@@ -90,8 +99,6 @@ class STDataset(Dataset):
             if missing:
                 raise ValueError(f"Genes missing in DataFrame: {missing}")
             self.genes = list(genes)
-
-        self.G = len(self.genes)
 
         # Optional per-gene weights: try to read a vector w[g] per sample
         self.use_weights = use_weights
@@ -131,30 +138,38 @@ class STDataset(Dataset):
         img = self._load_image(row["tile"])
 
         if self.inputs_only:
-            # Return image only; caller can ignore targets entirely
             return img
 
-        y = self._row_to_target(row)             # shape (G,)
+        if self.return_floats:
+            y = np.array([float(row[g]) for g in self.genes], dtype=np.float32)   # shape (G,)
+            if self.use_weights:
+                w = np.array([float(row[f"{g}_lds_w"]) for g in self.genes], dtype=np.float32)  # shape (G,)
+                return img, y, w
+            return img, y
 
+        # default tensor path
+        y = self._row_to_target(row)  # torch.float32, shape (G,)
         if self.use_weights:
-            w = self._row_to_weights(row)        # shape (G,)
+            w = self._row_to_weights(row)  # torch.float32, shape (G,)
             return img, y, w
-
         return img, y
 
 
-class STDataset_umap(STDataset):
-    def __init__(self, dataframe, image_transforms=None, device="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu", inputs_only=False):
-        super().__init__(dataframe, image_transforms, device, inputs_only)
+class STDatasetUMAP(STDataset):
+    def __init__(self, df, *, image_transforms=None):
+        super().__init__(
+            df,
+            image_transforms=image_transforms,
+            inputs_only=True, # umap
+            genes=[],
+            use_weights=False,
+            return_floats=False
+        )
 
     def __getitem__(self, index):
-        row = self.dataframe.iloc[index]
-        a = Image.open(row["tile"]).convert("RGB")
-        if self.transforms:
-            a = self.transforms(a)
-        if self.device_handling:
-            a = a.to(self.device)
-        return a, row["tile"]
+        row = self.df.iloc[index]
+        img = self._load_image(row["tile"])
+        return img, row["tile"]
 
 
 class TileLoader:
@@ -362,7 +377,8 @@ def get_dataset(
     gene_data_filename: str = "gene_data.csv",
     lds_smoothing_csv: str | Path | None = None,
     weight_transform: str = "inverse",
-    weight_clamp: int = 10
+    weight_clamp: int = 10,
+    return_floats: bool = False
 ):
     if samples is None:
         samples = [f.name for f in os.scandir(data_dir) if f.is_dir()]
@@ -387,6 +403,7 @@ def get_dataset(
         inputs_only=only_inputs,
         genes=genes,
         use_weights=lds_smoothing_csv is not None,
+        return_floats=return_floats
     )
     return ds
 

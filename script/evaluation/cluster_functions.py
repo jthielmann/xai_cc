@@ -34,10 +34,19 @@ from crp.image import imgify
 
 import torchvision
 
-def cluster(model, data_dir, samples, genes, out_path, debug=False):
+def cluster(cfg, model, data_dir, samples, genes, out_path, debug=False, target_layer_name="encoder"):
     print("clustering start")
-    results_paths = cluster_explanations_genes_loop(model, data_dir, out_path, genes=genes, debug=debug, samples=samples)
-
+    results_paths = []
+    for gene in genes:
+        gene_out = os.path.join(out_path, gene)  # per-gene subdir
+        os.makedirs(gene_out, exist_ok=True)
+        res = cluster_explanations_genes_loop(
+            cfg, model, data_dir, gene_out,
+            genes=[gene],
+            target_layer_name=target_layer_name,
+            debug=debug, samples=samples
+        )
+        results_paths.extend(res)
     return results_paths
 
 
@@ -62,7 +71,8 @@ def get_composite_layertype_layername(model):
 
 def get_composite_layertype_layername_lightning(model, target_layer_name="encoder"):
     composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
-    layer_type = model.get_attr(target_layer_name).layer1[0].__class__
+    #layer_type = getattr(model, target_layer_name).layer1[0].__class__
+    layer_type = getattr(model, target_layer_name).__class__
     # select last bottleneck module
     layer_name = get_layer_names(model, [layer_type])[-1]
     return composite, layer_type, layer_name
@@ -231,78 +241,117 @@ def get_prototypes(attr, embedding_attr, act, embedding_act):
 
 def get_umaps(attr, act, model_dir):
     embedding_attr = UMAP(n_neighbors=5, random_state=123, n_jobs=1)
-    X_attr_filename = model_dir + "X_attr.npy"
+    X_attr_filename = os.path.join(model_dir, "X_attr.npy")
     X_attr = embedding_attr.fit_transform(attr.detach().cpu().numpy())
     with open(X_attr_filename, 'wb') as f:
         np.save(f, X_attr)
 
     embedding_act = UMAP(n_neighbors=5, random_state=123, n_jobs=1)
-    X_act_filename = model_dir + "X_act.npy"
+    X_act_filename = os.path.join(model_dir, "X_act.npy")
     if os.path.exists(X_act_filename):
         with open(X_act_filename, 'rb') as f:
-            X_act = np.load(X_act_filename)
+            X_act = np.load(f)
     else:
-        X_act = embedding_attr.fit_transform(act.detach().cpu().numpy())
+        X_act = embedding_act.fit_transform(act.detach().cpu().numpy())  # <-- was embedding_attr
         with open(X_act_filename, 'wb') as f:
             np.save(f, X_act)
 
     return embedding_attr, embedding_act, X_attr, X_act
 
-# debug fully loads the dataset but then only uses the first few samples for testing purposes
-def cluster_explanations_genes_loop(model, data_dir, out_path, genes, target_layer_name, debug=False, samples=None):
+
+def cluster_explanations_genes_loop(cfg, model, data_dir, out_path, genes, target_layer_name, debug=False, samples=None):
     results_paths = []
-    os.makedirs(out_path, exist_ok=True) # later we check if it is already calculated before we fill this dir
+    os.makedirs(out_path, exist_ok=True)
+
     composite, layer_type, layer_name = get_composite_layertype_layername_lightning(model, target_layer_name)
     print("target layer type:", layer_type)
     print("target layer:", layer_name)
     model.eval()
 
     attribution = CondAttribution(model)
-    layer_map = {layer_name: ChannelConcept()}
-    cc = ChannelConcept()
-    for gene in genes:
-        print("clustering started for gene", gene)
+    cc = ChannelConcept()                              # <-- define cc explicitly
+    layer_map = {layer_name: cc}
 
+    from script.data_processing.data_loader import get_dataset
+    from script.data_processing.image_transforms import get_transforms
+    import numpy as np
+    import torch
+
+    BATCH = 32
+
+    for idx, gene in enumerate(genes):
+        print("clustering started for gene", gene)
         print("loading dataset")
-        #dataset = get_dataset_for_plotting(data_dir, genes=[gene], device=model.device, samples=samples)
-        from script.data_processing.data_loader import get_dataset
-        from script.data_processing.image_transforms import get_transforms
-        dataset = get_dataset(data_dir, genes=[gene], samples=samples, transforms=get_transforms(), max_len=None, only_inputs=True)
+
+        dataset = get_dataset(
+            data_dir,
+            genes=[gene],
+            samples=samples,
+            transforms=get_transforms(cfg),
+            max_len=None,
+            only_inputs=False,
+            return_floats=True
+        )
         print("dataset loaded")
 
-        fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=None, path=out_path)
-        print("preprocessing CRP to ", out_path)
-        # skip calculation in debug mode as we only require to calculate it once
-        if not debug or not os.path.exists(out_path + "/ActMax_sum_normed/encoder.layer4.2_data.npy"):
-            fv.run(composite, 0, len(dataset) // 1, batch_size=32)
-        print("CRP preprocessing done. output path:", out_path)
+        # ---- side-car targets aligned to dataset order (per-gene) ----
+        Y_all = torch.from_numpy(dataset.df[dataset.genes].to_numpy(dtype=np.float32))
+        if Y_all.ndim == 2 and Y_all.size(1) == 1:
+            Y_all = Y_all.squeeze(1)
 
-        dataloader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=0)
 
-        if not debug and os.path.exists(out_path + "/activations.pt"):
+        def preprocess_fn(batch):
+            if isinstance(batch, (tuple, list)):
+                x = batch[0]
+            else:
+                x = batch
+            return x
+
+        fv = FeatureVisualization(
+            attribution,
+            dataset,
+            layer_map,
+            preprocess_fn=preprocess_fn,
+            path=out_path,   # each gene already has its own out_path from caller
+        )
+
+        N = len(dataset)
+        N_rounded = (N // BATCH) * BATCH if N >= BATCH else N
+        if N_rounded > 0:
+            print(f"preprocessing CRP to {out_path}")
+            fv.run(composite, 0, N_rounded, batch_size=BATCH)
+        else:
+            print("dataset empty after rounding; skipping FV.run()")
+
+        dataloader = DataLoader(dataset, batch_size=BATCH, shuffle=False, num_workers=0)
+
+        if (not debug) and os.path.exists(os.path.join(out_path, "activations.pt")):
             print("loading precalculated attributions and activations")
             activations, attributions, outputs, indices = load_attributions(out_path)
         else:
             print("calculating concept attributions and activations over the dataset")
-            activations, attributions, outputs, indices = calculate_attributions(dataloader, model.device, composite, layer_name, attribution, out_path, cc)
+            activations, attributions, outputs, indices = calculate_attributions(
+                dataloader, model.device, composite, layer_name, attribution, out_path, cc
+            )
             print("calculation finished")
 
-        # all indices are 0 because we only have one output
-        attr = attributions[outputs.argmax(1) == 0]
-        act = activations[outputs.argmax(1) == 0]
-        indices = indices[outputs.argmax(1) == 0]
+        # NOTE: this assumes a classification-like prediction and selects class 0
+        # If you're doing regression, you likely want to drop this filter.
+        keep = (outputs.argmax(1) == 0)
+        attr = attributions[keep]
+        act = activations[keep]
+        indices = indices[keep]
 
         embedding_attr, embedding_act, X_attr, X_act = get_umaps(attr, act, out_path)
         x_attr, y_attr = X_attr[:, 0], X_attr[:, 1]
-        x_act, y_act = X_act[:, 0], X_act[:, 1]
+        x_act, y_act   = X_act[:, 0], X_act[:, 1]
 
         print("calculating prototypes")
-        os.makedirs(out_path + "/prototypes/", exist_ok=True)
+        os.makedirs(os.path.join(out_path, "prototypes"), exist_ok=True)
 
         prototypes = get_prototypes(attr, embedding_attr, act, embedding_act)
-
-        for i in range(len(prototypes)):
-            np.save(out_path + "/prototypes/" + str(i), prototypes[i])
+        for i, proto in enumerate(prototypes):
+            np.save(os.path.join(out_path, "prototypes", str(i)), proto)
 
         proto_attr = prototypes[0]
         print("calculating distances")
