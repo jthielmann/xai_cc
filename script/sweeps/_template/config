@@ -1,12 +1,12 @@
-project: RUBCNL pearson loss base
-name: compare different preprocessing of the gene data
-method: grid
+project: YOUR_PROJECT_NAME
+name: YOUR_SWEEP_NAME
+method: grid   # or random / bayes
 
 metric:
   name: valid_loss
   goal: minimize
 
-# Fixed
+# fixed
 debug: false
 log_to_wandb: true
 epochs: 40
@@ -17,7 +17,7 @@ genes: [RUBCNL]
 encoder_out_dim: 2048
 middle_layer_features: 200
 num_workers: 2
-loss_fn_switch: pearson   # MSE, WMSE, pearson
+loss_fn_switch: pearson
 image_size: 224
 generate_scatters: true
 use_early_stopping: true
@@ -25,7 +25,7 @@ use_leaky_relu: false
 one_linear_out_layer: false
 freeze_encoder: true
 
-# hyperparameters
+# Sweep parameters
 parameters:
   learning_rate:
     values: [0.1, 0.01, 0.001]
