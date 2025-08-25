@@ -1,12 +1,14 @@
 import sys
 
+import torch
+
 sys.path.insert(0, '..')
 from script.data_processing.data_loader import get_base_dataset, get_dataset, NCT_CRC_Dataset
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-import torchvision.transforms as transforms
-
+from torch.utils.data import DataLoader
+from torchvision import transforms
 
 gene = "RUBCNL"
 dataset_name = "NCT-CRC-HE-100K"
@@ -14,58 +16,81 @@ from script.data_processing.image_transforms import get_transforms
 use_val = False
 use_test = False
 
-def get_mean_std_features(dataset_name, data_dirs, gene, patients, use_tiles_subdir=False, gene_data_filename=None):
-
-    r_sum, g_sum, b_sum = 0, 0, 0
-    r_sq_sum, g_sq_sum, b_sq_sum = 0, 0, 0
-    num_pixels = 0  # Total number of pixels across all images
+def get_mean_std_per_patient(
+    dataset_name,
+    data_dirs,
+    gene,
+    patients,
+    use_tiles_subdir=False,
+    gene_data_filename=None,
+    batch_size=64,
+    num_workers=4,
+):
+    to_tensor = transforms.ToTensor()
+    results = {}  # patient -> (mean[C], std[C])
 
     for patient in patients:
+        # build ONE dataset per data_dir (filtered to this patient), then concat
+        per_dir_datasets = []
         for data_dir in data_dirs:
-            image_dir_i = data_dir + "/" + patient
-            if use_tiles_subdir:
-                image_dir_i += "/tiles/"
-            if not os.path.exists(image_dir_i):
-                if data_dirs.index(data_dir) == len(data_dirs) - 1:
-                    out_text = "patient" + patient + "does not exist in any datadir, datadirs:"
-                    for d in data_dirs:
-                        out_text += d
-                        out_text += ", "
-                    print(out_text)
+            # quick existence check (optional; dataset classes may already filter)
+            img_dir = os.path.join(data_dir, patient, "tiles" if use_tiles_subdir else "")
+            if not os.path.exists(img_dir):
                 continue
-            print("patient", patient)
+
             if dataset_name == "NCT-CRC-HE-100K":
-                dataset = NCT_CRC_Dataset(data_dir, patients, use_tiles_sub_dir=use_tiles_subdir,
-                                          image_transforms=transforms.Compose([transforms.ToTensor()]))
-
+                ds = NCT_CRC_Dataset(
+                    data_dir,
+                    [patient],
+                    use_tiles_sub_dir=use_tiles_subdir,
+                    image_transforms=to_tensor,
+                )
             else:
-                dataset = get_dataset(data_dir, [gene], samples=[patient], transforms=get_transforms(),gene_data_filename=gene_data_filename)
+                ds = get_dataset(
+                    data_dir,
+                    [gene],
+                    samples=[patient],
+                    transforms=to_tensor,  # no augmentation because we analyze data
+                    gene_data_filename=gene_data_filename,
+                )
+            if len(ds) > 0:
+                per_dir_datasets.append(ds)
 
+        if not per_dir_datasets:
+            print(f"[warn] patient {patient} not found in any data_dir")
+            continue
 
-            for data, target in dataset:
-                # Assuming data shape is (3, H, W)
-                num_pixels += data.shape[1] * data.shape[2]  # H * W
+        dataset = per_dir_datasets[0] if len(per_dir_datasets) == 1 else torch.utils.data.ConcatDataset(per_dir_datasets)
+        loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False, drop_last=False)
 
-                r_sum += data[0].sum()
-                g_sum += data[1].sum()
-                b_sum += data[2].sum()
+        sum_c   = torch.zeros(3, dtype=torch.float64)
+        sumsq_c = torch.zeros(3, dtype=torch.float64)
+        total_pixels = 0
 
-                r_sq_sum += (data[0] ** 2).sum()
-                g_sq_sum += (data[1] ** 2).sum()
-                b_sq_sum += (data[2] ** 2).sum()
+        with torch.no_grad():
+            for batch in loader:
+                data = batch[0]  # take data from (data, label), [B, 3, H, W]
+                if data is None or data.ndim != 4 or data.size(1) != 3:
+                    continue
+                b, _, h, w = data.shape
+                total_pixels += b * h * w
 
-    # Compute mean
-    r_mean = r_sum / num_pixels
-    g_mean = g_sum / num_pixels
-    b_mean = b_sum / num_pixels
+                d64 = data.to(torch.float64)  # reduce rounding issues
+                sum_c   += d64.sum(dim=(0, 2, 3))
+                sumsq_c += (d64 ** 2).sum(dim=(0, 2, 3))
 
-    # Compute standard deviation
-    r_std = ((r_sq_sum / num_pixels) - r_mean ** 2) ** 0.5
-    g_std = ((g_sq_sum / num_pixels) - g_mean ** 2) ** 0.5
-    b_std = ((b_sq_sum / num_pixels) - b_mean ** 2) ** 0.5
+        if total_pixels == 0:
+            print(f"[warn] patient {patient} has zero pixels after filtering")
+            continue
 
-    print("Mean:", round(r_mean.item(), 4), round(g_mean.item(), 4), round(b_mean.item(), 4))
-    print("Std:", round(r_std.item(), 4), round(g_std.item(), 4), round(b_std.item(), 4))
+        mean = (sum_c / total_pixels).to(torch.float32)
+        var  = (sumsq_c / total_pixels) - (mean.to(torch.float64) ** 2)
+        std  = var.clamp_min(0).sqrt().to(torch.float32)
+
+        print(f"Patient {patient} Mean: {[round(x.item(),4) for x in mean]}, Std: {[round(x.item(),4) for x in std]}")
+        results[patient] = (mean, std)
+
+    return results
 
 def calculate_mean_std_labels(data_dir, gene, patients, filename="gene_data.csv"):
     bins = 30

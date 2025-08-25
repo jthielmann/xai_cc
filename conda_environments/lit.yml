@@ -1,4 +1,4 @@
-name: lit
+name: lit_2
 channels:
   - bioconda
   - conda-forge
