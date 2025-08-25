@@ -20,7 +20,7 @@ from io import BytesIO
 from PIL import Image
 from torch.optim.lr_scheduler import OneCycleLR, ChainedScheduler
 sys.path.insert(0, '..')
-from script.model.loss_functions import MultiGeneWeightedMSE
+from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss
 from script.model.lit_ae import SparseAutoencoder
 from typing import Dict, Any
 from torchmetrics.functional import pearson_corrcoef
@@ -89,6 +89,10 @@ class GeneExpressionRegressor(L.LightningModule):
             weight_dir = self.config["lds_weight_csv"]
             weights = load_gene_weights(weight_dir, self.genes)
             self.loss_fn = MultiGeneWeightedMSE(weights)
+        elif self.config["loss_fn_switch"] == "pearson":
+            self.loss_fn = PearsonCorrLoss()
+        else:
+            raise ValueError(f"loss_fn_switch {self.config['loss_fn_switch']} not implemented")
 
         self.num_training_batches = 0
         self.current_loss = torch.tensor(0.).to(self.device)
@@ -177,115 +181,95 @@ class GeneExpressionRegressor(L.LightningModule):
 
     def on_validation_epoch_end(self):
         # Skip sanity check epoch
-        if not hasattr(self, 'sanity_skipped'):
+        if not hasattr(self, "sanity_skipped"):
             self.sanity_skipped = True
             return
 
-        torch.save(self.state_dict(), os.path.join(self.config['out_path'], "latest.pth"))
+        torch.save(self.state_dict(), os.path.join(self.config["out_path"], "latest.pth"))
         if self.current_loss < self.best_loss:
             self.best_loss = self.current_loss
-            # Save the best model
-            best_model_path = os.path.join(self.config['out_path'], "best_model.pth")
+            best_model_path = os.path.join(self.config["out_path"], "best_model.pth")
             torch.save(self.state_dict(), best_model_path)
-
             if self.is_online:
                 wandb.run.summary["best_val_loss"] = self.best_loss
                 wandb.run.summary["best_val_epoch"] = self.current_epoch
-                #wandb.save(best_model_path, base_path=self.config['out_path'])
                 wandb.log({"epoch": self.current_epoch})
 
-        y_hat = torch.cat(self.y_hats, dim=0)
-        y_true = torch.cat(self.ys, dim=0)
-        pred_std = y_hat.std(dim=0)
-        if self.is_online:
-            per_gene_r = [
-                pearson_corrcoef(y_hat[:, i].float(), y_true[:, i].float()).item()
-                for i in range(y_hat.shape[1])
-            ]
-            self.log_dict({f"pearson_{g}": float(r) for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
+        y_hat = torch.cat(self.y_hats, dim=0).float()
+        y_true = torch.cat(self.ys, dim=0).float()
 
-            # Generate scatter plots if requested
-            if self.config.get('generate_scatters', False):
-                for i, gene in enumerate(self.genes):
-                    results_file = os.path.join(self.config['out_path'], "_" + str(random.randbytes(4).hex()) + "_results.csv")
-                    yhat_g  = y_hat[:, i]
-                    ytrue_g = y_true[:, i]
-                    result = self.loss_fn(yhat_g, ytrue_g)
-                    pearson = float(pearson_corrcoef(yhat_g, ytrue_g))
+        with torch.no_grad():
+            # Per-gene Pearson once
+            per_gene_r = []
+            for i in range(y_hat.shape[1]):
+                yi, ti = y_hat[:, i], y_true[:, i]
+                if yi.std(unbiased=False) == 0 or ti.std(unbiased=False) == 0:
+                    per_gene_r.append(float("nan"))
+                else:
+                    per_gene_r.append(float(pearson_corrcoef(yi, ti)))
+
+            if self.is_online:
+                self.log_dict({f"pearson_{g}": float(r) for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
+
+            if self.config.get("generate_scatters", False):
+                ABBR = {
+                    "learning_rate": "lr", "batch_size": "bs", "dropout_rate": "dr",
+                    "loss_fn_swtich": "loss", "encoder_type": "encdr",
+                    "middle_layer_features": "mfeatures", "gene_data_filename": "file",
+                    "freeze_encoder": "f_encdr", "one_linear_out_layer": "1linLr",
+                    "use_leaky_relu": "lkReLu", "use_early_stopping": "eStop",
+                }
+                sweep_keys = getattr(getattr(self, "wandb_run", None), "config", {}).get("sweep_parameter_names", [])
+                appendix = " | ".join(
+                    f"{ABBR.get(k, k)}={self.config.get(k)}" for k in sweep_keys) if sweep_keys else ""
+                table = getattr(self, "table", None)
+
+                for gi, gene in enumerate(self.genes):
+                    yi, ti = y_hat[:, gi], y_true[:, gi]
+                    r_value = float(per_gene_r[gi])
+                    loss = float(self.loss_fn(yi, ti))
+
+                    yh = yi.detach().cpu().numpy()
+                    yt = ti.detach().cpu().numpy()
+                    lo = float(min(yh.min(), yt.min()))
+                    hi = float(max(yh.max(), yt.max()))
+                    if lo == hi:
+                        lo, hi = lo - 1.0, hi + 1.0
+
                     fig, ax = plt.subplots()
-                    ax.text(x=-2, y=3, s="MSE: " + str(round(result.item(), 2)))
-                    ax.text(x=-2, y=1, s="Pearson: " + str(pearson))
-                    ax.plot([-2, 3], [-2, 3], color='red')
-                    ABBR = {
-                        "learning_rate": "lr",
-                        "batch_size": "bs",
-                        "dropout_rate": "dr",
-                        "loss_fn_swtich": "loss",
-                        "encoder_type": "encdr",
-                        "middle_layer_features": "mfeatures",
-                        "gene_data_filename": "file",
-                        "freeze_encoder": "f_encdr",
-                        "one_linear_out_layer": "1linLr",
-                        "use_leaky_relu": "lkReLu",
-                        "use_early_stopping": "eStop"
-                    }
+                    ax.scatter(yh, yt, s=8)
+                    ax.plot([lo, hi], [lo, hi], linewidth=1)
+                    ax.text(0.02, 0.98, f"loss: {loss:.3f}\nr: {r_value:.3f}",
+                            transform=ax.transAxes, va="top", ha="left", fontsize="small")
+                    title = " — ".join([f"ep {self.current_epoch}", gene] + ([appendix] if appendix else []))
+                    ax.set_title(title)
+                    ax.set_xlabel("output")
+                    ax.set_ylabel("target")
+                    ax.set_aspect("equal", adjustable="box")
 
-                    sweep_keys = getattr(getattr(self, "wandb_run", None), "config", {}).get("sweep_parameter_names", [])
-                    appendix_parts = []
-                    for k in sweep_keys:
-                        short = ABBR.get(k, k)
-                        val = self.config.get(k)
-                        appendix_parts.append(f"{short}={val}")
-                    out_file_appendix = " | ".join(appendix_parts)
-
-                    for i, gene in enumerate(self.genes):
-                        yhat_t = y_hat[:, i].reshape(-1).float()
-                        ytrue_t = y_true[:, i].reshape(-1).float()
-
-                        if (yhat_t.std(unbiased=False) == 0) or (ytrue_t.std(unbiased=False) == 0):
-                            r_value = float('nan')
-                        else:
-                            r_value = float(pearson_corrcoef(yhat_t, ytrue_t))
-                        loss = float(self.loss_fn(yhat_t, ytrue_t))
-
-                        yhat_g = yhat_t.detach().cpu().numpy()
-                        ytrue_g = ytrue_t.detach().cpu().numpy()
-
-                        lo = float(np.minimum(yhat_g.min(), ytrue_g.min()))
-                        hi = float(np.maximum(yhat_g.max(), ytrue_g.max()))
-                        if lo == hi: # padding if identity
-                            lo, hi = lo - 1.0, hi + 1.0
-
-                        fig, ax = plt.subplots()
-                        ax.scatter(yhat_g, ytrue_g, s=8)
-                        ax.plot([lo, hi], [lo, hi], linewidth=1)
-
-                        ax.text(0.02, 0.98, f"loss: {loss:.3f}\nr: {r_value:.3f}",
-                                transform=ax.transAxes, va="top", ha="left", fontsize="small")
-
-                        title_bits = [f"ep {self.current_epoch}", gene]
-                        if out_file_appendix:
-                            title_bits.append(out_file_appendix)
-                        ax.set_title(" — ".join(title_bits))
-                        ax.set_xlabel("output")
-                        ax.set_ylabel("target")
-                        ax.set_aspect('equal', adjustable='box')
-
-                        buf = BytesIO()
+                    from io import BytesIO
+                    with BytesIO() as buf:
                         fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
                         plt.close(fig)
                         buf.seek(0)
-
-                        img = Image.open(buf)
-                        if getattr(self, "is_online", False) and getattr(self, "table", None) is not None:
-                            self.table.add_data(
+                        if self.is_online and table is not None:
+                            img = Image.open(buf)
+                            table.add_data(
                                 self.current_epoch,
                                 gene,
-                                self.config.get('learning_rate'),
+                                self.config.get("learning_rate"),
                                 self.config.get("bins", 0),
                                 wandb.Image(img, caption=gene),
                             )
-                        buf.close()
+                            img.close()
+
+        # prevent accumulation across epochs
+        self.y_hats.clear()
+        self.ys.clear()
+
+        # prevent accumulation across epochs
+        self.y_hats.clear()
+        self.ys.clear()
 
     def on_train_epoch_end(self):
         lrs = [g["lr"] for g in self.trainer.optimizers[0].param_groups]

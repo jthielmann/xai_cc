@@ -1,6 +1,9 @@
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchmetrics.functional import pearson_corrcoef
+from typing import Dict, Union
 
 class SparsityLoss(nn.Module):
     def __init__(self, layername, model):
@@ -38,15 +41,6 @@ class CompositeLoss(nn.Module):
             weighted_sum += l
         return weighted_sum
 
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from typing import Dict, Union, Sequence
 
 
 class MultiGeneWeightedMSE(nn.Module):
@@ -98,4 +92,28 @@ class MultiGeneWeightedMSE(nn.Module):
         return losses[0] if len(losses) == 1 else torch.stack(losses).mean()
 
 
+class PearsonCorrLoss(nn.Module):
+    def __init__(self, dim: int = 0, eps: float = 1e-8, reduction: str = "mean"):
+        super().__init__()
+        self.dim = dim
+        self.eps = eps
+        self.reduction = reduction
+
+    def forward(self, preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        x = preds
+        y = target
+        x = x - x.mean(dim=self.dim, keepdim=True)
+        y = y - y.mean(dim=self.dim, keepdim=True)
+
+        xy = (x * y).sum(dim=self.dim)
+        xx = (x * x).sum(dim=self.dim)
+        yy = (y * y).sum(dim=self.dim)
+
+        r = xy / (torch.sqrt(xx + self.eps) * torch.sqrt(yy + self.eps))  # shape: (G,) or scalar
+        loss = 1 - r
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "sum":
+            return loss.sum()
+        return loss
 
