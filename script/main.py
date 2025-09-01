@@ -1,4 +1,8 @@
+import csv
 import sys
+
+import pandas as pd
+
 sys.path.insert(0, '..')
 
 import wandb
@@ -48,6 +52,34 @@ def _sweep_run():
 
     ds_cfg = get_dataset_cfg(cfg)
     cfg.update(ds_cfg)
+    if cfg.get("genes", None) is None:
+        debug = cfg["debug"]
+        meta_data_dir = "/meta_data/"
+        patients = cfg["train_samples"] + cfg["val_samples"]
+        test_samples = cfg.get("test_samples", None)
+        if test_samples:
+            patients += test_samples
+        data_dir = cfg["data_dir"]
+        gene_data_filename = cfg["gene_data_filename"]
+        fp = os.path.join(data_dir, patients[0], meta_data_dir.lstrip("/"), gene_data_filename)
+        df = pd.read_csv(fp, nrows=1)
+        candidates = [c for c in df.columns if
+                      c != "tile" and not str(c).endswith("_lds_w") and pd.api.types.is_numeric_dtype(df[c])]
+        if not candidates:
+            raise ValueError("Could not infer gene columns from dataset")
+        genes = set(candidates)
+        if debug:
+            len_genes = len(genes)
+            print(f"genes found p0: {len_genes}")
+        for idx, patient in enumerate(patients[1:]):
+            fp = os.path.join(data_dir, patient, meta_data_dir.lstrip("/"), gene_data_filename)
+            df = pd.read_csv(fp, nrows=1)
+            genes &= set(df.columns)
+            if debug:
+                print(f"genes dropped after p{idx + 1}: {len_genes-len(genes)}")
+                len_genes = len(genes)
+        cfg["genes"] = [c for c in candidates if c in genes]
+
     pipeline = TrainerPipeline(cfg, run=run)
     pipeline.run()
     run.finish()
@@ -73,16 +105,24 @@ def main():
             "metric": read_config_parameter(raw_cfg, "metric"),
             "parameters": read_config_parameter(raw_cfg, "parameters"),
             "project": read_config_parameter(raw_cfg, "project"),
-            "description": " ".join(get_sweep_parameter_names(raw_cfg))
+            "description": " ".join(get_sweep_parameter_names(raw_cfg)),
         }
+
+        # Normalize model_dir for W&B
+        params = sweep_config["parameters"]
+        val = params.get("model_dir", "../models/")
+        if not isinstance(val, dict):
+            params["model_dir"] = {"value": str(val)}
+        params["model_dir"]["value"] = "../models/"
 
         # need the target location to exist to check if there is enough space
         project = sweep_config["project"] if not read_config_parameter(raw_cfg,"debug") else "debug_" + random.randbytes(4).hex()
-        sweep_dir = "../models/" + project
+        sweep_dir = sweep_config["parameters"]["model_dir"]["value"] + project
         if not os.path.exists(sweep_dir):
             os.makedirs(sweep_dir, exist_ok=True)
         ensure_free_disk_space(sweep_dir)
         sweep_config["parameters"]["sweep_dir"] = {"value": sweep_dir}
+
 
         print(f"Project: {project}")
         sweep_id_dir = os.path.join("..", "wandb_sweep_ids", project, sweep_config["name"])

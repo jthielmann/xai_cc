@@ -25,6 +25,7 @@ from script.model.lit_ae import SparseAutoencoder
 from typing import Dict, Any
 from torchmetrics.functional import pearson_corrcoef
 import scipy
+import pandas as pd
 
 def load_model(path: str, config: Dict[str, Any]) -> L.LightningModule:
     device = "cpu"
@@ -99,8 +100,12 @@ class GeneExpressionRegressor(L.LightningModule):
         self.best_loss = float("inf")
         self.is_online = self.config.get('log_to_wandb')
 
-        if self.config.get('generate_scatters', False):
-            self.table = wandb.Table(columns=["epoch","gene","lr","bins","scatter_plot"])
+        self.best_epoch = None
+        self.best_r_mean = float("nan")
+        self.best_model_path = None
+
+        if self.config.get('generate_scatters', False) and self.is_online:
+            self.table = wandb.Table(columns=["epoch", "gene", "lr", "bins", "scatter_plot"])
         if self.is_online:
             wandb.watch(self, log=None)
         self.encoder_lr = self.config.get("encoder_lr", 1e-3)  # encoder
@@ -134,9 +139,9 @@ class GeneExpressionRegressor(L.LightningModule):
         os.makedirs(self.config["out_path"], exist_ok=True)
 
     def on_validation_epoch_start(self):
-        self.current_loss = 0.0
-        self.y_hats = []
-        self.ys = []
+        self.val_loss_total = 0.0
+        self.val_loss_count = 0
+        self.y_hats, self.ys = [], []
 
     def forward(self, x):
         z = self.encoder(x)
@@ -157,9 +162,17 @@ class GeneExpressionRegressor(L.LightningModule):
         loss, y_hat, y = self._step(batch)
         self.log('val_' + self.config['loss_fn_switch'], loss, on_epoch=True)
 
+        bs = y.size(0)
+        if self.config["loss_fn_switch"].lower() in {"mse", "wmse", "weighted mse"}:
+            self.val_loss_total += float(loss.detach()) * bs
+            self.val_loss_count += bs
+        else:
+            # average over batches
+            self.val_loss_total += float(loss.detach())
+            self.val_loss_count += 1
+
         self.y_hats.append(y_hat.detach().float().cpu())
         self.ys.append(y.detach().float().cpu())
-        self.current_loss += loss.detach().item()
         return loss
 
     def _step(self, batch):
@@ -179,95 +192,123 @@ class GeneExpressionRegressor(L.LightningModule):
         loss = self.loss_fn(y_hat, y)
         return loss, y_hat, y
 
+    def _compute_per_gene_pearson(self, y_hat: torch.Tensor, y_true: torch.Tensor) -> list[float]:
+        y_hat = y_hat.float()
+        y_true = y_true.float()
+        r = []
+        with torch.no_grad():
+            for i in range(y_hat.shape[1]):
+                yi, ti = y_hat[:, i], y_true[:, i]
+                if yi.std(unbiased=False) == 0 or ti.std(unbiased=False) == 0:
+                    r.append(float("nan"))
+                else:
+                    r.append(float(pearson_corrcoef(yi, ti)))
+        return r
+
+    def _update_best(self, loss_sum: float, epoch: int, out_path: str, r_mean: float) -> None:
+        if loss_sum < getattr(self, "best_loss", float("inf")):
+            self.best_loss = loss_sum
+            self.best_epoch = int(epoch)
+            self.best_r_mean = float(r_mean)
+            self.best_model_path = os.path.join(out_path, "best_model.pth")
+            torch.save(self.state_dict(), self.best_model_path)
+            if self.is_online:
+                wandb.run.summary.update({"best_val_loss": self.best_loss, "best_val_epoch": self.best_epoch})
+                wandb.log({"epoch": self.best_epoch})
+
+    def _scatter_fig(self, yh: np.ndarray, yt: np.ndarray, loss: float, r: float, title: str):
+        lo, hi = float(min(yh.min(), yt.min())), float(max(yh.max(), yt.max()))
+        if lo == hi: lo, hi = lo - 1.0, hi + 1.0
+        fig, ax = plt.subplots()
+        ax.scatter(yh, yt, s=8)
+        ax.plot([lo, hi], [lo, hi], linewidth=1)
+        ax.text(0.02, 0.98, f"loss: {loss:.3f}\nr: {r:.3f}", transform=ax.transAxes,
+                va="top", ha="left", fontsize="small")
+        ax.set(title=title, xlabel="output", ylabel="target")
+        ax.set_aspect("equal", adjustable="box")
+        return fig
+
+    def _log_scatter_to_wandb(self, fig, gene: str, epoch: int) -> None:
+        if not (self.is_online and getattr(self, "table", None) is not None):
+            plt.close(fig)
+            return
+        with BytesIO() as buf:
+            fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            buf.seek(0)
+            img = Image.open(buf)
+            self.table.add_data(
+                epoch,
+                gene,
+                self.config.get("learning_rate"),
+                self.config.get("bins", 0),
+                wandb.Image(img, caption=gene),
+            ) #["epoch", "gene", "lr", "bins", "scatter_plot"]
+            img.close()
+
     def on_validation_epoch_end(self):
-        # Skip sanity check epoch
+        # Skip the Lightning sanity check run
         if not hasattr(self, "sanity_skipped"):
             self.sanity_skipped = True
             return
 
-        torch.save(self.state_dict(), os.path.join(self.config["out_path"], "latest.pth"))
-        if self.current_loss < self.best_loss:
-            self.best_loss = self.current_loss
-            best_model_path = os.path.join(self.config["out_path"], "best_model.pth")
-            torch.save(self.state_dict(), best_model_path)
-            if self.is_online:
-                wandb.run.summary["best_val_loss"] = self.best_loss
-                wandb.run.summary["best_val_epoch"] = self.current_epoch
-                wandb.log({"epoch": self.current_epoch})
+        out_path = self.config["out_path"]
+        torch.save(self.state_dict(), os.path.join(out_path, "latest.pth"))
 
-        y_hat = torch.cat(self.y_hats, dim=0).float()
-        y_true = torch.cat(self.ys, dim=0).float()
+        # Nothing accumulated (defensive)
+        if not self.y_hats or not self.ys:
+            return
 
         with torch.no_grad():
-            # Per-gene Pearson once
-            per_gene_r = []
-            for i in range(y_hat.shape[1]):
-                yi, ti = y_hat[:, i], y_true[:, i]
-                if yi.std(unbiased=False) == 0 or ti.std(unbiased=False) == 0:
-                    per_gene_r.append(float("nan"))
-                else:
-                    per_gene_r.append(float(pearson_corrcoef(yi, ti)))
+            # Concatenate all batches to compute dataset-level metrics
+            y_hat = torch.cat(self.y_hats, dim=0).float()
+            y_true = torch.cat(self.ys, dim=0).float()
 
+            # Per-gene Pearson (and log each gene if online)
+            per_gene_r = self._compute_per_gene_pearson(y_hat, y_true)
             if self.is_online:
-                self.log_dict({f"pearson_{g}": float(r) for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
+                self.log_dict({f"pearson_{g}": r for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
 
+            # Mean loss over the *whole* validation set (independent of batch sizes)
+            try:
+                val_loss_mean = float(self.loss_fn(y_hat, y_true))
+            except Exception:
+                # If a custom loss can't run over concatenated tensors, fall back to MSE
+                val_loss_mean = float(torch.mean((y_hat - y_true) ** 2))
+
+            # Selection metric
+            r_mean = float(np.nanmean(per_gene_r)) if per_gene_r else float("nan")
+            loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
+            criterion = -r_mean if "pearson" in loss_switch else val_loss_mean
+
+            # Update "best" (expects lower-is-better)
+            self._update_best(criterion, int(self.current_epoch), out_path, r_mean)
+
+            # Optional scatter plots
             if self.config.get("generate_scatters", False):
                 ABBR = {
                     "learning_rate": "lr", "batch_size": "bs", "dropout_rate": "dr",
-                    "loss_fn_swtich": "loss", "encoder_type": "encdr",
-                    "middle_layer_features": "mfeatures", "gene_data_filename": "file",
-                    "freeze_encoder": "f_encdr", "one_linear_out_layer": "1linLr",
-                    "use_leaky_relu": "lkReLu", "use_early_stopping": "eStop",
+                    "loss_fn_switch": "loss", "loss_fn_swtich": "loss",  # catch both spellings
+                    "encoder_type": "encdr", "middle_layer_features": "mfeatures",
+                    "gene_data_filename": "file", "freeze_encoder": "f_encdr",
+                    "one_linear_out_layer": "1linLr", "use_leaky_relu": "lkReLu",
+                    "use_early_stopping": "eStop",
                 }
-                sweep_keys = getattr(getattr(self, "wandb_run", None), "config", {}).get("sweep_parameter_names", [])
-                appendix = " | ".join(
-                    f"{ABBR.get(k, k)}={self.config.get(k)}" for k in sweep_keys) if sweep_keys else ""
-                table = getattr(self, "table", None)
+                sweep = getattr(getattr(self, "wandb_run", None), "config", {}).get("sweep_parameter_names", [])
+                appendix = " | ".join(f"{ABBR.get(k, k)}={self.config.get(k)}" for k in sweep) if sweep else ""
 
                 for gi, gene in enumerate(self.genes):
                     yi, ti = y_hat[:, gi], y_true[:, gi]
-                    r_value = float(per_gene_r[gi])
-                    loss = float(self.loss_fn(yi, ti))
+                    r_val = float(per_gene_r[gi])
+                    # Use per-gene MSE for the plot to be robust across loss types
+                    loss_g = float(torch.mean((yi - ti) ** 2))
+                    fig = self._scatter_fig(
+                        yi.cpu().numpy(), ti.cpu().numpy(), loss_g, r_val,
+                        " — ".join([f"ep {self.current_epoch}", gene] + ([appendix] if appendix else []))
+                    )
+                    self._log_scatter_to_wandb(fig, gene, int(self.current_epoch))
 
-                    yh = yi.detach().cpu().numpy()
-                    yt = ti.detach().cpu().numpy()
-                    lo = float(min(yh.min(), yt.min()))
-                    hi = float(max(yh.max(), yt.max()))
-                    if lo == hi:
-                        lo, hi = lo - 1.0, hi + 1.0
-
-                    fig, ax = plt.subplots()
-                    ax.scatter(yh, yt, s=8)
-                    ax.plot([lo, hi], [lo, hi], linewidth=1)
-                    ax.text(0.02, 0.98, f"loss: {loss:.3f}\nr: {r_value:.3f}",
-                            transform=ax.transAxes, va="top", ha="left", fontsize="small")
-                    title = " — ".join([f"ep {self.current_epoch}", gene] + ([appendix] if appendix else []))
-                    ax.set_title(title)
-                    ax.set_xlabel("output")
-                    ax.set_ylabel("target")
-                    ax.set_aspect("equal", adjustable="box")
-
-                    from io import BytesIO
-                    with BytesIO() as buf:
-                        fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
-                        plt.close(fig)
-                        buf.seek(0)
-                        if self.is_online and table is not None:
-                            img = Image.open(buf)
-                            table.add_data(
-                                self.current_epoch,
-                                gene,
-                                self.config.get("learning_rate"),
-                                self.config.get("bins", 0),
-                                wandb.Image(img, caption=gene),
-                            )
-                            img.close()
-
-        # prevent accumulation across epochs
-        self.y_hats.clear()
-        self.ys.clear()
-
-        # prevent accumulation across epochs
+        # Reset accumulators
         self.y_hats.clear()
         self.ys.clear()
 
@@ -285,9 +326,22 @@ class GeneExpressionRegressor(L.LightningModule):
             torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
 
     def on_train_end(self):
-        if self.is_online:
-            if hasattr(self, 'table'):
-                wandb.log({'scatter_table': self.table})
+        if self.is_online and hasattr(self, 'table'):
+            wandb.log({'scatter_table': self.table})
+
+        csv_path = os.path.join(self.config["out_path"], "results.csv")
+        row = {
+            "best_epoch": self.best_epoch if self.best_epoch is not None else int(self.current_epoch),
+            "val_score": float(self.best_loss),
+            "pearson_mean": float(self.best_r_mean),
+            "out_path": self.config["out_path"],
+            "model_path": self.best_model_path or os.path.join(self.config["out_path"], "best_model.pth"),
+            "wandb_url": (wandb.run.url if self.is_online and wandb.run is not None else ""),
+        }
+        df = pd.DataFrame([row])
+        header = not os.path.exists(csv_path)
+        df.to_csv(csv_path, mode="a", header=header, index=False)
+
 
 
     # to update after lr tuning

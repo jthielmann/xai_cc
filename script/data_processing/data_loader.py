@@ -8,7 +8,7 @@ import torch.nn.functional
 from torchvision import transforms
 from PIL import Image
 from script.data_processing.image_transforms import get_transforms
-from typing import List, Literal
+from typing import List, Literal, Union, Mapping
 from pathlib import Path
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
@@ -25,11 +25,17 @@ from scipy.signal.windows import triang
 from scipy.stats import entropy, wasserstein_distance
 from script.main_utils import parse_yaml_config, parse_args
 from script.configs.dataset_config import get_dataset_data_dir
-
+from torchvision import transforms as T
 import pandas as pd
 import os
 from pathlib import Path
 import torch
+
+from pathlib import Path
+import json
+import pandas as pd
+import numpy as np
+from typing import Any, Dict, Literal
 
 
 def seed_basic(seed=DEFAULT_RANDOM_SEED):
@@ -71,7 +77,7 @@ class STDataset(Dataset):
         *,
         image_transforms=None,
         inputs_only: bool = False,
-        genes: Optional[List[str]] = None,
+        genes: list[str] | None = None,
         use_weights: bool = False,
         return_floats: bool = False
     ):
@@ -261,10 +267,9 @@ def get_all_genes():
 # contains tile path and gene data
 def get_base_dataset(
     data_dir: str | Path,
-    genes: List[str],
     samples: List[str],
+    genes: list[str] | None = None,
     *,
-    meta_data_dir: str = "/meta_data/",
     max_len: int | None = None,
     bins: int = 1,
     gene_data_filename: str = "gene_data.csv",
@@ -272,6 +277,7 @@ def get_base_dataset(
     weight_transform: str = "inverse",
     weight_clamp: int = 10
 ):
+    meta_data_dir = "/meta_data/"
     columns_of_interest = ["tile"] + (genes or []) if genes else None
     dfs = []
 
@@ -366,11 +372,10 @@ def overlay_patient_hists_for_gene(df, gene, patients=None, bins=50, density=Tru
 
 def get_dataset(
     data_dir: str | Path,
-    genes: list[str],
+    genes: list[str] | None = None,
     *,
     transforms=None,
     samples: list[str] | None = None,
-    meta_data_dir: str = "/meta_data/",
     max_len: int | None = None,
     bins: int = 1,
     only_inputs: bool = False,
@@ -384,10 +389,9 @@ def get_dataset(
         samples = [f.name for f in os.scandir(data_dir) if f.is_dir()]
 
     df = get_base_dataset(
-        data_dir,
-        genes,
-        samples,
-        meta_data_dir=meta_data_dir,
+        data_dir=data_dir,
+        samples=samples,
+        genes=genes,
         max_len=max_len,
         bins=bins,
         gene_data_filename=gene_data_filename,
@@ -691,108 +695,6 @@ class LDS:
     # -----------------------------------------------------------
 
 
-# --------------------------- main -----------------------------
-if __name__ == "__main__":
-    args = parse_args()
-    bin_space = [20, 30, 40, 50, 100]        # number of histogram bins to test
-    ks_space = [7, 9, 11]          # odd kernel sizes
-    sigma_space = [0.8, 1.0, 1.2, 1.5, 2.0] # search space for σ (in index units)
-
-    cfg = parse_yaml_config(args.config)
-    params = cfg.get("parameters", {})
-
-    data_dir           = get_dataset_data_dir(params["dataset"].get("value"))
-    gene_data_filename = params["gene_data_filename"].get("value")
-    max_len            = 100 if params["debug"].get("value") else None
-    samples            = params["train_samples"].get("value")
-    debug              = params["debug"].get("value")
-    if debug:
-        samples = samples[:1]
-
-    dataset = label_dataset(
-        data_dir=data_dir,
-        samples=samples,
-        gene_data_filename=gene_data_filename,
-        max_len=max_len,
-    )
-
-    lds = LDS(
-        kernel_type="gaussian",
-        dataset=dataset,
-        main_metric="js",
-    )
-
-    genes = [
-        "TNNT1", "AQP5", "RAMP1", "ADGRG6", "SECTM1", "DPEP1", "CHP2", "RUBCNL",
-        "SLC9A3", "VAV3", "MUC2", "PIGR", "TFF1", "KIAA1324", "ZBTB7C", "SERPINA1",
-        "SPOCK1", "FBLN1", "ANTXR1", "TNS1", "MYL9", "HSPB8",
-    ]
-
-    # ---------- NEW: prepare cache ----------
-    cache_path = Path("best_smoothings.csv")
-
-    if cache_path.is_file():
-        cache_df = pd.read_csv(cache_path)
-    else:
-        cache_df =  pd.DataFrame(columns=["gene", "bins", "kernel_size", "sigma", "loo_ll"])
-
-    for gene in genes:
-        lds.set_gene(gene)
-        for bins in bin_space:
-            for ks in ks_space:
-                for sigma in sigma_space:
-                    if not cache_df[
-                        (cache_df["gene"] == gene) &
-                        (cache_df["bins"] == bins) &
-                        (cache_df["kernel_size"] == ks) &
-                        (cache_df["sigma"] == sigma)
-                        ].empty:
-                        continue
-
-                    lds.set_gene(gene)
-                    emp, edges = lds.get_empirical_distr(bins)
-                    smoothed = lds.get_smoothing(bins, ks, sigma)
-                    rating = lds.rate_smoothing(smoothed, emp, edges)
-                    ll_rating = lds.get_ll_rating(bins, ks, sigma)
-
-                    cache_df.loc[len(cache_df)] = {
-                        "gene": gene,
-                        "bins": bins,
-                        "kernel_size": ks,
-                        "sigma": sigma,
-                        "loo_ll": ll_rating
-                    }
-                    cache_df.to_csv(cache_path, index=False)
-
-    best_per_gene = cache_df.loc[
-        cache_df.groupby("gene")["loo_ll"].idxmax()
-    ].reset_index(drop=True)
-
-    print("===  Best hyper-parameters per gene  ===")
-    print(best_per_gene)  # or log to a file if you prefer
-
-    for _, row in best_per_gene.iterrows():
-        gene = row["gene"]
-        bins = int(row["bins"])
-        ks = int(row["kernel_size"])
-        sigma = float(row["sigma"])
-        ll_rating = float(row["loo_ll"])
-
-        # make sure LDS is focused on the right gene
-        lds.set_gene(gene)
-        emp, edges = lds.get_empirical_distr(bins)
-        smoothed = lds.get_smoothing(bins, ks, sigma)
-        rating = lds.rate_smoothing(smoothed, emp, edges)
-
-        # your custom comparison / evaluation
-        lds.compareTo(gene, bins, ks, sigma, ll_rating, rating)
-
-
-from pathlib import Path
-import json
-import pandas as pd
-import numpy as np
-from typing import Any, Dict, Literal
 
 def load_best_smoothing(csv_path: str | Path, gene: str) -> Dict[str, Any]:
 
@@ -980,3 +882,202 @@ def get_dataset_for_plotting(data_dir, genes, samples=None,
     dataset.reset_index(drop=True, inplace=True)
 
     return PlottingDataset(dataset, device=device)
+
+
+# return_floats -> python float instead of torch
+class STSpatialDataset(Dataset):
+    def __init__(
+        self,
+        df,
+        *,
+        image_transforms=None,
+        genes: Optional[List[str]] = None,
+        return_floats: bool = False,
+        dtype: torch.dtype = torch.float32,
+        patient_filter: Optional[Union[str, Sequence[str]]] = None,
+        return_patient: bool = False,
+    ):
+        # Basic column checks
+        required_cols = {"tile", "x", "y", "patient"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(f"DataFrame must include columns {sorted(required_cols)}; missing {sorted(missing)}.")
+
+        # Optional patient filtering
+        if patient_filter is not None:
+            if isinstance(patient_filter, str):
+                keep = {patient_filter}
+            else:
+                keep = set(patient_filter)
+            df = df[df["patient"].isin(keep)]
+            if df.empty:
+                raise ValueError("No rows left after applying patient_filter.")
+
+        self.df = df.reset_index(drop=True)
+        self.transforms = image_transforms
+        self.return_floats = return_floats
+        self.dtype = dtype
+        self.return_patient = return_patient
+
+        # Determine gene columns explicitly (stable order)
+        if genes is None:
+            skip = {"tile", "x", "y", "patient"}
+            candidates = []
+            for c in self.df.columns:
+                if c in skip or str(c).endswith("_lds_w"):
+                    continue
+                dt = getattr(self.df[c], "dtype", None)
+                if dt is not None and getattr(dt, "kind", None) in {"f", "i", "u"}:
+                    candidates.append(c)
+            if not candidates:
+                raise ValueError("Could not infer gene columns; please pass `genes`.")
+            self.genes = list(candidates)
+        else:
+            missing = [g for g in genes if g not in self.df.columns]
+            if missing:
+                raise ValueError(f"Genes missing in DataFrame: {missing}")
+            self.genes = list(genes)
+
+    # add result to internal df, so that once everything is calculated one can plot the results spatially
+    def add_result_for_tile(
+        self,
+        tile: str,
+        result,
+        *,
+        column: str = None,
+        prefix: str = None,
+        create_columns: bool = True,
+        use_first_if_duplicate: bool = True,
+    ) -> int:
+        # locate row(s)
+        matches = self.df.index[self.df["tile"] == tile].tolist()
+        if not matches:
+            raise KeyError(f"No row found for tile={tile!r}.")
+        if len(matches) > 1 and not use_first_if_duplicate:
+            raise ValueError(f"Multiple rows found for tile={tile!r}: {matches}")
+        idx = matches[0]
+
+        def _ensure_col(colname: str):
+            if colname not in self.df.columns:
+                raise KeyError(f"Column {colname!r} does not exist and create_columns=False.")
+
+        # Write logic
+        if isinstance(result, Mapping):
+            for k, v in result.items():
+                _ensure_col(k)
+                self.df.at[idx, k] = v
+        elif isinstance(result, (Sequence, np.ndarray)) and not isinstance(result, (str, bytes)):
+            if prefix is None:
+                raise ValueError("For sequence/array results, please provide a `prefix`.")
+            # create the necessary columns
+            n = len(result)
+            for i in range(n):
+                _ensure_col(f"{prefix}{i}")
+            for i, v in enumerate(result):
+                self.df.at[idx, f"{prefix}{i}"] = v
+        else:
+            # scalar
+            if column is None:
+                raise ValueError("For scalar result, please provide `column`.")
+            _ensure_col(column)
+            self.df.at[idx, column] = result
+
+        return idx
+
+    # Batch version
+    def add_results(self, tile_to_result: Mapping[str, object], **kwargs) -> list[int]:
+        updated = []
+        for t, r in tile_to_result.items():
+            updated.append(self.add_result_for_tile(t, r, **kwargs))
+        return updated
+
+    # Convenience
+    @property
+    def patients(self) -> List[str]:
+        return sorted(self.df["patient"].unique().tolist())
+
+    def __len__(self):
+        return len(self.df)
+
+    def _load_image(self, path: str):
+        img = Image.open(path).convert("RGB")
+        if self.transforms:
+            img = self.transforms(img)
+        return img
+
+    def _row_to_target(self, row):
+        vals = [float(row[g]) for g in self.genes]
+        if self.return_floats:
+            return np.asarray(vals, dtype=np.float32)
+        return torch.tensor(vals, dtype=self.dtype)
+
+    def __getitem__(self, index: int):
+        row = self.df.iloc[index]
+
+        img = self._load_image(row["tile"])
+        target = self._row_to_target(row)
+
+        x_val = float(row["x"])
+        y_val = float(row["y"])
+        patient_id = row["patient"]
+
+        if self.return_floats:
+            if self.return_patient:
+                return img, target, x_val, y_val, patient_id
+            return img, target, x_val, y_val
+
+        x_t = torch.tensor(x_val, dtype=self.dtype)
+        y_t = torch.tensor(y_val, dtype=self.dtype)
+
+        if self.return_patient:
+            # keep patient as a Python str to avoid encoding assumptions
+            return img, target, x_t, y_t, patient_id
+
+        return img, target, x_t, y_t
+
+
+def get_spatial_dataset(
+    data_dir: str | Path,
+    genes: list[str],
+    *,
+    transforms=T.ToTensor(),
+    samples: list[str] | None = None,
+    meta_data_dir: str = "/meta_data/",
+    gene_data_filename: str = "gene_data.csv",
+    return_floats: bool = False,
+    max_len: int | None = None,
+    patient_filter: str | list[str] | None = None,
+    return_patient: bool = False,
+):
+
+    if samples is None:
+        samples = [f.name for f in os.scandir(data_dir) if f.is_dir()]
+
+    dfs = []
+    for sample in samples:
+        # load gene data
+        g_path = os.path.join(data_dir, sample, meta_data_dir.lstrip("/"), gene_data_filename)
+        g_df = pd.read_csv(g_path, nrows=max_len)
+
+        g_df["patient"] = sample
+
+        # load spatial coords
+        s_path = os.path.join(data_dir, sample, meta_data_dir.lstrip("/"), "spatial_data.csv")
+        s_df = pd.read_csv(s_path, usecols=["tile", "x", "y"])
+
+        # merge on tile
+        df = pd.merge(g_df, s_df, on="tile")
+        df["tile"] = df["tile"].apply(lambda t: os.path.join(data_dir, sample, "tiles", t))
+        dfs.append(df)
+
+    base_df = pd.concat(dfs, ignore_index=True)
+
+    ds = STSpatialDataset(
+        base_df,
+        image_transforms=transforms,
+        genes=genes,
+        return_floats=return_floats,
+        patient_filter=patient_filter,
+        return_patient=return_patient,
+    )
+    return ds
