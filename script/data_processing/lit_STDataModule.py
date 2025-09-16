@@ -84,7 +84,7 @@ class STDataModule(L.LightningDataModule):
             shuffle=False,
             num_workers=self.cfg.get('num_workers', 0),
             pin_memory=False
-        )
+        ) if self.test_dataset else None
 
     def free_memory(self):
         self.train_dataset = None

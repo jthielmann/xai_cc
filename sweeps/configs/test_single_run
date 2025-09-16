@@ -1,0 +1,49 @@
+project: crc_base_label_normalizations
+name: quick_grid_search
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  debug:
+    value: true
+  log_to_wandb:
+    value: true
+  # fixed
+  epochs:
+    value: 40
+  dataset:
+    value: crc_base
+  encoder_type:
+    value: dino
+  batch_size:
+    value: 32
+  dataset:
+    value: crc_base
+  genes:
+    value: [RUBCNL]
+  error_metric_name:
+    value: MSE
+  encoder_out_dim:
+    value: 2048
+  middle_layer_features:
+    value: 200
+  num_workers:
+    value: 2
+  loss_fn_switch:
+    value: MSE
+  gene_data_filename:
+    values: [gene_data.csv]
+  image_size:
+    value: 224
+  generate_scatters:
+    value: true
+
+  # hyperparams
+  learning_rate:
+    values: [0.1]
+  bins:
+    values: [1]
+  freeze_encoder:
+    value: true

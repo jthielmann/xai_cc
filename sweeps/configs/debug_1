@@ -1,0 +1,40 @@
+project: dino
+name: train dino on NCT-CRC-HE-100K
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  log_to_wandb:
+    value: true
+  debug:
+    value: true
+
+  # Fixed parameters
+  epochs:
+    value: 40
+  dataset:
+    value: NCT-CRC-HE-100K
+  encoder_type:
+    value: resnet50
+  batch_size:
+    value: 32
+  error_metric_name:
+    value: DinoLoss
+  encoder_out_dim:
+    value: 2048
+  middle_layer_features:
+    value: 200
+  num_workers:
+    value: 2
+  loss_fn_switch:
+    value: DinoLoss
+  image_size:
+    value: 224
+  generate_scatters:
+    value: true
+  local_crop_scale:
+    value: [0.05, 0.4]
+  n_local_views:
+    value: 6

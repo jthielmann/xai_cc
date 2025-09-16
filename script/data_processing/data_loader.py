@@ -79,7 +79,9 @@ class STDataset(Dataset):
         inputs_only: bool = False,
         genes: list[str] | None = None,
         use_weights: bool = False,
-        return_floats: bool = False
+        return_floats: bool = False,
+        gene_list_index = -1,
+        split_genes_by = 100
     ):
         self.df = df.reset_index(drop=True)
         self.transforms = image_transforms
@@ -99,6 +101,16 @@ class STDataset(Dataset):
 
             if not candidates:
                 raise ValueError("Could not infer gene columns; please pass `genes`.")
+
+            if gene_list_index and gene_list_index > 0:
+                if split_genes_by is not None and split_genes_by > 0:
+                    k = int(split_genes_by)
+                    if k <= 0:
+                        raise ValueError("split_genes_by must be a positive integer.")
+                    chunks = [candidates[i:i + k] for i in range(0, len(candidates), k)]
+                    if gene_list_index >= len(chunks):
+                        raise IndexError(f"gene_list_index={gene_list_index} exceeds number of chunks={len(chunks)}.")
+                    candidates = chunks[gene_list_index]
             self.genes = list(candidates)
         else:
             missing = [g for g in genes if g not in self.df.columns]

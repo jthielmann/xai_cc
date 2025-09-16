@@ -5,8 +5,6 @@ import gc
 import os
 import json
 import logging
-from pathlib import Path
-import copy
 
 # Third-party imports
 import torch
@@ -22,24 +20,163 @@ from wandb.wandb_run import Run
 from typing import Optional, cast, Any
 import re
 import numpy as np
-import torch.nn as nn
 from typing import Dict, List
-import itertools
 
 # Local application imports
 from script.model.lit_model import get_model
 from script.data_processing.lit_STDataModule import get_data_module
-from script.model.model_factory import get_encoder  # for encoder factory
 from script.data_processing.data_loader import get_spatial_dataset
 # Prepare a module logger (configuration should be done in entry-point)
 log = logging.getLogger(__name__)
+from lightning.pytorch import seed_everything
+import os, json, pandas as pd
+from collections import Counter
 
+def _validate_config_and_shapes(cfg, model, data_module):
+    # 1. Gene count matches model output
+    dummy_batch = next(iter(data_module.train_dataloader()))
+    x, y = dummy_batch[:2]   # first two items are usually (img, expr)
+    y_hat = model(x)
+    if y_hat.shape[1] != len(cfg["genes"]):
+        raise ValueError(f"Model outputs {y_hat.shape[1]} genes, "
+                         f"but config['genes'] has {len(cfg['genes'])}")
+
+    # 2. Shapes align
+    if y_hat.shape != y.shape:
+        raise ValueError(f"Output shape {y_hat.shape} != target shape {y.shape}")
+
+    # 3. Splits disjoint
+    all_sets = [set(cfg.get(k, [])) for k in ("train_samples","val_samples","test_samples")]
+    overlap = set.intersection(*all_sets) if all_sets else set()
+    if overlap:
+        raise ValueError(f"Patient overlap across splits: {overlap}")
+
+def _verify_log_frozen(model, freeze_encoder, wandb_run=None):
+    # strict encoder check + counts
+    enc_trainable_names, enc_frozen_names = [], []
+    if hasattr(model, "encoder"):
+        enc_trainable_names = [n for n, p in model.encoder.named_parameters() if p.requires_grad]
+        enc_frozen_names    = [n for n, p in model.encoder.named_parameters() if not p.requires_grad]
+        if freeze_encoder and enc_trainable_names:
+            raise RuntimeError(f"freeze_encoder=True but trainable: {enc_trainable_names[:5]}...")
+        if not freeze_encoder and not enc_trainable_names:
+            raise RuntimeError("freeze_encoder=False but encoder has no trainable params!")
+
+    # totals
+    total_params   = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    frozen_params  = total_params - trainable_params
+
+    # per-top-module breakdown
+    mods = {}
+    for name, p in model.named_parameters():
+        top = name.split('.', 1)[0]
+        t, tr = mods.get(top, (0, 0))
+        n = p.numel()
+        mods[top] = (t + n, tr + (n if p.requires_grad else 0))
+
+    # print summary
+    pct = 100.0 * trainable_params / total_params if total_params else 0.0
+    print(f"[verify] freeze_encoder={freeze_encoder} | trainable {trainable_params}/{total_params} ({pct:.1f}%)")
+    for m, (t, tr) in mods.items():
+        mpct = 100.0 * tr / t if t else 0.0
+        print(f"  - {m:12s} {tr}/{t} ({mpct:.1f}%)")
+
+    # wandb logging (single block)
+    if wandb_run:
+        log_dict = {
+            "params/total": total_params,
+            "params/trainable": trainable_params,
+            "params/frozen": frozen_params,
+            "config/freeze_encoder": freeze_encoder,
+        }
+        if hasattr(model, "encoder"):
+            enc_trainable = sum(p.numel() for _, p in model.encoder.named_parameters() if p.requires_grad)
+            enc_frozen    = sum(p.numel() for _, p in model.encoder.named_parameters() if not p.requires_grad)
+            log_dict.update({
+                "encoder/params_trainable": enc_trainable,
+                "encoder/params_frozen": enc_frozen,
+            })
+        wandb_run.log(log_dict)
+        for m, (t, tr) in mods.items():
+            wandb_run.log({
+                f"{m}/total": t,
+                f"{m}/trainable": tr,
+                f"{m}/frozen": t - tr,
+                f"{m}/trainable_pct": (100.0 * tr / t) if t else 0.0
+            })
+
+
+
+def _log_dataset_info(cfg, out_dir, train=None, val=None, test=None, wandb_run=None):
+    def split_df(loader, split):
+        ds = getattr(loader, "dataset", loader)
+        pats = getattr(ds, "patient_per_item", None) or getattr(ds, "patients", None)
+        if pats is None and hasattr(ds, "df") and "patient" in ds.df: pats = ds.df["patient"].tolist()
+        if pats is None: pats = ["unknown"] * len(ds)
+        c = Counter(pats)
+        return pd.DataFrame({"split": split, "patient": list(c), "n_items": list(c.values())})
+
+    dfs = []
+    if train: dfs.append(split_df(train, "train"))
+    if val:   dfs.append(split_df(val, "val"))
+    if test:  dfs.append(split_df(test, "test"))
+    manifest = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+    meta = {
+        "data_dir": cfg.get("data_dir",""),
+        "n_train_samples": len(cfg.get("train_samples",[])),
+        "n_val_samples":   len(cfg.get("val_samples",[])),
+        "n_test_samples":  len(cfg.get("test_samples",[])),
+        "n_patients": manifest.patient.nunique() if not manifest.empty else 0,
+        "n_genes": len(cfg.get("genes",[])),
+        "encoder_type": cfg.get("encoder_type",""),
+    }
+
+    os.makedirs(out_dir, exist_ok=True)
+    manifest.to_csv(os.path.join(out_dir,"split_manifest.csv"), index=False)
+    open(os.path.join(out_dir,"genes.txt"),"w").write("\n".join(cfg.get("genes",[])))
+    open(os.path.join(out_dir,"dataset_meta.json"),"w").write(json.dumps(meta,indent=2))
+
+    print("[dataset]", meta)
+    if not manifest.empty: print("[splits]\n", manifest.head())
+
+    if wandb_run:
+        wandb_run.log({f"data/{k}": v for k,v in meta.items()})
+        import wandb
+        table = wandb.Table(columns=["split","patient","n_items"])
+        for r in manifest.itertuples(index=False): table.add_data(r.split,r.patient,int(r.n_items))
+        wandb_run.log({"data/split_manifest": table})
+
+def _save_spatial_parquets(spatial_df: pd.DataFrame, genes: list[str], out_dir: str) -> None:
+    base = os.path.join(out_dir, "spatial_parquet")
+    os.makedirs(base, exist_ok=True)
+    idx = []
+
+    for gene in genes:
+        pred_col = f"pred_{gene}"
+        if pred_col not in spatial_df.columns:
+            raise RuntimeError(f"Missing column {pred_col} in spatial_df.")
+        for patient, sub in spatial_df.groupby("patient"):
+            if sub.empty:
+                continue
+            df = pd.DataFrame({
+                "x":     sub["x"].astype("float32"),
+                "y":     sub["y"].astype("float32"),
+                "label": sub[gene].astype("float32"),
+                "pred":  sub[pred_col].astype("float32"),
+            })
+            df["diff"] = (df["pred"] - df["label"]).astype("float32")
+
+            fn = f"{patient}__{gene}.parquet"
+            fp = os.path.join(base, fn)
+            df.to_parquet(fp, index=False)  # uses pyarrow if installed
+            idx.append({"patient": patient, "gene": gene, "path": fp, "n": len(df)})
+
+    if idx:
+        pd.DataFrame(idx).to_parquet(os.path.join(base, "_index.parquet"), index=False)
 
 def _determine_device() -> str:
-    """
-    Check available hardware and return 'gpu' or 'mps'.
-    Abort if no supported accelerator is available.
-    """
     if torch.cuda.is_available():
         return "gpu"
     if torch.backends.mps.is_available():
@@ -137,7 +274,7 @@ class TrainerPipeline:
                     "learning_rate": "lr",
                     "batch_size": "bs",
                     "dropout_rate": "dr",
-                    "loss_fn_swtich": "loss",
+                    "loss_fn_switch": "loss",
                     "encoder_type": "encdr",
                     "middle_layer_features": "mfeatures",
                     "gene_data_filename": "file",
@@ -168,7 +305,7 @@ class TrainerPipeline:
         self.device  = _determine_device()
         self.out_path = self._prepare_output_dir()
 
-    def _run_name_to_dir(self, run_name: str, base_dir: str = "outputs") -> str:
+    def _run_name_to_dir(self, run_name: str) -> str:
         # Split into key=value parts and strip spaces
         parts = [p.strip() for p in run_name.split(",")]
 
@@ -187,7 +324,7 @@ class TrainerPipeline:
             clean_parts.append(f"{key}-{val}")
 
         dir_name = "_".join(clean_parts)
-        return os.path.join(base_dir, dir_name)
+        return dir_name
 
     def _prepare_output_dir(self) -> str:
         base = self.config["model_dir"]
@@ -222,7 +359,8 @@ class TrainerPipeline:
                     mode="min",
                     patience=self.config.get("patience", 10)
                 ))
-        callbacks.append(LearningRateMonitor(logging_interval="step"))
+        if self.config.get("monitorLr", False):
+            callbacks.append(LearningRateMonitor(logging_interval="step"))
         for cb in callbacks:
             print(cb, type(cb))
         trainer = L.Trainer(
@@ -234,7 +372,8 @@ class TrainerPipeline:
             callbacks=callbacks,
             profiler=profiler,
             accelerator="gpu",
-            devices=self.config.get("devices", 1)
+            devices=self.config.get("devices", 1),
+            deterministic=True
         )
         return trainer
 
@@ -284,7 +423,7 @@ class TrainerPipeline:
         )
         suggestion = finder.suggestion()
         if suggestion is None:
-            raise ValueError(f"no learning rate found for {g}")
+            raise ValueError(f"no learning rate found for {key}")
         if use_lr_find:
             if suggestion_scale_factor:
                 suggestion *= suggestion_scale_factor
@@ -360,14 +499,25 @@ class TrainerPipeline:
         return tuned_max_lrs
 
     def run(self):
+        seed_everything(42, workers=True)
         self._save_summary("started")
         data_module = get_data_module(self.config)
         data_module.setup("fit")
         train_loader = data_module.train_dataloader()
         val_loader = data_module.val_dataloader()
+        test_loader = data_module.test_dataloader()
+        _log_dataset_info(self.config, self.out_path,
+                         train=train_loader, val=val_loader,
+                         test=test_loader if self.config.get("test_samples") else None,
+                         wandb_run=self.wandb_run if self.is_online else None)
         self.config["out_path"] = self.out_path
         model = get_model(self.config)
 
+        # better save than sorry, also count and log trainable param
+        _verify_log_frozen(model, self.config.get("freeze_encoder", False),
+                               self.wandb_run if self.is_online else None)
+
+        _validate_config_and_shapes(self.config, model, data_module)
         # learning rate tuning
         self.config.setdefault("learning_rate", 1e-3) # init learning rate
 
@@ -485,6 +635,7 @@ class TrainerPipeline:
                         is_online=self.is_online,
                         wandb_run=self.wandb_run if self.is_online else None,
                     )
+            _save_spatial_parquets(spatial_ds, self.config["genes"], self.out_path)
 
     def _save_summary(self, status):
         serializable_cfg = {k: v for k, v in self.config.items() \

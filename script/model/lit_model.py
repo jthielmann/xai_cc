@@ -1,3 +1,6 @@
+import json
+import logging
+
 import numpy as np
 import torch
 import lightning as L
@@ -26,6 +29,57 @@ from typing import Dict, Any
 from torchmetrics.functional import pearson_corrcoef
 import scipy
 import pandas as pd
+
+import torch
+from contextlib import nullcontext
+
+def bytes2gb(x): return x / (1024**3)
+
+@torch.no_grad()
+def estimate_per_sample_activations(model, sample):
+    """CPU/any-device estimate of forward outputs that require grad (≈ activations kept for backward)."""
+    sizes = []
+    handles = []
+
+    def hook(_m, _inp, out):
+        def num_bytes(t):
+            if not torch.is_tensor(t): return 0
+            # assume AMP/bfloat16 for training activations → 2 bytes/elem; change to 4 for fp32
+            return t.numel() * 2 if t.requires_grad else 0
+        if isinstance(out, (list, tuple)):
+            sizes.append(sum(num_bytes(t) for t in out))
+        else:
+            sizes.append(num_bytes(out))
+
+    for m in model.modules():
+        if len(list(m.children())) == 0:
+            handles.append(m.register_forward_hook(hook))
+
+    model.eval()
+    _ = model(sample)  # forward only; we just need shapes
+    for h in handles: h.remove()
+    # sum once, then divide by batch to get per-sample
+    total_bytes = sum(sizes)
+    return total_bytes / sample.shape[0]
+
+def measure_peak_train_step(model, batch, criterion, optimizer, amp=True, device="cuda"):
+    torch.cuda.reset_peak_memory_stats(device)
+    model.to(device).train()
+    x, y = batch
+    x, y = x.to(device), y.to(device)
+
+    ctx = torch.cuda.amp.autocast if amp else nullcontext
+    scaler = torch.cuda.amp.GradScaler(enabled=amp)
+
+    optimizer.zero_grad(set_to_none=True)
+    with ctx():
+        out = model(x)
+        loss = criterion(out, y)
+    scaler.scale(loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
+
+    return torch.cuda.max_memory_allocated(device)  # bytes
 
 def load_model(path: str, config: Dict[str, Any]) -> L.LightningModule:
     device = "cpu"
@@ -79,8 +133,12 @@ class GeneExpressionRegressor(L.LightningModule):
         else:
             self.sae = None
 
-
-        self.genes = self.config['genes']
+        self.genes = list(self.config['genes'])
+        if len(self.genes) != len(set(self.genes)):
+            raise RuntimeError("Duplicate genes in config['genes']")
+        self.gene_to_idx = {g: i for i, g in enumerate(self.genes)}
+        if not self.gene_to_idx == {g: i for i, g in enumerate(self.genes)}:
+            raise RuntimeError("Gene/index mapping drifted!")
 
         for g in self.genes:
             setattr(self, f"{g}_lr", default_lr)
@@ -135,8 +193,10 @@ class GeneExpressionRegressor(L.LightningModule):
         return {"optimizer": opt,
                 "lr_scheduler": {"scheduler": sched, "interval": "step"}}
 
-    def on_fit_start(self):          # ← runs before the first batch
+    def on_fit_start(self):
         os.makedirs(self.config["out_path"], exist_ok=True)
+        with open(os.path.join(self.config["out_path"], "config.json"), "w") as f:
+            json.dump(self.config, f, indent=2, ensure_ascii=False)
 
     def on_validation_epoch_start(self):
         self.val_loss_total = 0.0
@@ -174,6 +234,35 @@ class GeneExpressionRegressor(L.LightningModule):
         self.y_hats.append(y_hat.detach().float().cpu())
         self.ys.append(y.detach().float().cpu())
         return loss
+
+    def _log_wandb_artifacts(self):
+        if not (self.is_online and wandb.run):
+            return
+        run = wandb.run
+        cfg_path = os.path.join(self.config["out_path"], "config.json")
+        best_path = self.best_model_path or os.path.join(self.config["out_path"], "best_model.pth")
+        if not os.path.exists(best_path):
+            # ensure we have a file (fallback to current state)
+            torch.save(self.state_dict(), best_path)
+
+        art = wandb.Artifact(
+            name=f"model-{run.id}",
+            type="model",
+            metadata={
+                "encoder_type": self.config.get("encoder_type"),
+                "n_genes": len(self.genes),
+                "genes": self.genes,
+                "freeze_encoder": self.config.get("freeze_encoder", False),
+                "loss_fn": self.config.get("loss_fn_switch"),
+                "best_epoch": self.best_epoch,
+                "best_val_metric": self.best_loss,
+            },
+        )
+        art.add_file(best_path, name="best_model.pth")
+        if os.path.exists(cfg_path):
+            art.add_file(cfg_path, name="config.json")
+
+        run.log_artifact(art, aliases=["best", "latest"])
 
     def _step(self, batch):
         if isinstance(batch, (list, tuple)) and len(batch) == 3:
@@ -255,28 +344,23 @@ class GeneExpressionRegressor(L.LightningModule):
         out_path = self.config["out_path"]
         torch.save(self.state_dict(), os.path.join(out_path, "latest.pth"))
 
-        # Nothing accumulated (defensive)
         if not self.y_hats or not self.ys:
-            return
+            raise RuntimeError("no ys")
 
         with torch.no_grad():
             # Concatenate all batches to compute dataset-level metrics
             y_hat = torch.cat(self.y_hats, dim=0).float()
             y_true = torch.cat(self.ys, dim=0).float()
 
-            # Per-gene Pearson (and log each gene if online)
             per_gene_r = self._compute_per_gene_pearson(y_hat, y_true)
             if self.is_online:
                 self.log_dict({f"pearson_{g}": r for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
 
-            # Mean loss over the *whole* validation set (independent of batch sizes)
             try:
                 val_loss_mean = float(self.loss_fn(y_hat, y_true))
             except Exception:
-                # If a custom loss can't run over concatenated tensors, fall back to MSE
                 val_loss_mean = float(torch.mean((y_hat - y_true) ** 2))
 
-            # Selection metric
             r_mean = float(np.nanmean(per_gene_r)) if per_gene_r else float("nan")
             loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
             criterion = -r_mean if "pearson" in loss_switch else val_loss_mean
@@ -288,7 +372,7 @@ class GeneExpressionRegressor(L.LightningModule):
             if self.config.get("generate_scatters", False):
                 ABBR = {
                     "learning_rate": "lr", "batch_size": "bs", "dropout_rate": "dr",
-                    "loss_fn_switch": "loss", "loss_fn_swtich": "loss",  # catch both spellings
+                    "loss_fn_switch": "loss", "loss_fn_switch": "loss",  # catch both spellings
                     "encoder_type": "encdr", "middle_layer_features": "mfeatures",
                     "gene_data_filename": "file", "freeze_encoder": "f_encdr",
                     "one_linear_out_layer": "1linLr", "use_leaky_relu": "lkReLu",
@@ -326,23 +410,41 @@ class GeneExpressionRegressor(L.LightningModule):
             torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
 
     def on_train_end(self):
-        if self.is_online and hasattr(self, 'table'):
-            wandb.log({'scatter_table': self.table})
+        if self.is_online and hasattr(self, "table"):
+            wandb.log({"scatter_table": self.table})
+        if self.config["debug"]:
+            return
 
-        csv_path = os.path.join(self.config["out_path"], "results.csv")
+        csv_path = os.path.join(self.config["model_dir"], "results.csv")
         row = {
-            "best_epoch": self.best_epoch if self.best_epoch is not None else int(self.current_epoch),
+            "best_epoch": self.best_epoch or int(self.current_epoch),
             "val_score": float(self.best_loss),
             "pearson_mean": float(self.best_r_mean),
             "out_path": self.config["out_path"],
             "model_path": self.best_model_path or os.path.join(self.config["out_path"], "best_model.pth"),
-            "wandb_url": (wandb.run.url if self.is_online and wandb.run is not None else ""),
+            "wandb_url": (wandb.run.url if self.is_online and wandb.run else ""),
         }
-        df = pd.DataFrame([row])
-        header = not os.path.exists(csv_path)
-        df.to_csv(csv_path, mode="a", header=header, index=False)
 
+        row.update({f"pearson_{g}": float(r) for g, r in zip(self.genes, self.best_r)})
 
+        keep = [
+            "dataset",
+            "gene_data_filename",
+            "encoder_type",
+            "freeze_encoder",
+            "learning_rate",
+            "batch_size",
+            "bins",
+            "loss_fn_switch",
+            "genes",
+        ]
+        row.update({k: self.config[k] for k in keep if k in self.config})
+        row["hp_json"] = json.dumps(self.config, ensure_ascii=False)
+
+        pd.DataFrame([row]).to_csv(csv_path, mode="a", header=not os.path.exists(csv_path), index=False)
+        logging.info("logged results into %s", csv_path)
+
+        self._log_wandb_artifacts()
 
     # to update after lr tuning
     def update_lr(self, lrs):

@@ -1,0 +1,45 @@
+project: all genes n19 single run
+name: log1p grid
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  debug:
+    value: false
+  log_to_wandb:
+    value: true
+  epochs:
+    value: 40
+  dataset:
+    value: CRC_N19
+  encoder_type:
+    value: resnet50random
+  batch_size:
+    value: 32
+  middle_layer_features:
+    value: 100
+  num_workers:
+    value: 2
+  loss_fn_switch:
+    value: MSE
+  gene_data_filename:
+    value: gene_data_log1p.csv
+  image_size:
+    value: 224
+  generate_scatters:
+    value: true
+  use_early_stopping:
+    value: true
+  use_leaky_relu:
+    value: false
+  one_linear_out_layer:
+    value: false
+  # hyperparams
+  global_fix_learning_rate:
+    values: [0.01]
+  bins:
+    value: 1
+  freeze_encoder:
+    value: true
