@@ -170,6 +170,8 @@ class GeneExpressionRegressor(L.LightningModule):
         default_head_lr = self.config.get("head_lr", 1e-3)  # heads
         for g in self.config["genes"]:
             setattr(self, f"{g}_lr", default_head_lr)
+        self.best_r: list[float] = [float("nan")] * len(self.genes)
+        self.last_r: list[float] = [float("nan")] * len(self.genes)
 
 
     def configure_optimizers(self):
@@ -294,14 +296,15 @@ class GeneExpressionRegressor(L.LightningModule):
                     r.append(float(pearson_corrcoef(yi, ti)))
         return r
 
-    def _update_best(self, loss_sum: float, epoch: int, out_path: str, r_mean: float) -> None:
+    def _update_best(self, loss_sum: float, epoch: int, out_path: str, r_mean: float, per_gene_r: list[float]) -> None:
         if loss_sum < getattr(self, "best_loss", float("inf")):
-            self.best_loss = loss_sum
+            self.best_loss = float(loss_sum)
             self.best_epoch = int(epoch)
             self.best_r_mean = float(r_mean)
+            self.best_r = [float(x) for x in per_gene_r]
             self.best_model_path = os.path.join(out_path, "best_model.pth")
             torch.save(self.state_dict(), self.best_model_path)
-            if self.is_online:
+            if self.is_online and wandb.run:
                 wandb.run.summary.update({"best_val_loss": self.best_loss, "best_val_epoch": self.best_epoch})
                 wandb.log({"epoch": self.best_epoch})
 
@@ -353,6 +356,7 @@ class GeneExpressionRegressor(L.LightningModule):
             y_true = torch.cat(self.ys, dim=0).float()
 
             per_gene_r = self._compute_per_gene_pearson(y_hat, y_true)
+            self.last_r = list(per_gene_r)
             if self.is_online:
                 self.log_dict({f"pearson_{g}": r for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
 
@@ -366,7 +370,7 @@ class GeneExpressionRegressor(L.LightningModule):
             criterion = -r_mean if "pearson" in loss_switch else val_loss_mean
 
             # Update "best" (expects lower-is-better)
-            self._update_best(criterion, int(self.current_epoch), out_path, r_mean)
+            self._update_best(criterion, int(self.current_epoch), out_path, r_mean, per_gene_r)
 
             # Optional scatter plots
             if self.config.get("generate_scatters", False):
@@ -425,7 +429,8 @@ class GeneExpressionRegressor(L.LightningModule):
             "wandb_url": (wandb.run.url if self.is_online and wandb.run else ""),
         }
 
-        row.update({f"pearson_{g}": float(r) for g, r in zip(self.genes, self.best_r)})
+        per_gene_for_row = getattr(self, "best_r", None) or getattr(self, "last_r", None) or []
+        row.update({f"pearson_{g}": float(r) for g, r in zip(self.genes, per_gene_for_row)})
 
         keep = [
             "dataset",

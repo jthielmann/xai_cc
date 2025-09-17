@@ -243,6 +243,29 @@ def _plot_triptych_and_log(x, y, y_label, y_pred, patient, gene, out_path, is_on
     log.info("Saved spatial plot: %s", out_file)
 # ---------------------------------------------------------------------------
 
+def _cuda_supports_bf16() -> bool:
+    if not torch.cuda.is_available():
+        return False
+    try:
+        # Available in recent PyTorch versions; guards for runtime envs
+        return bool(getattr(torch.cuda, "is_bf16_supported", lambda: False)())
+    except Exception:
+        pass
+    try:
+        major, _ = torch.cuda.get_device_capability()
+        return major >= 8  # Ampere (A100/3090) and newer (Ada 4090+)
+    except Exception:
+        return False
+
+
+def _choose_precision() -> str:
+    """Return a Lightning precision string based on runtime support."""
+    if torch.cuda.is_available():
+        return "bf16-mixed" if _cuda_supports_bf16() else "16-mixed"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        # MPS benefits from fp16 mixed; bf16 not broadly supported/stable
+        return "16-mixed"
+    return "32"
 
 class TrainerPipeline:
     def __init__(self, config: dict, run: wandb.sdk.wandb_run.Run):
@@ -366,17 +389,26 @@ class TrainerPipeline:
             callbacks.append(LearningRateMonitor(logging_interval="step"))
         for cb in callbacks:
             print(cb, type(cb))
+
+        accelerator = "auto"
+        devices = self.config.get("devices", "auto")
+
+        strategy = self.config.get("strategy", None)
+        if strategy is None and (devices == "auto" or (isinstance(devices, int) and devices > 1)):
+            strategy = "ddp_find_unused_parameters_false"
+        precision = _choose_precision()
         trainer = L.Trainer(
             max_epochs=self.config["epochs"] if not self.config.get("debug", False) else 2,
             logger=self.logger,
             log_every_n_steps=self.config.get("log_every_n_steps", 1),
             enable_checkpointing=self.config.get("enable_checkpointing", False),
-            precision=16 if self.device == "gpu" else 32,
+            precision=precision,
             callbacks=callbacks,
             profiler=profiler,
-            accelerator="gpu",
+            accelerator=accelerator,
             devices=self.config.get("devices", 1),
-            deterministic=True
+            deterministic=True,
+            strategy=strategy
         )
         return trainer
 

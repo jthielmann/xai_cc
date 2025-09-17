@@ -109,6 +109,10 @@ def _sweep_run():
     cfg = _prepare_cfg(dict(run.config))
     TrainerPipeline(cfg, run=run).run(); run.finish()
 
+def log_runtime_banner():
+    dev = "cuda" if torch.cuda.is_available() else ("mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else "cpu")
+    print(f"[runtime] torch={torch.__version__} cuda={torch.version.cuda} device={dev} bf16_supported={torch.cuda.is_bf16_supported() if dev=='cuda' else False}")
+
 def main():
     args = parse_args()
     raw_cfg = parse_yaml_config(args.config)
