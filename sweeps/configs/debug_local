@@ -10,7 +10,7 @@ parameters:
     value: true
   log_to_wandb:
     value: true
-  split_genes_by:
+  split_genes_by: # only works with one value
     value: 50
   epochs:
     value: 40
@@ -40,7 +40,7 @@ parameters:
     value: false
   # hyperparams
   global_fix_learning_rate:
-    value: 0.01
+    values: [0.01, 0.1, 0.001]
   bins:
     value: 1
   freeze_encoder:

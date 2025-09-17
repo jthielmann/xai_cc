@@ -1,5 +1,5 @@
-project: all genes n19 single run
-name: log1p grid
+project: all genes n19 resrand split
+name: compare different preprocessing of the gene data
 method: grid
 metric:
   name: valid_loss
@@ -10,6 +10,8 @@ parameters:
     value: false
   log_to_wandb:
     value: true
+  split_genes_by: # only works with one value
+    value: 50
   epochs:
     value: 40
   dataset:
@@ -38,7 +40,7 @@ parameters:
     value: false
   # hyperparams
   global_fix_learning_rate:
-    values: [0.01]
+    values: [0.01, 0.1, 0.001]
   bins:
     value: 1
   freeze_encoder:

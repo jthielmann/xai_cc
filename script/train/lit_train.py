@@ -293,6 +293,9 @@ class TrainerPipeline:
                 name = ", ".join(parts)
             else:
                 name = self.config["project"] + " " + self.config["name"]
+            gid = self.config.get("genes_id")
+            if gid and "genes_id=" not in name:
+                name = f"{name}, genes_id={gid}"
             self.wandb_run.name = name
             self.wandb_run.notes = f"Training {self.wandb_run.name} on {self.wandb_run.project}"
             self.logger = WandbLogger(
