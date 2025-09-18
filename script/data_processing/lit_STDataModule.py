@@ -3,7 +3,7 @@ import torch
 from torchvision import transforms
 import lightning as L
 from script.data_processing.image_transforms import get_transforms
-from script.data_processing.data_loader import get_dataset
+from script.data_processing.data_loader import get_dataset, get_dataset_single_file
 
 
 def get_data_module(cfg):
@@ -27,37 +27,114 @@ class STDataModule(L.LightningDataModule):
         max_len = 100 if self.cfg.get('debug', False) else None
 
         if stage in (None, 'fit'):
-            self.train_dataset = get_dataset(
-                self.cfg['data_dir'],
-                genes=self.cfg['genes'],
-                samples=self.cfg['train_samples'],
-                transforms=self.transforms,
-                bins=self.cfg.get("bins", 0),
-                gene_data_filename=self.cfg['gene_data_filename'],
-                max_len=max_len,
-                lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
-            )
-            self.val_dataset = get_dataset(
-                self.cfg['data_dir'],
-                genes=self.cfg['genes'],
-                samples=self.cfg['val_samples'],
-                transforms=self.transforms,
-                bins=self.cfg.get("bins", 0),
-                gene_data_filename=self.cfg['gene_data_filename'],
-                max_len=max_len,
-                lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
-            )
-        if stage in (None, 'test') and self.cfg.get('test_samples'):
-            self.test_dataset = get_dataset(
-                self.cfg['data_dir'],
-                genes=self.cfg['genes'],
-                samples=self.cfg['test_samples'],
-                transforms=self.transforms,
-                bins=self.cfg.get("bins", 0),
-                gene_data_filename=self.cfg['gene_data_filename'],
-                max_len=max_len,
-                lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
-            )
+            if self.cfg.get('split_csv_path'):
+                self.train_dataset = get_dataset_single_file(
+                    csv_path=self.cfg['split_csv_path'],
+                    data_dir=self.cfg.get('data_dir'),
+                    genes=self.cfg['genes'],
+                    transforms=self.transforms,
+                    bins=self.cfg.get("bins", 0),
+                    max_len=max_len,
+                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    tile_subdir=self.cfg.get('tile_subdir'),
+                    split='train',
+                    split_col_name=self.cfg.get('split_col_name', 'split')
+                )
+            elif self.cfg.get('train_csv_path'):
+                self.train_dataset = get_dataset_single_file(
+                    csv_path=self.cfg['train_csv_path'],
+                    data_dir=self.cfg.get('data_dir'),
+                    genes=self.cfg['genes'],
+                    transforms=self.transforms,
+                    bins=self.cfg.get("bins", 0),
+                    max_len=max_len,
+                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    tile_subdir=self.cfg.get('tile_subdir')
+                )
+            else:
+                self.train_dataset = get_dataset(
+                    self.cfg['data_dir'],
+                    genes=self.cfg['genes'],
+                    samples=self.cfg['train_samples'],
+                    transforms=self.transforms,
+                    bins=self.cfg.get("bins", 0),
+                    gene_data_filename=self.cfg['gene_data_filename'],
+                    max_len=max_len,
+                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
+                )
+
+            if self.cfg.get('split_csv_path'):
+                self.val_dataset = get_dataset_single_file(
+                    csv_path=self.cfg['split_csv_path'],
+                    data_dir=self.cfg.get('data_dir'),
+                    genes=self.cfg['genes'],
+                    transforms=self.transforms,
+                    bins=self.cfg.get("bins", 0),
+                    max_len=max_len,
+                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    tile_subdir=self.cfg.get('tile_subdir'),
+                    split='val',
+                    split_col_name=self.cfg.get('split_col_name', 'split')
+                )
+            elif self.cfg.get('val_csv_path'):
+                self.val_dataset = get_dataset_single_file(
+                    csv_path=self.cfg['val_csv_path'],
+                    data_dir=self.cfg.get('data_dir'),
+                    genes=self.cfg['genes'],
+                    transforms=self.transforms,
+                    bins=self.cfg.get("bins", 0),
+                    max_len=max_len,
+                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    tile_subdir=self.cfg.get('tile_subdir')
+                )
+            else:
+                self.val_dataset = get_dataset(
+                    self.cfg['data_dir'],
+                    genes=self.cfg['genes'],
+                    samples=self.cfg['val_samples'],
+                    transforms=self.transforms,
+                    bins=self.cfg.get("bins", 0),
+                    gene_data_filename=self.cfg['gene_data_filename'],
+                    max_len=max_len,
+                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
+                )
+        if stage in (None, 'test'):
+            if self.cfg.get('split_csv_path'):
+                self.test_dataset = get_dataset_single_file(
+                    csv_path=self.cfg['split_csv_path'],
+                    data_dir=self.cfg.get('data_dir'),
+                    genes=self.cfg['genes'],
+                    transforms=self.transforms,
+                    bins=self.cfg.get("bins", 0),
+                    max_len=max_len,
+                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    tile_subdir=self.cfg.get('tile_subdir'),
+                    split='test',
+                    split_col_name=self.cfg.get('split_col_name', 'split')
+                )
+            elif self.cfg.get('test_csv_path'):
+                self.test_dataset = get_dataset_single_file(
+                    csv_path=self.cfg['test_csv_path'],
+                    data_dir=self.cfg.get('data_dir'),
+                    genes=self.cfg['genes'],
+                    transforms=self.transforms,
+                    bins=self.cfg.get("bins", 0),
+                    max_len=max_len,
+                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    tile_subdir=self.cfg.get('tile_subdir')
+                )
+            else:
+                if self.cfg.get('test_samples'):
+                    self.test_dataset = get_dataset(
+                        self.cfg['data_dir'],
+                        genes=self.cfg['genes'],
+                        samples=self.cfg['test_samples'],
+                        transforms=self.transforms,
+                        bins=self.cfg.get("bins", 0),
+                        gene_data_filename=self.cfg['gene_data_filename'],
+                        max_len=max_len,
+                        lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
+                    )
 
     def train_dataloader(self):
         return DataLoader(

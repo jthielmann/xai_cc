@@ -9,9 +9,6 @@ DEFAULT_RANDOM_SEED = 42
 
 from typing import Sequence
 import matplotlib.pyplot as plt
-from scipy.ndimage import convolve1d,
-from scipy.signal.windows import triang
-from scipy.stats import entropy, wasserstein_distance
 from torchvision import transforms as T
 import os
 
@@ -417,6 +414,139 @@ def get_dataset_for_umap(data_dir, genes, transforms=None, samples=None, meta_da
     return st_dataset
 
 
+def get_base_dataset_single_file(
+    csv_path: str | Path,
+    *,
+    data_dir: str | Path | None = None,
+    genes: list[str] | None = None,
+    max_len: int | None = None,
+    bins: int = 1,
+    lds_smoothing_csv: str | Path | None = None,
+    weight_transform: str = "inverse",
+    weight_clamp: int = 10,
+    tile_subdir: str | None = None,
+    split: str | list[str] | None = None,
+    split_col_name: str = "split",
+) -> pd.DataFrame:
+    """Build a base DataFrame from a single top-level CSV.
+
+    The CSV should contain at least a `tile` column and gene columns. If `data_dir`
+    is provided and `tile` paths are relative, they are joined with
+    `data_dir` (and `tile_subdir` if given).
+    """
+    csv_path = Path(csv_path)
+    if not csv_path.is_file():
+        raise FileNotFoundError(csv_path)
+
+    df = pd.read_csv(csv_path, nrows=max_len)
+
+    # Optional row filtering by split column
+    if split is not None:
+        if split_col_name not in df.columns:
+            raise ValueError(f"Column '{split_col_name}' not found in {csv_path}")
+        if isinstance(split, (list, tuple, set)):
+            df = df[df[split_col_name].isin(list(split))].copy()
+        else:
+            df = df[df[split_col_name] == split].copy()
+
+    # Ensure absolute tile paths if data_dir is given and tiles are relative
+    if data_dir is not None:
+        base = Path(data_dir)
+        if tile_subdir:
+            base = base / tile_subdir
+        df["tile"] = df["tile"].apply(lambda t: str(base / str(t)) if not os.path.isabs(str(t)) else str(t))
+
+    # Ensure a patient column exists (optional)
+    if "patient" not in df.columns:
+        df["patient"] = "all"
+
+    # Optionally attach LDS weights
+    if lds_smoothing_csv is not None:
+        # Determine gene list if not provided
+        if genes is None:
+            candidates = []
+            for c in df.columns:
+                if c == "tile" or str(c).endswith("_lds_w") or c == "patient":
+                    continue
+                if pd.api.types.is_numeric_dtype(df[c]):
+                    candidates.append(c)
+            genes = list(candidates)
+
+        if genes:
+            gene2weights = load_gene_weights(
+                lds_smoothing_csv, genes=genes, weight_transform=weight_transform
+            )
+            gene2weights = make_weights(gene2weights, clip_max=weight_clamp, r1=20, r2=100)
+
+            for g in genes:
+                if g not in gene2weights:
+                    raise ValueError(f"No weights for {g}")
+                w_vec = gene2weights[g]
+                K = len(w_vec)
+                vals = df[g].to_numpy()
+                edges = np.linspace(vals.min(), vals.max(), K + 1, dtype=np.float32)
+                idx = np.clip(np.searchsorted(edges, vals, side="right") - 1, 0, K - 1)
+                df[f"{g}_lds_w"] = w_vec[idx]
+
+    # Optional bin oversampling based on the first gene
+    if bins > 1 and genes:
+        gene_values = df[genes[0]]
+        gene_bins = pd.cut(gene_values, bins)
+        groups = df.groupby(gene_bins)
+        sample_size = groups.size().max()
+        df = (
+            groups.apply(lambda x: x.sample(sample_size, replace=True) if len(x) else x)
+            .reset_index(drop=True)
+        )
+
+    return df
+
+
+def get_dataset_single_file(
+    csv_path: str | Path,
+    *,
+    data_dir: str | Path | None = None,
+    genes: list[str] | None = None,
+    transforms=None,
+    max_len: int | None = None,
+    bins: int = 1,
+    only_inputs: bool = False,
+    lds_smoothing_csv: str | Path | None = None,
+    weight_transform: str = "inverse",
+    weight_clamp: int = 10,
+    return_floats: bool = False,
+    tile_subdir: str | None = None,
+    split: str | list[str] | None = None,
+    split_col_name: str = "split",
+):
+    """Return an `STDataset` built from a single top-level CSV.
+
+    Mirrors `get_dataset`, but does not expect per-patient subdirectories.
+    """
+    df = get_base_dataset_single_file(
+        csv_path=csv_path,
+        data_dir=data_dir,
+        genes=genes,
+        max_len=max_len,
+        bins=bins,
+        lds_smoothing_csv=lds_smoothing_csv,
+        weight_transform=weight_transform,
+        weight_clamp=weight_clamp,
+        tile_subdir=tile_subdir,
+        split=split,
+        split_col_name=split_col_name,
+    )
+
+    ds = STDataset(
+        df,
+        image_transforms=transforms,
+        inputs_only=only_inputs,
+        genes=genes,
+        use_weights=lds_smoothing_csv is not None,
+        return_floats=return_floats,
+    )
+    return ds
+
 def get_dino_dataset(csv_path, dino_transforms=None, max_len=None, bins=1, device_handling=False):
     if dino_transforms is None:
         dino_transforms = get_transforms()
@@ -490,213 +620,35 @@ class label_dataset(torch.utils.data.Dataset):
         val = self.dataframe.iloc[idx, self.dataframe.columns.get_loc(self.gene)]
         return torch.tensor(float(val), dtype=self.dtype) # supposed to be a 0D tensor
 
-class LDS:
-    EPS: float = 1e-12
-
-    def __init__(self, kernel_type: str, dataset: label_dataset, main_metric) -> None:
-        self.kernel_type = kernel_type  # for _kernel_size
-        self.best = None
-        self.dataset = dataset
-        self.main_metric = main_metric
-
-    def _get_kernel(self, kernel_size: int, sigma: float) -> np.ndarray:
-        """
-        Return a 1‑D smoothing kernel of length `kernel_size`.
-        `sigma` must already be expressed in **bin indices**, not in data units.
-        The kernel is L1‑normalised (∑k = 1) so it preserves total mass.
-        """
-        if kernel_size < 1 or kernel_size % 2 == 0:
-            raise ValueError("kernel_size must be a positive odd integer.")
-        if sigma <= 0:
-            raise ValueError("sigma must be > 0.")
-
-        half = (kernel_size - 1) // 2
-
-        if self.kernel_type in {"gaussian", "silverman"}:
-            # centred Gaussian: exp(-½ (x/σ)²)
-            x = np.arange(-half, half + 1, dtype=np.float32)
-            k = np.exp(-0.5 * (x / sigma) ** 2)
-
-        elif self.kernel_type == "triang":
-            # symmetric triangular window
-            k = triang(kernel_size).astype(np.float32)
-
-        elif self.kernel_type == "laplace":
-            # Laplace / double‑exponential: exp(-|x|/σ)
-            x = np.arange(-half, half + 1, dtype=np.float32)
-            k = np.exp(-np.abs(x) / sigma)
-
-        else:
-            raise ValueError(f"Unsupported kernel type '{self.kernel_type}'")
-
-        k /= k.sum()  # L1 normalisation
-        return k
-
-    def _get_silverman_sigma(self) -> float:
-        labels = np.stack([self.dataset[i] for i in range(len(self.dataset))])
-        n = labels.size
-        std = labels.std(ddof=1)
-        iqr = np.subtract(*np.percentile(labels, [75, 25]))
-        return 0.9 * min(std, iqr / 1.34) * n ** (-1 / 5)
-
-    def _smooth(self, hist: np.ndarray, kernel_size: int, sigma: float) -> np.ndarray:
-        min_len = int(np.ceil(6 * sigma)) | 1  # make it odd
-        ks = max(kernel_size, min_len)
-        kernel = self._get_kernel(ks, sigma)
-        return convolve1d(hist.astype(np.float32), kernel, mode="reflect")
-
-
-    def set_gene(self, gene):
-        self.dataset.set_gene(gene)
-
-    def _bandwidth_to_bins(self, bw_data_units: float, bins: int, data: np.ndarray) -> float:
-        # convert “real” bandwidth to index bandwidth
-        bin_width = (data.max() - data.min()) / bins
-        return max(bw_data_units / bin_width, 1e-6)  # keep σ > 0
-
-    def get_smoothing(self, bins: int, kernel_size: int, sigma:any=None) -> np.ndarray:
-        if kernel_size <= 1:
-            raise ValueError("Kernel size must be greater than 1.")
-
-        labels = np.asarray([self.dataset[i] for i in range(len(self.dataset))], dtype=float)
-        emp_hist, _ = np.histogram(labels, bins=bins)
-
-        if self.kernel_type == "silverman":
-            bw = self._get_silverman_sigma()  # data units
-            sigma_idx = self._bandwidth_to_bins(bw, bins, labels)
-        else:  # gaussian | triang | laplace
-            # self.sigma is already meant to be in data units
-            sigma_idx = self._bandwidth_to_bins(sigma, bins, labels)
-
-        return self._smooth(emp_hist, kernel_size, sigma_idx)
-
-    def get_empirical_distr(self, bins):
-        labels = np.stack([self.dataset[i] for i in range(len(self.dataset))])
-        emp_hist, emp_edges = np.histogram(labels, bins=bins)
-        return emp_hist, emp_edges
-
-    def rate_smoothing(self, smoothed_distr, empirical_distr, empirical_edges):
-        if empirical_distr.sum() == 0 or smoothed_distr.sum() == 0:
-            return np.nan, np.nan, np.nan, np.nan
-
-        p = np.maximum(empirical_distr / empirical_distr.sum(), self.EPS)
-        q = np.maximum(smoothed_distr / smoothed_distr.sum(), self.EPS)
-        p /= p.sum()
-        q /= q.sum()
-
-        m = 0.5 * (p + q)
-        js = 0.5 * (entropy(p, m) + entropy(q, m))
-        kl = entropy(p, q)
-        centres = 0.5 * (empirical_edges[:-1] + empirical_edges[1:])
-        ws = wasserstein_distance(centres.tolist(), centres.tolist(), p, q)
-        return js, kl, centres, ws
-
-    @staticmethod
-    def _load_cache(csv_path: Path) -> pd.DataFrame:
-        """Return an empty DataFrame with the correct columns if the file is absent."""
-        if csv_path.is_file():
-            return pd.read_csv(csv_path)
-        return pd.DataFrame(columns=["gene", "bins", "kernel_size", "sigma", "loo_ll"])
-
-    @staticmethod
-    def _append_cache(csv_path: Path, row: dict) -> None:
-        """Append *row* to *csv_path*, creating the file if necessary."""
-        df = LDS._load_cache(csv_path)
-        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-        df.to_csv(csv_path, index=False)
-
-    # --------------- plotting utils (unchanged) ---------------
-    def compareTo(self, gene, bins, kernel_size, sigma, ll_rating, rating) -> float:
-
-        empirical, edges = self.get_empirical_distr(bins)
-
-        smoothed = self._smooth(empirical.copy(), kernel_size, sigma)
-
-        if empirical.sum() == 0 or smoothed.sum() == 0:
-            return float("nan")
-
-        p = np.maximum(empirical / empirical.sum(), self.EPS)
-        q = np.maximum(smoothed / smoothed.sum(), self.EPS)
-        p /= p.sum(); q /= q.sum()
-
-        js, kl, centres, ws = rating
-
-        fig, ax = plt.subplots()
-        ax.step(centres, p, where="mid", lw=1.5, label="empirical")
-        ax.step(centres, q, where="mid", lw=1.5, label="smoothed")
-        ax.set_xlabel("bin centre")
-        ax.set_ylabel("probability")
-        ax.set_title(
-            f"LDS (bins={bins}, ks={kernel_size}, sigma={sigma:.2g}, gene={gene}, ll={ll_rating:.2g})"
-        )
-
-        metrics_txt = f"JS  = {js:.4g}\nKL  = {kl:.4g}\nWass = {ws:.4g}"
-        ax.annotate(
-            metrics_txt,
-            xy=(0.01, 0.99),
-            xycoords="axes fraction",
-            ha="left",
-            va="top",
-            fontsize=9,
-            bbox=dict(boxstyle="round,pad=0.4", fc="white", ec="grey", alpha=0.7),
-        )
-        ax.legend()
-        plt.show()
-
-    def get_ll_rating(self, bins, ks, sigma):
-        labels = np.asarray([self.dataset[i] for i in range(len(self.dataset))], dtype=float)
-        full_hist, edges = np.histogram(labels, bins=bins)
-        bin_idx = np.clip(
-            np.searchsorted(edges, labels, side="right") - 1,
-            0, bins - 1
-        )
-
-        # -----------------------------------------------------------------
-        # 2. LOO loop: remove one point from its bin, smooth, evaluate p(x)
-        # -----------------------------------------------------------------
-        ll   = 0.0
-        hist = full_hist.copy()                   # single reusable buffer
-
-        for idx in bin_idx:
-            hist[idx] -= 1                        # leave one out
-            smooth    = self._smooth(hist, ks, sigma)
-
-            # probability mass assigned to the left-out sample
-            p_x = max(smooth[idx] / smooth.sum(), self.EPS)
-            ll += np.log(p_x)
-
-            hist[idx] += 1                        # restore for next sample
-
-        return ll
-    # -----------------------------------------------------------
-
-
-
 def load_best_smoothing(csv_path: str | Path, gene: str) -> Dict[str, Any]:
+    """Load best smoothing params for a gene using JS divergence (smaller is better).
 
+    Expects a CSV produced by `script/data_processing/lds.py:grid_search_lds`, which
+    contains at least the columns: gene, bins, kernel_size, sigma, weights_json, js.
+    """
     csv_path = Path(csv_path)
     if not csv_path.is_file():
         raise FileNotFoundError(csv_path)
 
     df = pd.read_csv(csv_path)
-
-    # keep only the rows for this gene
     sub = df[df["gene"] == gene]
     if sub.empty:
         raise KeyError(f"Gene {gene!r} not present in {csv_path}")
 
-    # pick the row with the highest leave-one-out log-likelihood
-    row = sub.loc[sub["loo_ll"].idxmax()]
+    if "js" not in sub.columns:
+        raise ValueError("CSV does not contain 'js' column for selection.")
+
+    # select the row with minimal JS divergence
+    row = sub.loc[sub["js"].idxmin()]
 
     weights = np.array(json.loads(row["weights_json"]), dtype=float)
-    best = {
+    return {
         "bins": int(row["bins"]),
         "kernel_size": int(row["kernel_size"]),
         "sigma": float(row["sigma"]),
-        "loo_ll": float(row["loo_ll"]),
+        "js": float(row["js"]),
         "weights": weights,
     }
-    return best
 
 
 def load_gene_weights(

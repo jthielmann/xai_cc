@@ -21,19 +21,25 @@ def _prepare_gene_list(cfg: Dict[str, Any]) -> Any:
     if cfg.get("genes") is not None:
         return None
 
-    data_dir = cfg["data_dir"]
-    fname = cfg["gene_data_filename"]
+    data_dir = cfg.get("data_dir")
+    fname = cfg.get("gene_data_filename")
 
     files = []
-    sample_ids = cfg.get("sample_ids")
-    if sample_ids:
-        for sid in sample_ids:
-            path = os.path.join(data_dir, sid, "meta_data", fname)
-            if os.path.isfile(path):
-                files.append(path)
+    # Prefer single CSV(s) if provided
+    if cfg.get("split_csv_path") and os.path.isfile(cfg["split_csv_path"]):
+        files = [cfg["split_csv_path"]]
+    elif cfg.get("train_csv_path") and os.path.isfile(cfg["train_csv_path"]):
+        files = [cfg["train_csv_path"]]
     else:
-        files = glob.glob(os.path.join(data_dir, "*", "meta_data", fname))
-        files.sort()
+        sample_ids = cfg.get("sample_ids")
+        if sample_ids:
+            for sid in sample_ids:
+                path = os.path.join(data_dir, sid, "meta_data", fname)
+                if os.path.isfile(path):
+                    files.append(path)
+        else:
+            files = glob.glob(os.path.join(data_dir, "*", "meta_data", fname))
+            files.sort()
 
     if not files:
         raise FileNotFoundError(f"No gene data files found under {data_dir}/*/meta_data/{fname}")

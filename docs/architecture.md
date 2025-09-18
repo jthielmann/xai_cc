@@ -173,6 +173,7 @@ Outputs (under `out_path`):
 ## Data Processing Details
 - `STDataset`: wraps tile image and gene targets; optional LDS weight columns `f"{gene}_lds_w"`
 - `get_base_dataset`: merges per‑sample CSVs, attaches absolute tile paths and patient IDs; applies LDS weighting and optional bin oversampling
+- `get_dataset_single_file` / `get_base_dataset_single_file`: build the same dataset from a single top‑level CSV (no per‑patient subdirs); supports LDS weights, bin oversampling, and optional `tile_subdir` for resolving relative tile names. Can filter by a `split` column (default name `split`).
 - `image_transforms.get_transforms`: Torchvision v2 or v1 transforms (resize, crop, flip, rotate, dtype/normalize)
 
 ## Key Extension Points
@@ -186,6 +187,14 @@ Outputs (under `out_path`):
 - Supervised single run: `python script/main.py --config sweeps/configs/debug`
 - Sweep: same command with a config that defines parameter `values`; sweep orchestration happens in `main.py`
 - DINO: `python script/dino_main.py --config sweeps/configs/dino`
+
+Single‑file dataset config
+- `script/data_processing/lit_STDataModule.py` accepts options to use one CSV instead of per‑patient files:
+  - `split_csv_path`: single CSV containing a `split` column with values like `train`, `val`, `test`
+  - `split_col_name` (optional): name of the split column (default `split`)
+  - Alternatively, `train_csv_path`, `val_csv_path`, `test_csv_path` for separate CSVs per split
+  - `tile_subdir` (optional): subfolder under `data_dir` to prepend to relative tile names
+  - `lds_weight_csv`: path to smoothing CSV (same as multi‑file flow)
 
 ## Observations & Improvement Ideas
 - Config typing: Introduce dataclasses/Pydantic for config validation and defaults
@@ -205,4 +214,3 @@ Outputs (under `out_path`):
 - Losses: `script/model/loss_functions.py`
 - Config/Datasets: `script/configs/dataset_config.py`, `script/main_utils.py`
 - Docs/Notes: `dino.md`, `todo.md`
-
