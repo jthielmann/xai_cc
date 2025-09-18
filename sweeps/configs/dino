@@ -1,60 +1,99 @@
 project: dino
-name: train dino on NCT-CRC-HE-100K
+name: train dinov3 on NCT-CRC-HE-100K
 method: grid
 metric:
   name: valid_loss
   goal: minimize
 
 parameters:
+  # Run behavior
   log_to_wandb:
     value: true
   debug:
     value: true
   use_early_stopping:
     value: true
-
-  # Fixed parameters
-  epochs:
-    value: 40
-  dataset:
-    value: NCT-CRC-HE-100K
-  encoder_type:
-    value: resnet50
-  batch_size:
-    value: 32
-  error_metric_name:
-    value: DinoLoss
-  encoder_out_dim:
-    value: 2048
-  middle_layer_features:
-    value: 200
-  num_workers:
-    value: 2
-  loss_fn_switch:
-    value: DinoLoss
-  image_size:
-    value: 224
   generate_scatters:
     value: true
-  local_crop_scale:
-    value: [0.05, 0.4]
+
+  # Data / loader
+  dataset:
+    value: NCT-CRC-HE-100K
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+  image_size_global:
+    values: [224, 336]        # match your tile scale
+  image_size_local:
+    values: [96, 112]
+
+  # Encoder (DINOv3)
+  model_id:
+    values:
+      - facebook/dinov3-vitb16-pretrain-lvd1689m
+  use_hf_normalize:
+    values: [true, false]     # toggle to compare HF normalization vs your transforms
+
+  # Training schedule
+  epochs:
+    value: 40
+  optimizer:
+    value: adamw
+  learning_rate:
+    values: [5e-4, 1e-3]      # scale with effective batch size
+  weight_decay:
+    values: [0.05, 0.1]
+  warmup_epochs:
+    value: 10
+  lr_schedule:
+    value: cosine
+
+  # DINO-specific (teacher/student)
+  num_global_views:
+    value: 2
   n_local_views:
     value: 6
-
-  # Augmentation-related sweeps
   global_crop_scale:
     values:
       - [0.4, 1.0]
       - [0.5, 1.0]
       - [0.6, 1.0]
+  local_crop_scale:
+    value: [0.05, 0.4]
 
+  # Temperatures / centering / EMA
+  teacher_temp_warmup:
+    value: 0.04
+  teacher_temp_final:
+    values: [0.07, 0.08]
+  student_temp:
+    value: 0.1
+  center_momentum:
+    value: 0.9
+  ema_momentum_start:
+    value: 0.996
+  ema_momentum_end:
+    value: 0.9995
+
+  # Augmentations (histology-friendly)
   cj_strength:
     values: [0.3, 0.5, 0.8]
-
-  gaussian_blur:
+  gaussian_blur:              # [prob_global1, prob_global2, prob_local]
     values:
       - [1.0, 0.1, 0.1]
       - [1.0, 0.1, 0.5]
-
   solarization_prob:
     values: [0.0, 0.2]
+
+  # Logging / metrics
+  loss_fn_switch:
+    value: DinoLoss
+  error_metric_name:
+    value: DinoLoss
+
+  # Runtime (optional but handy)
+  precision_auto:
+    value: true               # your code maps this to bf16/16/32 at runtime
+  ddp_find_unused_parameters_false:
+    value: true               # safe for DINO; faster than scanning for unused params

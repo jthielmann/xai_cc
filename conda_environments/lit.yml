@@ -25,6 +25,7 @@ dependencies:
   - matplotlib
   - protobuf
   - pandas<2.0.0 # required by anndata
+  - transformers
   - pip
   - pip:
     - onnxscript
