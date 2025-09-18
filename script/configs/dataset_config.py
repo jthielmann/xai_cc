@@ -27,6 +27,18 @@ _BASE_CRC_BASE: Dict[str, Any] = {
     "val_samples_all":   ["p009","p013"],
 }
 
+_BASE_COAD: Dict[str, Any] = {
+    "data_dir": "../data/CRC-N19/",
+    "train_samples_all": [
+         'MISC62', 'ZEN45', 'TENX152', 'MISC73', 'MISC71', 'MISC70', 'MISC68', 'MISC67', 'MISC66', 'MISC65', 'MISC64',
+         'MISC63', 'MISC58', 'MISC57', 'MISC51', 'MISC50', 'MISC49', 'MISC48', 'MISC47', 'MISC46', 'MISC44', 'MISC43',
+         'MISC41', 'MISC40', 'MISC39', 'MISC38', 'MISC36', 'TENX92', 'TENX91', 'TENX49', 'ZEN47', 'ZEN46', 'ZEN43',
+         'ZEN39', 'MISC42'],
+    "val_samples_all": ['MISC69', 'MISC56', 'MISC37', 'MISC35', 'MISC34', 'TENX90', 'TENX29', 'ZEN42', 'ZEN38'],
+    "test_samples_all": ['MISC72', 'MISC45', 'MISC33', 'TENX89', 'TENX28', 'ZEN44']
+}
+
+
 # Consolidated dataset configurations
 DATASETS: Dict[str, Dict[str, Any]] = {
     "CRC_N19": {
@@ -39,6 +51,12 @@ DATASETS: Dict[str, Dict[str, Any]] = {
         **_BASE_CRC_N19,
         "mean": [0.5405, 0.2749, 0.5476],
         "std":  [0.2619, 0.2484, 0.2495],
+        "weights": None,
+    },
+    "coad": {
+        **_BASE_COAD,
+        "mean": [0.0, 0.0, 0.0], # already normalized according to Amos
+        "std": [1.0, 1.0, 1.0],
         "weights": None,
     },
     "crc_base": {

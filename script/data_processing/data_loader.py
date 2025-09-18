@@ -1,41 +1,25 @@
 from __future__ import annotations
 
-import os
 import random
-import numpy as np
-import torch
 import torch.nn.functional
 from torchvision import transforms
-from PIL import Image
 from script.data_processing.image_transforms import get_transforms
-from typing import List, Literal, Union, Mapping
-from pathlib import Path
-from pathlib import Path
-from typing import Dict, List, Literal, Optional
-import json
-import pandas as pd
-import torch
+from typing import Union, Mapping
 DEFAULT_RANDOM_SEED = 42
 
-import numpy as np
-from typing import Tuple, Optional, Sequence
+from typing import Sequence
 import matplotlib.pyplot as plt
-from scipy.ndimage import convolve1d, gaussian_filter1d
+from scipy.ndimage import convolve1d,
 from scipy.signal.windows import triang
 from scipy.stats import entropy, wasserstein_distance
-from script.main_utils import parse_yaml_config, parse_args
-from script.configs.dataset_config import get_dataset_data_dir
 from torchvision import transforms as T
-import pandas as pd
 import os
-from pathlib import Path
-import torch
 
 from pathlib import Path
 import json
 import pandas as pd
 import numpy as np
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 
 def seed_basic(seed=DEFAULT_RANDOM_SEED):
@@ -474,18 +458,6 @@ class NCT_CRC_Dataset(torch.utils.data.Dataset):
 
         return img, row["class"]
 
-# returns imgs and tile paths
-def get_dataset_NCT_CRC_classification(data_dir, transforms=None, samples=None, meta_data_dir="/meta_data/", max_len=None):
-    if samples is None:
-        samples = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
-    st_dataset = STDataset_umap(gene_data_df, image_transforms=transforms)
-    return st_dataset
-
-
-
-
-
-
 def get_label_dataframe(data_dir, samples, meta_data_dir="/meta_data/", max_len=None, gene_data_filename="gene_data.csv"):
     datasets = []  # Use a list to store DataFrames
 
@@ -517,15 +489,6 @@ class label_dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         val = self.dataframe.iloc[idx, self.dataframe.columns.get_loc(self.gene)]
         return torch.tensor(float(val), dtype=self.dtype) # supposed to be a 0D tensor
-
-
-
-
-
-
-
-
-
 
 class LDS:
     EPS: float = 1e-12
@@ -747,28 +710,6 @@ def load_gene_weights(
     renorm_mean1: bool = True,
     clip_max: Optional[float] = None,
 ) -> Dict[str, torch.Tensor]:
-    """
-    Build {gene: weight_tensor} from the LDS CSV.
-
-    Parameters
-    ----------
-    csv_path : path to CSV with columns ["gene", "weights_json", selection_metric, ...]
-    genes : list of genes to load
-    weight_transform :
-        - "inverse"       -> w = 1 / p
-        - "sqrt-inverse"  -> w = 1 / sqrt(p)
-        - "none"          -> w = p
-      (p is the smoothed distribution; we always re-normalize p to sum=1 first.)
-    selection_metric : column name to choose the best row per gene (default: "js")
-    mode : "min" or "max" depending on the metric direction (JS uses "min")
-    eps : numerical floor for stability
-    renorm_mean1 : if True, scale weights so mean(w) == 1 (keeps loss scale stable)
-    clip_max : optional upper bound to clip extreme weights
-
-    Returns
-    -------
-    Dict[str, torch.Tensor] mapping gene -> 1D float32 tensor of length == bins.
-    """
     csv_path = Path(csv_path)
     if not csv_path.is_file():
         raise FileNotFoundError(csv_path)
