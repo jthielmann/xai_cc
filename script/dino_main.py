@@ -13,7 +13,7 @@ from lightning.pytorch.tuner.tuning import Tuner
 # Project-specific imports
 from script.data_processing.data_loader import get_dino_dataset
 from lightly.transforms.dino_transform import DINOTransform
-from script.model.lit_model import DINO
+from script.model.lit_dino import DINO
 
 from main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, read_config_parameter, get_sweep_parameter_names
 
@@ -82,14 +82,17 @@ def _train(cfg: dict):
     trainer.fit(model=model, train_dataloaders=dataloader_train, val_dataloaders=dataloader_val)
 
     wandb_run_id = run.id
-    best_ckpt = trainer.checkpoint_callback.best_model_path
+    best_ckpt = getattr(getattr(trainer, "checkpoint_callback", None), "best_model_path", "")
 
-    artifact = wandb.Artifact("model-best", type="model")
-    artifact.add_file(best_ckpt, name="model.ckpt")
-    run.log_artifact(artifact)
-    run.summary["best_model_artifact"] = artifact.name
+    if best_ckpt and os.path.exists(best_ckpt):
+        artifact = wandb.Artifact("model-best", type="model")
+        artifact.add_file(best_ckpt, name="model.ckpt")
+        run.log_artifact(artifact)
+        run.summary["best_model_artifact"] = artifact.name
 
-    with open(cfg["out_path"] + "/" + "wandb_run_id.txt", "w") as f:
+    out_dir = cfg.get("out_path", ".")
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "wandb_run_id.txt"), "w") as f:
         f.write(wandb_run_id)
 
 def _sweep_run():

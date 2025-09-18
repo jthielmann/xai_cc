@@ -437,7 +437,8 @@ def get_dino_dataset(csv_path, dino_transforms=None, max_len=None, bins=1, devic
     if dino_transforms is None:
         dino_transforms = get_transforms()
     file_df = pd.read_csv(csv_path, nrows=max_len)
-    st_dataset = STDataset(file_df, image_transforms=dino_transforms, inputs_only=True, device_handling=device_handling)
+    # Ensure STDataset does not attempt to infer gene columns (CSV has none for DINO)
+    st_dataset = STDataset(file_df, image_transforms=dino_transforms, inputs_only=True, genes=[])
     return st_dataset
 
 
