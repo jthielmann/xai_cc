@@ -1,0 +1,60 @@
+project: debug_single_csv
+name: single-file csv (split column) debug
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  # Run behavior
+  debug:
+    value: true
+  log_to_wandb:
+    value: false
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: true
+
+  # Data
+  dataset:
+    value: coad            # used for transforms mean/std and defaults
+  split_csv_path:
+    value: /data/cephfs-2/unmirrored/groups/krieger/xai/HEST/hest_coad_visium/hvg_cmmn_std.csv   # single CSV with a `split` column
+  split_col_name:
+    value: split
+  data_dir:
+    value: /data/cephfs-2/unmirrored/groups/krieger/xai/HEST/hest_coad_visium  # base path to resolve relative `tile` values
+  tile_subdir:
+    value: tiles
+
+  # Model / training
+  encoder_type:
+    value: dino
+  batch_size:
+    value: 16
+  epochs:
+    value: 2
+  image_size:
+    value: 224
+  num_workers:
+    value: 2
+  genes:
+    value: null               # let code infer genes from CSV; or set list
+  split_genes_by:
+    value: 50
+  loss_fn_switch:
+    value: MSE
+  error_metric_name:
+    value: MSE
+  freeze_encoder:
+    value: true
+
+
+  # Optional LDS weighting
+  lds_weight_csv:
+    value: null               # set to a weights CSV if you have one
+  weight_transform:
+    value: inverse
+
+
