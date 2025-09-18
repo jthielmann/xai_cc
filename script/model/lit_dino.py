@@ -61,6 +61,13 @@ class DINO(L.LightningModule):
     def on_fit_start(self):
         os.makedirs(self.config.get('out_path', '.'), exist_ok=True)
 
+        # ---- total_steps for per-step cosine schedules ----
+        # Prefer Lightning's estimate; fallback to epochs * num_training_batches
+        if hasattr(self.trainer, "estimated_stepping_batches") and self.trainer.estimated_stepping_batches:
+            self.total_steps = int(self.trainer.estimated_stepping_batches)
+        else:
+            self.total_steps = int(self.config['epochs'] * max(1, self.num_training_batches))
+
     def update_lr(self, lr):
         self.lr = lr
 
@@ -70,17 +77,18 @@ class DINO(L.LightningModule):
         return z
 
     def forward_teacher(self, pixel_values):
-        y = self._encode_cls(pixel_values, self.teacher_backbone)
-        z = self.teacher_head(y)
-        return z
+        with torch.no_grad():
+            y = self._encode_cls(pixel_values, self.teacher_backbone)
+        return self.teacher_head(y)
 
     def common_step(self, batch, batch_idx):
-        # momentum schedule (unchanged)
+        # Step-based EMA momentum
+        step_now = min(self.global_step, max(0, self.total_steps - 1))
         momentum = cosine_schedule(
-            step=self.current_epoch,
-            max_steps=self.config['epochs'],
+            step=step_now,
+            max_steps=self.total_steps,
+            start_value=1.0,
             end_value=0.996,
-            start_value=1.0
         )
         update_momentum(self.student_backbone, self.teacher_backbone, m=momentum)
         update_momentum(self.student_head, self.teacher_head, m=momentum)
@@ -94,12 +102,12 @@ class DINO(L.LightningModule):
         views = []
         for v in views_in:
             if self.use_hf_normalize:
-                # If v is a PIL image or tensor (C,H,W) float in [0,1], processor can handle it.
-                pv = self.processor(images=v, return_tensors="pt")["pixel_values"].to(self.device)
+                if torch.is_tensor(v) and v.dim() == 4:           # (B,C,H,W) already
+                    pv = v.to(self.device)                         # assume you normalized earlier
+                else:
+                    pv = self.processor(images=v, return_tensors="pt")["pixel_values"].to(self.device)
             else:
-                # If you already normalize in your dataloader/transforms, just ensure it's a float tensor (B,C,H,W) on device
-                pv = v if v.dim() == 4 else v.unsqueeze(0)
-                pv = pv.to(self.device)
+                pv = (v if (torch.is_tensor(v) and v.dim()==4) else v.unsqueeze(0)).to(self.device)
             views.append(pv)
 
         # teacher: first 2 global crops; student: all crops
@@ -162,11 +170,12 @@ class DINO(L.LightningModule):
         # save best model if improved
         if self.current_loss < self.best_loss:
             self.best_loss = self.current_loss
-            wandb.run.summary['best_val_loss'] = self.best_loss
-            wandb.run.summary['best_val_epoch'] = self.current_epoch
+            if wandb.run:
+                wandb.run.summary['best_val_loss'] = float(self.best_loss)
+                wandb.run.summary['best_val_epoch'] = int(self.current_epoch)
+                wandb.log({'epoch': int(self.current_epoch)})
             best = os.path.join(self.config.get('out_path', '.'), 'best_model.pth')
             torch.save(self.state_dict(), best)
-            wandb.log({'epoch': self.current_epoch})
 
     def set_num_training_batches(self, num_batches):
         self.num_training_batches = num_batches
