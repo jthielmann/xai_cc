@@ -1,6 +1,94 @@
 # Project Architecture Overview
-
 This document maps the repository’s structure, major components, and data/control flow so you can quickly orient yourself and plan improvements.
+```mermaid
+%%{init:{
+  "securityLevel":"loose",
+  "flowchart":{"htmlLabels":true,"nodeSpacing":30,"rankSpacing":60,"useMaxWidth":true},
+  "themeVariables":{"fontSize":"18px"}
+}}%%
+flowchart TB
+
+subgraph Scripts
+  direction TB
+  T[train.py];
+  X[xai.py];
+  E[eval.py];
+  S[sweep.py];
+  M[manifest.py];
+end
+
+subgraph Common[script/common/]
+  direction TB
+  Datasets[datasets.py<br/>weights.py<br/>sampling.py];
+  Heads[heads.py<br/>HeadRegistry];
+  Transforms[transforms.py v1 or v2];
+  TrainPolicy[train_policy.py<br/>optim / AMP / seed];
+  Logging[logging.py<br/>unified keys];
+  SweepGen[sweep.py<br/>config gen];
+end
+
+subgraph Config_Manifest[Configuration and Manifest]
+  direction TB
+  Config[Pydantic v2 config<br/>config_resolved.json];
+  Schema[config.schema.json];
+  Manifest[manifest.v1.json];
+end
+
+subgraph Pipeline[Train and XAI Orchestration]
+  direction TB
+  TrainEnv[(conda env:<br/>train.lock.yml)];
+  XAIEnv[(conda env:<br/>xai.lock.yml)];
+  MakeTarget[make train_and_xai];
+  XAIWorker[(optional xai-worker<br/>FastAPI queue)];
+end
+
+subgraph Data_Model[Data and Model Code]
+  direction TB
+  DM_Datasets[(Dataset registry)];
+  DM_Heads[(Per gene heads)];
+  DM_Transforms[(Transforms)];
+end
+
+subgraph Outputs
+  direction TB
+  OutDir[out / run_id /];
+  OutConfigs[config_raw.json<br/>config_resolved.json];
+  OutManifest[manifest.json];
+  Metrics[metrics.jsonl and csv];
+  Figures[plots and figs];
+  Cache[out / cache];
+end
+
+%% gentle layout ordering (invisible edges)
+Scripts -.-> Common;
+Common -.-> Config_Manifest;
+Config_Manifest -.-> Pipeline;
+Pipeline -.-> Data_Model;
+Data_Model -.-> Outputs;
+```
+
+```mermaid
+%%{init: {"themeVariables":{"fontSize":"18px"},"flowchart":{"rankSpacing":70}}}%%
+flowchart TD
+  T[train.py] --> OutDir[out/run_id/]
+  OutDir --> OutConfigs
+  OutDir --> OutManifest
+  OutDir --> Metrics
+  OutDir --> Figures
+  OutDir --> Cache
+  OutManifest --> X[xai.py]
+  X --> Metrics
+  X --> Figures
+  T --> Datasets
+  T --> Transforms
+  T --> TrainPolicy
+  X --> Datasets
+  X --> Transforms
+  Datasets --> DM_Datasets
+  Transforms --> DM_Transforms
+  DM_Datasets --> T
+  DM_Transforms --> T
+```
 
 ## Purpose
 - Supervised: Predict gene expression from histology tiles using PyTorch Lightning.

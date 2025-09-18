@@ -1,0 +1,42 @@
+%%{init:{
+  "securityLevel":"loose",
+  "flowchart":{"htmlLabels":true,"nodeSpacing":36,"rankSpacing":72,"useMaxWidth":true},
+  "themeVariables":{"fontSize":"19px"}
+}}%%
+flowchart TB
+subgraph Data_Model [Data Model]
+  direction TB
+  script_data_processing_custom_transforms_py[custom_transforms.py];
+  script_data_processing_data_loader_py[data_loader.py];
+  script_data_processing_fds_py[fds.py];
+  script_data_processing_fds_utils_py[fds_utils.py];
+  script_data_processing_get_lds_smoothing_py[get_lds_smoothing.py];
+  script_data_processing_image_transforms_py[image_transforms.py];
+  script_data_processing_lds_helpers_py[lds_helpers.py];
+  script_data_processing_lds_py[lds.py];
+  script_data_processing_lit_STDataModule_py[lit_STDataModule.py];
+  script_data_processing_patching_py[patching.py];
+  script_data_processing_process_csv_py[process_csv.py];
+  script_model_generate_results_py[generate_results.py];
+  script_model_lit_ae_py[lit_ae.py];
+  script_model_lit_dino_py[lit_dino.py];
+  script_model_lit_model_py[lit_model.py];
+  script_model_loss_functions_py[loss_functions.py];
+  script_model_model_factory_py[model_factory.py];
+  script_model_restructure_py[restructure.py];
+end
+
+script_data_processing_data_loader_py --> script_data_processing_image_transforms_py;
+script_data_processing_get_lds_smoothing_py --> script_data_processing_data_loader_py;
+script_data_processing_lds_py --> script_data_processing_data_loader_py;
+script_data_processing_lit_STDataModule_py --> script_data_processing_data_loader_py;
+script_data_processing_lit_STDataModule_py --> script_data_processing_image_transforms_py;
+script_data_processing_process_csv_py --> script_data_processing_data_loader_py;
+script_model_generate_results_py --> script_data_processing_data_loader_py;
+script_model_lit_ae_py --> script_model_model_factory_py;
+script_model_lit_model_py --> script_data_processing_data_loader_py;
+script_model_lit_model_py --> script_data_processing_image_transforms_py;
+script_model_lit_model_py --> script_data_processing_process_csv_py;
+script_model_lit_model_py --> script_model_lit_ae_py;
+script_model_lit_model_py --> script_model_loss_functions_py;
+script_model_lit_model_py --> script_model_model_factory_py;
