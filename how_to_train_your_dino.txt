@@ -1,0 +1,157 @@
+           __
+          / _)
+   .-^^^-/ /            RAWR! Let's train.
+__/       /
+<__.|_|-|_|             (DINOv3 quick guide)
+
+HOW TO TRAIN YOUR DINO (Quick, Practical Guide)
+
+0) Pre-flight (no downloads)
+   python script/tests/run_all_dino_tests.py
+   What: Runs compact sanity tests (heads, augment policy plumbing, optimizer schedules,
+         stain normalization, feature caching).
+
+1) Single-run training (reference defaults)
+   python script/dino_main.py --config sweeps/configs/dino_reference
+   What: Trains a DINOv3 ViT-B/16 student/teacher with a reference-aligned setup.
+         - 2 global + 6 local crops, cosine LR warmup, EMA momentum, per-step teacher temp,
+           AdamW (optional fused on CUDA), optional stain norm (off by default).
+         - Logs to W&B if log_to_wandb is true; set it false to disable.
+
+2) Sweep training (grid over parameters)
+   python script/dino_main.py --config sweeps/configs/dino
+   What: If a config contains parameters.*.values, the script auto-creates a W&B sweep
+         and launches an agent. Use for exploring crop sizes, head dims, learning rates, etc.
+   Tip: Set parameters.log_to_wandb.value: false for offline runs.
+
+3) Optional: High-resolution finetune stage
+   (a) Ensure your config has:
+       run_high_res_stage: true
+       high_res_epochs: 5            # short and memory-aware
+       high_global_crop_size: 336    # larger than base 224
+       high_local_crop_size: 128
+   (b) Train with your config (same command as above).
+   What: Automatically runs a short high-res stage after base training.
+
+4) Stain normalization: preview and train
+   Preview from CSV:
+     python script/evaluation/visualize_stain_norm.py \
+       --csv /path/to/files.csv --tile-col tile --n 12 --out-dir stain_vis
+   Preview from a directory:
+     python script/evaluation/visualize_stain_norm.py \
+       --dir /path/to/images --n 12 --out-dir stain_vis
+   Train with stain normalization:
+     - In your config: use_stain_norm: true, stain_norm_method: reinhard
+     What: Applies Reinhard stain normalization before DINO multi-crop augmentations.
+
+5) Input normalization: avoid double-normalize
+   - If using HuggingFace processor normalization in the model: set use_hf_normalize: true
+     (then transforms skip Normalize).
+   - If transforms do Normalize: set use_hf_normalize: false (recommended default).
+   What: Ensures augmentations run before normalization, avoiding double application.
+
+6) Key toggles you may want to try (edit in config)
+   - use_ref_aug_policy: true       # DINOv3-like per-view augs.
+   - teacher_temp_per_step: true    # Teacher temperature scheduled by global step.
+   - ema_momentum_start: 0.996, ema_momentum_end: 0.9995
+   - weight_decay_cosine: true, weight_decay_end: 0.0
+   - use_fused_adamw: true          # CUDA-only, falls back safely if unsupported.
+   - layer_lr_decay: 0.75           # Layer-wise LR decay (backbone), optional.
+   - gram_anchor_weight: 0.1        # Add Gram anchoring on patch tokens; start small.
+   - gram_anchor_token_subsample: 128  # Cap tokens for O(T^2) cost.
+
+7) Precision and stability
+   - precision_auto: true           # bf16-mixed if supported, else 16-mixed, else 32.
+   - grad_clip_val: 1.0, grad_clip_algo: norm
+   - use_sync_batchnorm: true       # If running multi-GPU DDP; safe to leave false on 1 GPU.
+   What: Mixed precision + clipping improve throughput and stability.
+
+8) Checkpoints and restart
+   Training saves:
+     - latest.pth       # last checkpoint
+     - best_model.pth   # best on validation (by valid_loss)
+   What: Contains student/teacher/backbone/head and DINOLoss state (centers/temps).
+   Note: dino_main.py does not implement resume-yet; load state in a small snippet if needed.
+
+9) Export backbone-only (for downstream tasks)
+   python - << 'PY'
+import torch
+from script.model.lit_dino import DINO
+ckpt = 'path/to/best_model.pth'
+model = DINO({'epochs': 1, 'use_dummy_backbone': True, 'debug': True})
+sd = torch.load(ckpt, map_location='cpu')
+model.load_state_dict(sd, strict=False)
+out = 'backbone_only.pth'
+model.export_backbone(out)
+print('saved', out)
+PY
+   What: Writes a small state-dict with only the student backbone weights.
+
+10) Cache features (CLS or patch-mean) for fast evaluation
+   Example (customize dataloader as needed):
+   python - << 'PY'
+import os, torch
+from torch.utils.data import DataLoader
+from script.model.lit_dino import DINO
+from script.data_processing.data_loader import NCT_CRC_Dataset
+from torchvision import transforms as T
+eval_tf = T.Compose([T.Resize((224,224)), T.ToTensor(),
+                     T.Normalize([0.7406,0.5331,0.7059],[0.1651,0.2174,0.1574])])
+ds = NCT_CRC_Dataset('/path/NCT-CRC-HE-100K', classes=['TUMOR','STROMA'], image_transforms=eval_tf, label_as_string=False)
+dl = DataLoader(ds, batch_size=64, shuffle=False, num_workers=4)
+model = DINO({'epochs': 1, 'use_dummy_backbone': True, 'debug': True})
+out = 'features_cls.pt'
+print('caching to', out)
+model.cache_features(dl, out, pool='cls', dtype='float16')
+print('done')
+PY
+   What: Extracts and stores fp16 CLS features for all tiles.
+
+11) Linear probe and NN retrieval (quick validation)
+   python script/evaluation/linear_probe.py \
+     --data-dir /path/NCT-CRC-HE-100K --classes TUMOR STROMA \
+     --ckpt /path/to/best_model.pth --epochs 10 --pool cls --batch-size 64
+   What: Extracts features from the DINO backbone and trains a linear classifier; also reports 1-NN.
+
+12) Debug-only smoke training
+   python script/tests/smoke_train_dino.py
+   What: 1-epoch CPU fit using a dummy backbone and synthetic multi-crop batches.
+
+13) Troubleshooting tips
+   Collapse (low variance):
+     - Lower teacher_temp_final slightly, increase center_momentum, or add gram_anchor_weight.
+   Out of memory:
+     - Reduce batch_size, n_local_views, crop sizes; enable grad_checkpointing; use bf16/16 mixed.
+   Slow convergence:
+     - Increase warmup_epochs slightly; ensure augmentations are balanced; consider LLRD.
+   GPU underutilized:
+     - Enable fused AdamW on CUDA; increase num_workers and batch size (memory permitting).
+
+
+Bonus T‑Rex
+
+                                                  ____
+       ___                                      .-~. /_"-._
+      `-._~-.                                  / /_ "~o\  :Y
+          \  \                                / : \~x.  ` ')
+           ]  Y                              /  |  Y< ~-.__j
+          /   !                        _.--~T : l  l<  /.-~
+         /   /                 ____.--~ .   ` l /~\ \<|Y
+        /   /             .-~~"        /| .    ',-~\ \L|
+       /   /             /     .^   \ Y~Y \.^>/l_   "--'
+      /   Y           .-"(  .  l__  j_j l_/ /~_.-~    .
+     Y    l          /    \  )    ~~~." / `/"~ / \.__/l_
+     |     \     _.-"      ~-{__     l  :  l._Z~-.___.--~
+     |      ~---~           /   ~~"---\_  ' __[>
+     l  .                _.^   ___     _>-y~
+      \  \     .      .-~   .-~   ~>--"  /
+       \  ~---"            /     ./  _.-'
+        "-.,_____.,_  _.--~\     _.-~
+                    ~~     (   _}       -Row
+                           `. ~(
+                             )  \
+                            /,`--'~\--'~\
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                             ->T-Rex<-
+
+you did dino-mite!
