@@ -1,4 +1,4 @@
-project: all genes n19 resrand split
+project: all genes n19 resrand split redo 2
 name: compare different preprocessing of the gene data
 method: grid
 metric:
@@ -40,7 +40,7 @@ parameters:
     value: false
   # hyperparams
   global_fix_learning_rate:
-    values: [0.01, 0.1, 0.001]
+    values: [0.01]
   bins:
     value: 1
   freeze_encoder:

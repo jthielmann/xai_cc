@@ -414,14 +414,17 @@ class GeneExpressionRegressor(L.LightningModule):
             torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
 
     def on_train_end(self):
+        # --- W&B scatter table (unchanged) ---
         if self.is_online and hasattr(self, "table"):
             wandb.log({"scatter_table": self.table})
-        if self.config["debug"]:
+        if self.config.get("debug"):
             return
 
         csv_path = os.path.join(self.config["model_dir"], "results.csv")
+
         row = {
-            "best_epoch": self.best_epoch or int(self.current_epoch),
+            "best_epoch": int(self.best_epoch) if getattr(self, "best_epoch", None) is not None else int(
+                self.current_epoch),
             "val_score": float(self.best_loss),
             "pearson_mean": float(self.best_r_mean),
             "out_path": self.config["out_path"],
@@ -429,9 +432,26 @@ class GeneExpressionRegressor(L.LightningModule):
             "wandb_url": (wandb.run.url if self.is_online and wandb.run else ""),
         }
 
+        # Build per-gene columns robustly
         per_gene_for_row = getattr(self, "best_r", None) or getattr(self, "last_r", None) or []
-        row.update({f"pearson_{g}": float(r) for g, r in zip(self.genes, per_gene_for_row)})
+        if len(per_gene_for_row) != len(self.genes):
+            raise RuntimeError(
+                f"genes ({len(self.genes)}) vs r ({len(per_gene_for_row)}) length mismatch"
+            )
 
+        # Handle duplicate gene names deterministically: pearson_<gene>, pearson_<gene>__1, __2, ...
+        seen = {}
+        for g, r in zip(self.genes, per_gene_for_row):
+            base_key = f"pearson_{g}"
+            if g in seen:
+                seen[g] += 1
+                key = f"{base_key}__{seen[g]}"
+            else:
+                seen[g] = 0
+                key = base_key
+            row[key] = float(r)
+
+        # Keep selected hyperparams/metadata
         keep = [
             "dataset",
             "gene_data_filename",
@@ -443,12 +463,29 @@ class GeneExpressionRegressor(L.LightningModule):
             "loss_fn_switch",
             "genes",
         ]
-        row.update({k: self.config[k] for k in keep if k in self.config})
+        for k in keep:
+            if k in self.config:
+                row[k] = self.config[k]
         row["hp_json"] = json.dumps(self.config, ensure_ascii=False)
 
-        pd.DataFrame([row]).to_csv(csv_path, mode="a", header=not os.path.exists(csv_path), index=False)
+        # --- Append row with schema union (handles changing pearson_* columns) ---
+        def _append_row_any_schema(csv_path: str, row_dict: dict):
+            df_new = pd.DataFrame([row_dict])
+            if os.path.exists(csv_path):
+                df_old = pd.read_csv(csv_path)
+                # Union of columns, preserving existing order; new columns appended at the end
+                all_cols = list(dict.fromkeys(list(df_old.columns) + list(df_new.columns)))
+                df_old = df_old.reindex(columns=all_cols)
+                df_new = df_new.reindex(columns=all_cols)
+                df = pd.concat([df_old, df_new], ignore_index=True)
+            else:
+                df = df_new
+            df.to_csv(csv_path, index=False)
+
+        _append_row_any_schema(csv_path, row)
         logging.info("logged results into %s", csv_path)
 
+        # --- (unchanged) log artifacts ---
         self._log_wandb_artifacts()
 
     # to update after lr tuning
