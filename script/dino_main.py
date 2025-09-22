@@ -124,16 +124,30 @@ def _train(cfg: dict):
     # Build datasets
     file_path_train, file_path_val = get_dino_csv(0.8, "../data/NCT-CRC-HE-100K/")
     debug = cfg.get("debug")
+    sanity_run = bool(cfg.get("sanity_run", False))
+    # Cap dataset size for sanity runs (tiny subset)
+    # Users can override with `sanity_max_samples`; defaults keep it very small.
+    sanity_max = int(cfg.get("sanity_max_samples", 1024)) if sanity_run else None
 
     # make sure that we can debug on 16GB ram macbook
     if cfg.get("debug") and torch.backends.mps.is_available():
         cfg["batch_size"] = 32
 
     # no bins for NCT-CRC-HE-100K for now as it is already somewhat balanced
-    train_dataset = get_dino_dataset(csv_path=file_path_train, dino_transforms=transform,
-                                     max_len=cfg.get("batch_size") if debug else None, bins=None, device_handling=False)
-    val_dataset = get_dino_dataset(csv_path=file_path_val, dino_transforms=transform,
-                                   max_len=cfg.get("batch_size") if debug else None, bins=None, device_handling=False)
+    train_dataset = get_dino_dataset(
+        csv_path=file_path_train,
+        dino_transforms=transform,
+        max_len=(sanity_max if sanity_run else (cfg.get("batch_size") if debug else None)),
+        bins=None,
+        device_handling=False,
+    )
+    val_dataset = get_dino_dataset(
+        csv_path=file_path_val,
+        dino_transforms=transform,
+        max_len=(min(256, sanity_max) if sanity_run and sanity_max is not None else (cfg.get("batch_size") if debug else None)),
+        bins=None,
+        device_handling=False,
+    )
 
     dataloader_train = torch.utils.data.DataLoader(train_dataset, batch_size=cfg.get("batch_size"), shuffle=True, drop_last=True, num_workers=cfg.get("num_workers", 0))
     dataloader_val = torch.utils.data.DataLoader(val_dataset, batch_size=cfg.get("batch_size"), shuffle=False, drop_last=False, num_workers=cfg.get("num_workers", 0))
@@ -220,10 +234,20 @@ def _train(cfg: dict):
         )
         # Wrap stain tfm if requested
         hi_transform = StainThenDINO(stain_tfm, hi_tfm) if cfg.get("use_stain_norm", False) else hi_tfm
-        train_dataset_hi = get_dino_dataset(csv_path=file_path_train, dino_transforms=hi_transform,
-                                            max_len=cfg.get("batch_size") if debug else None, bins=None, device_handling=False)
-        val_dataset_hi = get_dino_dataset(csv_path=file_path_val, dino_transforms=hi_transform,
-                                          max_len=cfg.get("batch_size") if debug else None, bins=None, device_handling=False)
+        train_dataset_hi = get_dino_dataset(
+            csv_path=file_path_train,
+            dino_transforms=hi_transform,
+            max_len=(sanity_max if sanity_run else (cfg.get("batch_size") if debug else None)),
+            bins=None,
+            device_handling=False,
+        )
+        val_dataset_hi = get_dino_dataset(
+            csv_path=file_path_val,
+            dino_transforms=hi_transform,
+            max_len=(min(256, sanity_max) if sanity_run and sanity_max is not None else (cfg.get("batch_size") if debug else None)),
+            bins=None,
+            device_handling=False,
+        )
         dl_train_hi = torch.utils.data.DataLoader(train_dataset_hi, batch_size=cfg.get("batch_size"), shuffle=True, drop_last=True, num_workers=cfg.get("num_workers", 0))
         dl_val_hi = torch.utils.data.DataLoader(val_dataset_hi, batch_size=cfg.get("batch_size"), shuffle=False, drop_last=False, num_workers=cfg.get("num_workers", 0))
         model.set_num_training_batches(len(dl_train_hi))

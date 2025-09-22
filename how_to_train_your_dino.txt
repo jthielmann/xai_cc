@@ -11,6 +11,25 @@ HOW TO TRAIN YOUR DINO (Quick, Practical Guide)
    What: Runs compact sanity tests (heads, augment policy plumbing, optimizer schedules,
          stain normalization, feature caching).
 
+   Tests — what each covers:
+     - script/tests/test_dino_heads_and_loss.py: Verifies dummy backbone hidden size, head output dims,
+       DINOLoss dimensionality, forward shapes, and that teacher modules are in eval mode.
+     - script/tests/test_dino_temp_and_gram.py: Checks per-step teacher temperature warmup→final schedule
+       and computes Gram anchor loss on patch tokens (non-negative sanity).
+     - script/tests/test_dino_optim_and_schedules.py: Builds optimizers, asserts multiple param groups
+       (backbone/head, decay/no-decay), exercises cosine weight-decay schedule, and fused AdamW safety.
+     - script/tests/test_dino_features_and_cache.py: Encodes CLS/mean features with the dummy backbone and
+       caches them to disk, validating shapes and that the cache file is written.
+     - script/tests/test_stain_norm.py: Applies Reinhard stain normalization to a dummy RGB image and
+       confirms a valid PIL.Image output of the same size.
+
+   Also handy (run directly):
+     - script/tests/test_dino_input_pipeline.py: End-to-end check of the multi-crop view routing in
+       common_step using a minimal DINO stub; validates student vs teacher calls and the
+       `use_hf_normalize` toggle without any network downloads.
+     - script/tests/smoke_train_dino.py: 1‑epoch CPU fit on synthetic multi-crop batches using the
+       dummy backbone; good for basic training loop smoke testing.
+
 1) Single-run training (reference defaults)
    python script/dino_main.py --config sweeps/configs/dino_reference
    What: Trains a DINOv3 ViT-B/16 student/teacher with a reference-aligned setup.
@@ -127,6 +146,7 @@ PY
    GPU underutilized:
      - Enable fused AdamW on CUDA; increase num_workers and batch size (memory permitting).
 
+you did dino-mite!
 
 Bonus T‑Rex
 
@@ -147,11 +167,9 @@ Bonus T‑Rex
       \  \     .      .-~   .-~   ~>--"  /
        \  ~---"            /     ./  _.-'
         "-.,_____.,_  _.--~\     _.-~
-                    ~~     (   _}       -Row
+                    ~~     (   _}
                            `. ~(
                              )  \
                             /,`--'~\--'~\
                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                             ->T-Rex<-
-
-you did dino-mite!
+                             ->This is a T-Rex<-

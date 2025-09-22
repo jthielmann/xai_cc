@@ -7,6 +7,14 @@ Sanity Tests (no downloads)
 - `python script/tests/test_dino_input_pipeline.py`  # verifies view routing and normalization toggle
 - `python script/tests/smoke_train_dino.py`          # 1-epoch CPU fit with a dummy backbone
 
+Test Coverage
+- `python script/tests/run_all_dino_tests.py`: Runs the compact suite below end-to-end.
+- `script/tests/test_dino_heads_and_loss.py`: Checks dummy backbone hidden size, head output dims, DINOLoss dim, forward shapes, and that teacher modules are eval().
+- `script/tests/test_dino_temp_and_gram.py`: Verifies per-step teacher temperature schedule and computes Gram anchor loss on patch tokens (sanity non-negative).
+- `script/tests/test_dino_optim_and_schedules.py`: Builds optimizers, asserts multiple param groups (backbone/head; decay/no-decay), exercises cosine weight-decay schedule, and fused AdamW safety.
+- `script/tests/test_dino_features_and_cache.py`: Encodes CLS/mean features with the dummy backbone and caches them to disk; validates feature shapes and that the cache file exists.
+- `script/tests/test_stain_norm.py`: Applies Reinhard stain normalization to a dummy RGB image and confirms a valid PIL.Image output of the same size.
+
 Visualization
 - Stain normalization preview (CSV):
   - `python script/evaluation/visualize_stain_norm.py --csv /path/to/files.csv --tile-col tile --n 12 --out-dir stain_vis`
@@ -153,3 +161,13 @@ These are implementation details from DINOv3-style references that differ from t
 - [x] Fused AdamW: `use_fused_adamw: true` (CUDA-only; falls back if unsupported).
 - [x] SyncBatchNorm (optional): enable via Trainer (`use_sync_batchnorm: true`), effective in DDP.
 - [x] Feature norm check: logs `cls_norm`, `patch_norm` per step (first student view) to monitor collapse.
+## Sanity Run
+
+- Use `sanity_run: true` in your config to train on a tiny subset of the dataset for quick smoke checks.
+- Optional: override `sanity_max_samples` to control how many rows are loaded from each of `train.csv` and `val.csv` (default 1024 for train and 256 for val).
+- Example (YAML under `parameters`):
+
+  sanity_run:
+    value: true
+  sanity_max_samples:
+    value: 1024

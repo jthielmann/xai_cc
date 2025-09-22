@@ -11,6 +11,8 @@ parameters:
     value: true
   debug:
     value: false
+  sanity_run:
+    value: false
   use_early_stopping:
     value: true
   generate_scatters:
