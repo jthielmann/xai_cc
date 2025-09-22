@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/hest/manifest.v1.json",
+  "title": "Hest Manifest v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "manifest_version",
+    "run_id",
+    "created_at",
+    "dataset",
+    "checkpoints",
+    "config_path",
+    "config_resolved_path"
+  ],
+  "properties": {
+    "manifest_version": { "type": "string", "const": "1" },
+    "run_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "git": {
+      "type": "object",
+      "properties": {
+        "commit": { "type": "string" },
+        "is_dirty": { "type": "boolean" },
+        "remote": { "type": "string" }
+      }
+    },
+    "python": { "type": "string" },
+    "torch": { "type": "string" },
+    "cuda": { "type": "string" },
+    "env_lock": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "hash": { "type": "string" }
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "split": { "type": "string" },
+        "hashes": { "type": "object" }
+      }
+    },
+    "encoder": {
+      "type": "object",
+      "properties": {
+        "arch": { "type": "string" },
+        "dim": { "type": "integer" },
+        "weights": { "type": "string" }
+      }
+    },
+    "checkpoints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "config_path": { "type": "string" },
+    "config_resolved_path": { "type": "string" },
+    "artifacts": {
+      "type": "object",
+      "properties": {
+        "metrics": { "type": "string" },
+        "figures": { "type": "string" },
+        "plots": { "type": "string" }
+      }
+    },
+    "transforms": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "string" },
+        "normalize": { "type": "boolean" },
+        "mean": { "type": "number" },
+        "std": { "type": "number" }
+      }
+    }
+  }
+}
+

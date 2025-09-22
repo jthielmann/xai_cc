@@ -214,3 +214,24 @@ Single‑file dataset config
 - Losses: `script/model/loss_functions.py`
 - Config/Datasets: `script/configs/dataset_config.py`, `script/main_utils.py`
 - Docs/Notes: `dino.md`, `todo.md`
+
+## Gene Model Structure (lit_model.py)
+- Encoder: Selected via `model_factory.get_encoder(encoder_type)`; optionally frozen with `freeze_encoder`.
+- Heads: One head per gene registered as attributes; supports 1-layer (`ReLU/LeakyReLU` + `Linear(out_dim→1)`) or 2-layer MLP (`Linear→ReLU/LeakyReLU→Linear`).
+- Optional SAE: If `sae: true`, inserts `SparseAutoencoder` with `d_in = encoder_out_dim` before heads.
+- Loss: `MSE`, `weighted MSE` (`MultiGeneWeightedMSE` with `lds_weight_csv`), or `pearson` (`PearsonCorrLoss`).
+- Optimizer: AdamW with param groups for encoder and each head; per-group learning rates.
+- Scheduler: `OneCycleLR` with `max_lr` list matching optimizer param groups; uses `trainer.estimated_stepping_batches` for `total_steps`.
+- Validation/metrics: Aggregates full-val predictions; computes per-gene Pearson r; logs per-gene metrics (W&B optional).
+- Checkpoints/artifacts: Saves `latest.pth` each val epoch; tracks best by chosen criterion and writes `best_model.pth`; logs model + config as a W&B artifact when online.
+
+## lit_model Potential Issues / Pitfalls
+- Required config keys: `genes`, `encoder_type`, `freeze_encoder`, `one_linear_out_layer`, `middle_layer_features`, `loss_fn_switch`, `out_path` (and `model_dir` for CSV aggregation in `on_train_end`).
+- WMSE weights: When `loss_fn_switch` is weighted MSE/WMSE, `lds_weight_csv` must exist and cover all configured genes.
+- Per-group LR schedule: `OneCycleLR` uses `trainer.estimated_stepping_batches`; ensure it is available (Lightning sets this during fit). If running outside `Trainer.fit`, guard accordingly.
+- Sweep appendix: W&B sweep metadata for scatter captions references `self.wandb_run`; if not externally set, appendix may be empty (safe fallback).
+- Logging accumulators: `val_loss_total`/`val_loss_count` are accumulated but not consumed later; metrics currently rely on full-batch aggregation and loss recomputation.
+- Weight norm logging: Assumes each gene head ends with a `Linear` at index `[-1]`; valid for both supported head variants, but refactors should preserve this shape.
+- CUDA-only helpers: `measure_peak_train_step` uses CUDA AMP and memory stats; should not be called on CPU/MPS.
+- Shape checks: `_step` enforces `y_hat.shape == y.shape`; if dataset returns 1D `y`, it is unsqueezed, but multi-gene configs must ensure consistent target shapes.
+- Artifacts: `on_validation_epoch_end` saves `latest.pth` unconditionally; ensure `out_path` exists (created in `on_fit_start`).

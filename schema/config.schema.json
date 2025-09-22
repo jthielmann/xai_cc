@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/hest/config.schema.json",
+  "title": "Hest Config",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "seed": { "type": "integer" },
+    "out_dir": { "type": "string" },
+    "dataset": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "split": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "training": {
+      "type": "object",
+      "properties": {
+        "batch_size": { "type": "integer", "minimum": 1 },
+        "epochs": { "type": "integer", "minimum": 1 },
+        "learning_rate": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}
+
