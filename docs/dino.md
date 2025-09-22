@@ -1,14 +1,14 @@
 # DINOv3 Migration Checklist (Reviewed)
 
 ## Deps & Config
-- [ ] Pin `transformers` + `torch` versions
-- [ ] Enable bf16 only if GPU supports it (A100/4090+)
-- [ ] Add flag to skip HF processor normalization if transforms already handle it
+- [x] Pin `transformers` + `torch` versions
+- [x] Enable bf16 only if GPU supports it (A100/4090+)
+- [x] Add flag to skip HF processor normalization if transforms already handle it
 
 ## Backbone (ResNet → DINOv3 ViT)
-- [ ] Use `Dinov3Model` + `hidden_size`
-- [ ] Enable gradient checkpointing to save VRAM
-- [ ] If unfreezing blocks: set param groups (bias/norm no-decay) + lower LR for backbone
+- [x] Use `Dinov3Model` + `hidden_size`
+- [x] Enable gradient checkpointing to save VRAM
+- [x] If unfreezing blocks: set param groups (bias/norm no-decay) + lower LR for backbone
 
 ## Input Pipeline
 - [ ] Teacher: 2× global crops only

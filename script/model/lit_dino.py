@@ -29,14 +29,31 @@ class DINO(L.LightningModule):
             "model_id", "facebook/dinov3-vitb16-pretrain-lvd1689m"
         )
         self.use_hf_normalize = bool(self.config.get("use_hf_normalize", True))
+        # Backbone training knobs
+        self.grad_checkpointing = bool(self.config.get("grad_checkpointing", True))
+        # Unfreeze last N transformer blocks (0 = none; -1 = all)
+        self.unfreeze_last_n = int(self.config.get("unfreeze_last_n", -1))
+        # Backbone LR multiplier (default 1.0 to avoid behavior change)
+        self.backbone_lr_mult = float(self.config.get("backbone_lr_mult", 1.0))
+        # Optional explicit backbone LR overrides multiplier
+        self.backbone_lr = self.config.get("backbone_lr", None)
 
         # HF processor (resize/normalize) – keep toggle so you can use your own transforms instead
         self.processor = AutoImageProcessor.from_pretrained(model_id)
 
         # Student / teacher ViT backbones
         self.student_backbone = Dinov3Model.from_pretrained(model_id)
+        # Enable gradient checkpointing to save VRAM
+        if self.grad_checkpointing and hasattr(self.student_backbone, "gradient_checkpointing_enable"):
+            try:
+                self.student_backbone.gradient_checkpointing_enable()
+            except Exception:
+                pass
         self.teacher_backbone = copy.deepcopy(self.student_backbone)
         deactivate_requires_grad(self.teacher_backbone)
+
+        # Optionally restrict trainable layers of the student backbone
+        self._configure_backbone_trainability(self.unfreeze_last_n)
 
         # Hidden size drives head input dim (e.g., 768 for ViT-B/16)
         hidden = self.student_backbone.config.hidden_size
@@ -57,6 +74,57 @@ class DINO(L.LightningModule):
         tokens = out.last_hidden_state                    # (B, 1+N, D)
         cls = tokens[:, 0]                                # (B, D)
         return cls
+
+    def _find_transformer_layers(self, model: nn.Module):
+        # Try common HF ViT/DINOv3 layer containers
+        candidates = [
+            "vit.encoder.layer",
+            "dinov3.encoder.layer",
+            "encoder.layer",
+            "blocks",
+            "layers",
+        ]
+        for path in candidates:
+            obj = model
+            ok = True
+            for attr in path.split('.'):
+                if hasattr(obj, attr):
+                    obj = getattr(obj, attr)
+                else:
+                    ok = False
+                    break
+            if ok and isinstance(obj, (nn.ModuleList, list, tuple)) and len(obj) > 0:
+                return obj
+        # Fallback: scan named_modules for a ModuleList that looks like transformer blocks
+        for name, mod in model.named_modules():
+            if isinstance(mod, nn.ModuleList) and len(mod) > 0 and any(k in name.lower() for k in ["layer", "block", "encoder"]):
+                return mod
+        return None
+
+    def _configure_backbone_trainability(self, unfreeze_last_n: int):
+        # Default: train all; allow selectively unfreezing last N blocks
+        if unfreeze_last_n is None:
+            return
+        if unfreeze_last_n == -1:
+            # train all backbone params
+            for p in self.student_backbone.parameters():
+                p.requires_grad = True
+            return
+        # freeze all first
+        for p in self.student_backbone.parameters():
+            p.requires_grad = False
+        # unfreeze last N blocks if we can find them
+        blocks = self._find_transformer_layers(self.student_backbone)
+        if isinstance(blocks, (nn.ModuleList, list, tuple)) and len(blocks) > 0 and unfreeze_last_n > 0:
+            n = min(unfreeze_last_n, len(blocks))
+            for blk in blocks[-n:]:
+                for p in blk.parameters():
+                    p.requires_grad = True
+        # Also allow final layernorm/head norms to train for stability
+        for name, module in self.student_backbone.named_modules():
+            if any(k in name.lower() for k in ["layernorm", "ln", "final_norm"]):
+                for p in module.parameters():
+                    p.requires_grad = True
 
     def on_fit_start(self):
         os.makedirs(self.config.get('out_path', '.'), exist_ok=True)
@@ -136,11 +204,57 @@ class DINO(L.LightningModule):
             raise ValueError(
                 '`num_training_batches` must be set before configuring optimizers'
             )
-        wd = self.config.get('weight_decay', 0.0)
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=wd)
+        wd = float(self.config.get('weight_decay', 0.0))
+
+        # Build optimizer parameter groups: bias/norm no-decay, lower LR for backbone
+        def split_decay_groups(module: nn.Module):
+            decay, no_decay = [], []
+            seen = set()
+            norm_types = (
+                nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d,
+                nn.GroupNorm, nn.LayerNorm, nn.InstanceNorm1d,
+                nn.InstanceNorm2d, nn.InstanceNorm3d,
+            )
+            for m in module.modules():
+                for name, p in getattr(m, 'named_parameters', lambda recurse=False: [])(recurse=False):
+                    # full param object identity check to avoid duplicates
+                    if not p.requires_grad or id(p) in seen:
+                        continue
+                    seen.add(id(p))
+                    if name.endswith('bias') or isinstance(m, norm_types):
+                        no_decay.append(p)
+                    else:
+                        decay.append(p)
+            return decay, no_decay
+
+        # Backbone groups (trainable only)
+        bb_decay, bb_no_decay = split_decay_groups(self.student_backbone)
+        # Head groups
+        head_decay, head_no_decay = split_decay_groups(self.student_head)
+
+        # Compute backbone LR
+        backbone_lr = float(self.backbone_lr) if self.backbone_lr is not None else float(self.lr) * float(self.backbone_lr_mult)
+
+        param_groups = []
+        if bb_decay:
+            param_groups.append({"params": bb_decay, "lr": backbone_lr, "weight_decay": wd})
+        if bb_no_decay:
+            param_groups.append({"params": bb_no_decay, "lr": backbone_lr, "weight_decay": 0.0})
+        if head_decay:
+            param_groups.append({"params": head_decay, "lr": float(self.lr), "weight_decay": wd})
+        if head_no_decay:
+            param_groups.append({"params": head_no_decay, "lr": float(self.lr), "weight_decay": 0.0})
+
+        # Fallback in unlikely case groups are empty
+        if not param_groups:
+            param_groups = [{"params": [p for p in self.parameters() if p.requires_grad], "lr": float(self.lr), "weight_decay": wd}]
+
+        optimizer = torch.optim.AdamW(param_groups)
+        # Respect per-group LR by passing a list to max_lr
+        max_lrs = [g.get('lr', float(self.lr)) for g in param_groups]
         scheduler = OneCycleLR(
             optimizer,
-            max_lr=self.lr,
+            max_lr=max_lrs,
             epochs=self.config['epochs'],
             steps_per_epoch=self.num_training_batches
         )
