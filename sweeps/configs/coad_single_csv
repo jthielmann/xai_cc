@@ -9,8 +9,8 @@ parameters:
   # I/O
   dataset:
     value: coad                  # provides mean/std; data_dir can be overridden below
-  data_dir:
-    value: ../data/COAD          # base dir for tiles (joined to relative tile paths)
+  meta_data_dir:
+    value: metadata
   single_csv_path:
     value: ../data/COAD/hvg_cmmn_std.csv   # single metadata file at top level
   split_col_name:

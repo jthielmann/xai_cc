@@ -266,16 +266,18 @@ def get_base_dataset(
     max_len: int | None = None,
     bins: int = 1,
     gene_data_filename: str = "gene_data.csv",
+    meta_data_dir: str = "/meta_data/",
     lds_smoothing_csv: str | Path | None = None,      # <─ NOW one file, not a dir
     weight_transform: str = "inverse",
     weight_clamp: int = 10
 ):
-    meta_data_dir = "/meta_data/"
+    # normalize meta data directory token (support 'meta_data', '/meta_data', 'meta_data/')
+    meta_dir = meta_data_dir.strip("/")
     columns_of_interest = ["tile"] + (genes or []) if genes else None
     dfs = []
 
     for patient in samples:
-        fp = os.path.join(data_dir, patient, meta_data_dir.lstrip("/"), gene_data_filename)
+        fp = os.path.join(data_dir, patient, meta_dir, gene_data_filename)
         df = pd.read_csv(fp, usecols=columns_of_interest, nrows=max_len)
         df["tile"] = df["tile"].apply(lambda t: os.path.join(data_dir, patient, "tiles", t))
         df["patient"] = patient
@@ -373,6 +375,7 @@ def get_dataset(
     bins: int = 1,
     only_inputs: bool = False,
     gene_data_filename: str = "gene_data.csv",
+    meta_data_dir: str = "/meta_data/",
     lds_smoothing_csv: str | Path | None = None,
     weight_transform: str = "inverse",
     weight_clamp: int = 10,
@@ -388,6 +391,7 @@ def get_dataset(
         max_len=max_len,
         bins=bins,
         gene_data_filename=gene_data_filename,
+        meta_data_dir=meta_data_dir,
         lds_smoothing_csv=lds_smoothing_csv,
         weight_transform=weight_transform,
         weight_clamp=weight_clamp

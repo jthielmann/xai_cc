@@ -214,4 +214,5 @@ Single‑file dataset config
 - Encoders: `script/model/model_factory.py`
 - Losses: `script/model/loss_functions.py`
 - Config/Datasets: `script/configs/dataset_config.py`, `script/main_utils.py`
+  - You can customize the per-patient metadata folder name via `meta_data_dir` (default `meta_data`).
 - Docs/Notes: `dino.md`, `todo.md`

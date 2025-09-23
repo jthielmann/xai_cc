@@ -590,7 +590,8 @@ class TrainerPipeline:
             spatial_ds = get_spatial_dataset(
                 data_dir=self.config["data_dir"],
                 genes=self.config["genes"],
-                samples=self.config["test_samples"] if use_test else self.config["val_samples"]
+                samples=self.config["test_samples"] if use_test else self.config["val_samples"],
+                meta_data_dir=self.config.get('meta_data_dir', '/meta_data/')
             )
 
             # Choose device and eval mode

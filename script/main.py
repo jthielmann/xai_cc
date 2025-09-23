@@ -30,6 +30,7 @@ def _prepare_gene_list(cfg: Dict[str, Any]) -> Any:
         )
 
     data_dir = cfg.get("data_dir")
+    meta_dir = str(cfg.get("meta_data_dir", "meta_data")).strip("/")
     fname = cfg.get("gene_data_filename")
 
     files = []
@@ -53,15 +54,15 @@ def _prepare_gene_list(cfg: Dict[str, Any]) -> Any:
         sample_ids = cfg.get("sample_ids")
         if sample_ids:
             for sid in sample_ids:
-                path = os.path.join(data_dir, sid, "meta_data", fname)
+                path = os.path.join(data_dir, sid, meta_dir, fname)
                 if os.path.isfile(path):
                     files.append(path)
         else:
-            files = glob.glob(os.path.join(data_dir, "*", "meta_data", fname))
+            files = glob.glob(os.path.join(data_dir, "*", meta_dir, fname))
             files.sort()
 
     if not files:
-        raise FileNotFoundError(f"No gene data files found under {data_dir}/*/meta_data/{fname}")
+        raise FileNotFoundError(f"No gene data files found under {data_dir}/*/{meta_dir}/{fname}")
 
     max_files = int(cfg.get("gene_detect_max_files", 50))
     files = files[:max_files]

@@ -73,6 +73,7 @@ class STDataModule(L.LightningDataModule):
                     transforms=self.transforms,
                     bins=self.cfg.get("bins", 0),
                     gene_data_filename=self.cfg['gene_data_filename'],
+                    meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                     max_len=max_len,
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
                 )
@@ -115,6 +116,7 @@ class STDataModule(L.LightningDataModule):
                     transforms=self.transforms,
                     bins=self.cfg.get("bins", 0),
                     gene_data_filename=self.cfg['gene_data_filename'],
+                    meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                     max_len=max_len,
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
                 )
@@ -158,6 +160,7 @@ class STDataModule(L.LightningDataModule):
                         transforms=self.transforms,
                         bins=self.cfg.get("bins", 0),
                         gene_data_filename=self.cfg['gene_data_filename'],
+                        meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                         max_len=max_len,
                         lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
                     )
