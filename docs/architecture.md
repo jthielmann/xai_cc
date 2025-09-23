@@ -190,9 +190,10 @@ Outputs (under `out_path`):
 
 Single‑file dataset config
 - `script/data_processing/lit_STDataModule.py` accepts options to use one CSV instead of per‑patient files:
-  - `split_csv_path`: single CSV containing a `split` column with values like `train`, `val`, `test`
+  - `single_csv_path`: single CSV containing a `split` column with values like `train`, `val`, `test`
   - `split_col_name` (optional): name of the split column (default `split`)
   - Alternatively, `train_csv_path`, `val_csv_path`, `test_csv_path` for separate CSVs per split
+  - Mutually exclusive: do not provide `single_csv_path` together with any of `train_csv_path`/`val_csv_path`/`test_csv_path`.
   - `tile_subdir` (optional): subfolder under `data_dir` to prepend to relative tile names
   - `lds_weight_csv`: path to smoothing CSV (same as multi‑file flow)
 

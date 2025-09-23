@@ -19,7 +19,7 @@ parameters:
   # Data
   dataset:
     value: coad            # used for transforms mean/std and defaults
-  split_csv_path:
+  single_csv_path:
     value: /data/cephfs-2/unmirrored/groups/krieger/xai/HEST/hest_coad_visium/hvg_cmmn_std.csv   # single CSV with a `split` column
   split_col_name:
     value: split
@@ -56,5 +56,4 @@ parameters:
     value: null               # set to a weights CSV if you have one
   weight_transform:
     value: inverse
-
 

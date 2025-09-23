@@ -27,9 +27,15 @@ class STDataModule(L.LightningDataModule):
         max_len = 100 if self.cfg.get('debug', False) else None
 
         if stage in (None, 'fit'):
-            if self.cfg.get('split_csv_path'):
+            # Validate mutually exclusive CSV config
+            if self.cfg.get('single_csv_path') and (
+                self.cfg.get('train_csv_path') or self.cfg.get('val_csv_path') or self.cfg.get('test_csv_path')
+            ):
+                raise ValueError("Provide either 'single_csv_path' or split-specific CSVs ('train_csv_path'/'val_csv_path'/'test_csv_path'), not both.")
+
+            if self.cfg.get('single_csv_path'):
                 self.train_dataset = get_dataset_single_file(
-                    csv_path=self.cfg['split_csv_path'],
+                    csv_path=self.cfg['single_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
                     transforms=self.transforms,
@@ -63,9 +69,9 @@ class STDataModule(L.LightningDataModule):
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
                 )
 
-            if self.cfg.get('split_csv_path'):
+            if self.cfg.get('single_csv_path'):
                 self.val_dataset = get_dataset_single_file(
-                    csv_path=self.cfg['split_csv_path'],
+                    csv_path=self.cfg['single_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
                     transforms=self.transforms,
@@ -99,9 +105,9 @@ class STDataModule(L.LightningDataModule):
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
                 )
         if stage in (None, 'test'):
-            if self.cfg.get('split_csv_path'):
+            if self.cfg.get('single_csv_path'):
                 self.test_dataset = get_dataset_single_file(
-                    csv_path=self.cfg['split_csv_path'],
+                    csv_path=self.cfg['single_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
                     transforms=self.transforms,

@@ -21,13 +21,21 @@ def _prepare_gene_list(cfg: Dict[str, Any]) -> Any:
     if cfg.get("genes") is not None:
         return None
 
+    # Validate mutually exclusive CSV configuration early
+    if cfg.get("single_csv_path") and (
+        cfg.get("train_csv_path") or cfg.get("val_csv_path") or cfg.get("test_csv_path")
+    ):
+        raise ValueError(
+            "Provide either 'single_csv_path' or split-specific CSVs ('train_csv_path'/'val_csv_path'/'test_csv_path'), not both."
+        )
+
     data_dir = cfg.get("data_dir")
     fname = cfg.get("gene_data_filename")
 
     files = []
     # Prefer single CSV(s) if provided
-    if cfg.get("split_csv_path") and os.path.isfile(cfg["split_csv_path"]):
-        files = [cfg["split_csv_path"]]
+    if cfg.get("single_csv_path") and os.path.isfile(cfg["single_csv_path"]):
+        files = [cfg["single_csv_path"]]
     elif cfg.get("train_csv_path") and os.path.isfile(cfg["train_csv_path"]):
         files = [cfg["train_csv_path"]]
     else:

@@ -28,7 +28,7 @@ _BASE_CRC_BASE: Dict[str, Any] = {
 }
 
 _BASE_COAD: Dict[str, Any] = {
-    "data_dir": "../data/CRC-N19/",
+    "data_dir": "/data/cephfs-2/unmirrored/groups/krieger/xai/HEST/hest_coad_visium",
     "train_samples_all": [
          'MISC62', 'ZEN45', 'TENX152', 'MISC73', 'MISC71', 'MISC70', 'MISC68', 'MISC67', 'MISC66', 'MISC65', 'MISC64',
          'MISC63', 'MISC58', 'MISC57', 'MISC51', 'MISC50', 'MISC49', 'MISC48', 'MISC47', 'MISC46', 'MISC44', 'MISC43',
