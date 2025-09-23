@@ -1,4 +1,4 @@
-project: coad
+project: coad 4
 name: coad_r50_mse
 method: grid
 metric:
@@ -27,7 +27,9 @@ parameters:
     value: coad
   # Optionally switch to e.g. gene_data_ranknorm.csv
   gene_data_filename:
-    value: gene_data.csv
+    value: gene_log1p.csv
+  meta_data_dir:
+    value: metadata
 
   # Model and loss
   encoder_type:
