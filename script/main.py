@@ -34,8 +34,19 @@ def _prepare_gene_list(cfg: Dict[str, Any]) -> Any:
 
     files = []
     # Prefer single CSV(s) if provided
-    if cfg.get("single_csv_path") and os.path.isfile(cfg["single_csv_path"]):
-        files = [cfg["single_csv_path"]]
+    scp = cfg.get("single_csv_path")
+    if scp:
+        # Resolve relative to data_dir if needed
+        path = None
+        if not os.path.isabs(scp) and cfg.get("data_dir"):
+            cand = os.path.join(cfg["data_dir"], scp)
+            if os.path.isfile(cand):
+                path = cand
+        if path is None and os.path.isfile(scp):
+            path = scp
+        if path is None:
+            raise FileNotFoundError(f"single_csv_path not found: '{scp}'. Tried: '{scp}' and data_dir-joined '{os.path.join(cfg.get('data_dir',''), scp)}'")
+        files = [path]
     elif cfg.get("train_csv_path") and os.path.isfile(cfg["train_csv_path"]):
         files = [cfg["train_csv_path"]]
     else:

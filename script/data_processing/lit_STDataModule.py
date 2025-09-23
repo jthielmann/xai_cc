@@ -1,4 +1,5 @@
 from torch.utils.data import DataLoader
+import os
 import torch
 from torchvision import transforms
 import lightning as L
@@ -34,8 +35,15 @@ class STDataModule(L.LightningDataModule):
                 raise ValueError("Provide either 'single_csv_path' or split-specific CSVs ('train_csv_path'/'val_csv_path'/'test_csv_path'), not both.")
 
             if self.cfg.get('single_csv_path'):
+                scp = self.cfg['single_csv_path']
+                # allow CSV path relative to data_dir
+                if not os.path.isabs(scp) and self.cfg.get('data_dir'):
+                    cand = os.path.join(self.cfg['data_dir'], scp)
+                    csv_path = cand if os.path.isfile(cand) else scp
+                else:
+                    csv_path = scp
                 self.train_dataset = get_dataset_single_file(
-                    csv_path=self.cfg['single_csv_path'],
+                    csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
                     transforms=self.transforms,
@@ -70,8 +78,14 @@ class STDataModule(L.LightningDataModule):
                 )
 
             if self.cfg.get('single_csv_path'):
+                scp = self.cfg['single_csv_path']
+                if not os.path.isabs(scp) and self.cfg.get('data_dir'):
+                    cand = os.path.join(self.cfg['data_dir'], scp)
+                    csv_path = cand if os.path.isfile(cand) else scp
+                else:
+                    csv_path = scp
                 self.val_dataset = get_dataset_single_file(
-                    csv_path=self.cfg['single_csv_path'],
+                    csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
                     transforms=self.transforms,
@@ -106,8 +120,14 @@ class STDataModule(L.LightningDataModule):
                 )
         if stage in (None, 'test'):
             if self.cfg.get('single_csv_path'):
+                scp = self.cfg['single_csv_path']
+                if not os.path.isabs(scp) and self.cfg.get('data_dir'):
+                    cand = os.path.join(self.cfg['data_dir'], scp)
+                    csv_path = cand if os.path.isfile(cand) else scp
+                else:
+                    csv_path = scp
                 self.test_dataset = get_dataset_single_file(
-                    csv_path=self.cfg['single_csv_path'],
+                    csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
                     transforms=self.transforms,
