@@ -1,0 +1,33 @@
+project: _debug_norm
+name: quick_norm_check
+
+# Single-run debug config to validate centralized normalization
+# - Change `encoder_type` to test different stats: resnet50imagenet | resnet50random | dino | unimodel
+# - Writes <out_path>/normalization.json and logs stats (if log_to_wandb=true)
+
+parameters:
+  # Runtime
+  debug:            { value: true }   # use small subsets for quick runs
+  log_to_wandb:     { value: true }   # required by current TrainerPipeline naming
+
+  # Training basics
+  epochs:           { value: 1 }
+  batch_size:       { value: 8 }
+  num_workers:      { value: 0 }
+  image_size:       { value: 224 }
+
+  # Dataset (uses script/configs/dataset_config.py)
+  dataset:          { value: crc_base }
+  data_dir:         { value: ../data/crc_base/Training_Data/ }
+  gene_data_filename: { value: gene_data.csv }
+  # keep a single gene for speed; remove to auto-detect
+  genes:            { value: [RUBCNL] }
+
+  # Model and loss
+  encoder_type:     { value: resnet50imagenet }  # try: resnet50random, dino, unimodel
+  freeze_encoder:   { value: true }
+  loss_fn_switch:   { value: MSE }
+
+  # Output base dir (main.py will put runs under this by project/name)
+  model_dir:        { value: ../models/ }
+
