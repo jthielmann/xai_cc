@@ -1,47 +1,33 @@
 import importlib
-v2_ready = importlib.util.find_spec("torchvision.transforms.v2")
-if v2_ready is not None:
-    import torchvision.transforms.v2 as transforms
+from typing import Dict, Optional
+
+import torch
+
+# v2 if available
+v2_ready = importlib.util.find_spec("torchvision.transforms.v2") is not None
+if v2_ready:
+    from torchvision.transforms import v2 as T
 else:
-    import torchvision.transforms as transforms
+    import torchvision.transforms as T  # type: ignore
 
-import torch
-import torchvision
-from torchvision.transforms import v2
+from script.configs.normalization import IMAGENET_MEAN, IMAGENET_STD, resolve_norm
+from script.data_processing.transforms import build_transforms as _build_transforms
 
-from torchvision.transforms import v2 as T
-import torch
-
-IMAGENET_MEAN = (0.485, 0.456, 0.406)
-IMAGENET_STD  = (0.229, 0.224, 0.225)
 
 def get_train_transforms(image_size: int = 256, frozen_encoder: bool = False):
-    # Geometric augs first
-    augs = [
+    # Backward-compatible simple ImageNet-normalized train transforms
+    return T.Compose([
+        T.ToImage(),
         T.RandomResizedCrop(image_size, scale=(0.75, 1.0), antialias=True),
         T.RandomHorizontalFlip(p=0.5),
         T.RandomVerticalFlip(p=0.5),
-        # 90° rotations (keeps tissue semantics):
-        T.RandomChoice([T.RandomRotation([0,0]),
-                        T.RandomRotation([90,90]),
-                        T.RandomRotation([180,180]),
-                        T.RandomRotation([270,270])], p=[0.25,0.25,0.25,0.25]),
-        # Small affine jitter (tiny translate/scale):
-        T.RandomAffine(degrees=0, translate=(0.02, 0.02), scale=(0.97, 1.03)),
-    ]
-
-    if not frozen_encoder:
-        augs.append(T.RandomApply([T.ColorJitter(0.05, 0.05, 0.03, 0.01)], p=0.2))
-
-    return T.Compose([
-        T.ToImage(),
-        *augs,
         T.ToDtype(torch.float32, scale=True),
         T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
     ])
 
+
 def get_eval_transforms(image_size: int = 256):
-    # Simple deterministic preprocessing for validation/test
+    # Backward-compatible simple ImageNet-normalized eval transforms
     return T.Compose([
         T.ToImage(),
         T.Resize((image_size, image_size), antialias=True),
@@ -50,15 +36,40 @@ def get_eval_transforms(image_size: int = 256):
     ])
 
 
+def get_transforms(cfg: Optional[Dict] = None, *, split: str = "train", normalize: bool = True):
+    """Compatibility shim used across the repo.
 
+    - If cfg is provided, use centralized builder with encoder-based stats.
+    - If cfg is None, return ImageNet-normalized transforms (train/eval per split).
+    - The 'normalize' flag is retained for callers that temporarily want raw tensors.
+    """
+    if cfg is None:
+        base = get_train_transforms() if split == "train" else get_eval_transforms()
+        if normalize:
+            return base
+        ops = getattr(base, "transforms", None)
+        if ops is None:
+            return base
+        ops_wo_norm = [op for op in ops if not isinstance(op, T.Normalize)]
+        return T.Compose(ops_wo_norm)
+
+    # Build using centralized logic
+    tfs = _build_transforms(cfg)
+    tf = tfs["train" if split == "train" else "eval"]
+    if normalize:
+        return tf
+
+    # Remove Normalize if requested (best-effort)
+    ops = getattr(tf, "transforms", None)
+    if ops is None:
+        return tf
+    ops_wo_norm = [op for op in ops if not isinstance(op, T.Normalize)]
+    return T.Compose(ops_wo_norm)
 
 
 def get_transforms_dinov3(resize_size: int = 256):
-    to_tensor = v2.ToImage()
-    resize = v2.Resize((resize_size, resize_size), antialias=True)
-    to_float = v2.ToDtype(torch.float32, scale=True)
-    normalize = v2.Normalize(
-        mean=(0.485, 0.456, 0.406),
-        std=(0.229, 0.224, 0.225),
-    )
-    return v2.Compose([to_tensor, resize, to_float, normalize])
+    to_tensor = T.ToImage()
+    resize = T.Resize((resize_size, resize_size), antialias=True)
+    to_float = T.ToDtype(torch.float32, scale=True)
+    normalize = T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+    return T.Compose([to_tensor, resize, to_float, normalize])

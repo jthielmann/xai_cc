@@ -3,7 +3,7 @@ import os
 import torch
 from torchvision import transforms
 import lightning as L
-from script.data_processing.image_transforms import get_transforms
+from script.data_processing.transforms import build_transforms
 from script.data_processing.data_loader import get_dataset, get_dataset_single_file
 
 
@@ -17,8 +17,10 @@ class STDataModule(L.LightningDataModule):
         # Save the entire config for easy access
         self.cfg = cfg
 
-        # Set up transforms based on config
-        self.transforms = get_transforms(cfg)
+        # Set up transforms based on config (train/eval)
+        _t = build_transforms(cfg)
+        self.transforms_train = _t["train"]
+        self.transforms_eval = _t["eval"]
         self.train_dataset = None
         self.val_dataset = None
         self.test_dataset = None
@@ -46,7 +48,7 @@ class STDataModule(L.LightningDataModule):
                     csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
-                    transforms=self.transforms,
+                    transforms=self.transforms_train,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
@@ -59,7 +61,7 @@ class STDataModule(L.LightningDataModule):
                     csv_path=self.cfg['train_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
-                    transforms=self.transforms,
+                    transforms=self.transforms_train,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
@@ -70,7 +72,7 @@ class STDataModule(L.LightningDataModule):
                     self.cfg['data_dir'],
                     genes=self.cfg['genes'],
                     samples=self.cfg['train_samples'],
-                    transforms=self.transforms,
+                    transforms=self.transforms_train,
                     bins=self.cfg.get("bins", 0),
                     gene_data_filename=self.cfg['gene_data_filename'],
                     meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
@@ -89,7 +91,7 @@ class STDataModule(L.LightningDataModule):
                     csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
-                    transforms=self.transforms,
+                    transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
@@ -102,7 +104,7 @@ class STDataModule(L.LightningDataModule):
                     csv_path=self.cfg['val_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
-                    transforms=self.transforms,
+                    transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
@@ -113,7 +115,7 @@ class STDataModule(L.LightningDataModule):
                     self.cfg['data_dir'],
                     genes=self.cfg['genes'],
                     samples=self.cfg['val_samples'],
-                    transforms=self.transforms,
+                    transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     gene_data_filename=self.cfg['gene_data_filename'],
                     meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
@@ -132,7 +134,7 @@ class STDataModule(L.LightningDataModule):
                     csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
-                    transforms=self.transforms,
+                    transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
@@ -145,7 +147,7 @@ class STDataModule(L.LightningDataModule):
                     csv_path=self.cfg['test_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg['genes'],
-                    transforms=self.transforms,
+                    transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
@@ -157,7 +159,7 @@ class STDataModule(L.LightningDataModule):
                         self.cfg['data_dir'],
                         genes=self.cfg['genes'],
                         samples=self.cfg['test_samples'],
-                        transforms=self.transforms,
+                        transforms=self.transforms_eval,
                         bins=self.cfg.get("bins", 0),
                         gene_data_filename=self.cfg['gene_data_filename'],
                         meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),

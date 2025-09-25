@@ -10,7 +10,7 @@ data_split = 0.8
 
 csv_path = data_dir + csv_name
 from script.data_processing.image_transforms import get_transforms
-transforms = get_transforms()
+transforms = get_transforms(None, split='train')
 bins = 1
 backbone = "resnet18"
 
@@ -92,4 +92,3 @@ else:
             "bins": {"values": [5]}
         },
     }
-

@@ -26,6 +26,7 @@ from typing import Dict, List
 from script.model.lit_model import get_model
 from script.data_processing.lit_STDataModule import get_data_module
 from script.data_processing.data_loader import get_spatial_dataset
+from script.configs.normalization import resolve_norm
 # Prepare a module logger (configuration should be done in entry-point)
 log = logging.getLogger(__name__)
 from lightning.pytorch import seed_everything
@@ -330,6 +331,27 @@ class TrainerPipeline:
 
         self.device  = _determine_device()
         self.out_path = self._prepare_output_dir()
+        # Log normalization choice (encoder-only policy)
+        try:
+            stats = resolve_norm(self.config.get("encoder_type", ""))
+            norm_meta = {
+                "mode": "encoder",
+                "encoder_type": self.config.get("encoder_type", ""),
+                "mean": list(stats.mean),
+                "std": list(stats.std),
+            }
+            os.makedirs(self.out_path, exist_ok=True)
+            with open(os.path.join(self.out_path, "normalization.json"), "w") as f:
+                json.dump(norm_meta, f, indent=2)
+            if self.is_online and self.wandb_run:
+                self.wandb_run.log({
+                    "normalize/mode": norm_meta["mode"],
+                    "normalize/mean": norm_meta["mean"],
+                    "normalize/std": norm_meta["std"],
+                    "normalize/encoder_type": norm_meta["encoder_type"],
+                })
+        except Exception:
+            pass
 
     def _run_name_to_dir(self, run_name: str) -> str:
         # Split into key=value parts and strip spaces

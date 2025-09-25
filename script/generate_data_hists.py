@@ -288,7 +288,13 @@ for patient in patients:
     if dataset_name == "NCT-CRC-HE-100K":
         dataset = NCT_CRC_Dataset(data_dir, patients, use_tiles_sub_dir=True, image_transforms=transforms.Compose([transforms.ToTensor()]))
     else:
-        dataset = get_dataset(data_dir, [gene], samples=[patient], transforms=get_transforms(normalize=False),gene_data_filename=gene_data_filename)
+        dataset = get_dataset(
+            data_dir,
+            [gene],
+            samples=[patient],
+            transforms=get_transforms(None, split='eval', normalize=False),
+            gene_data_filename=gene_data_filename,
+        )
     print("patient", patient)
     len_dataset = len(dataset)
     for idx, (data, target) in enumerate(dataset):
@@ -302,7 +308,13 @@ print("mean", r/len_datasets, g/len_datasets, b/len_datasets)
 
 if use_test:
     for patient in patients_test:
-        dataset = get_dataset(data_dir_test, [gene], samples=[patient], transforms=get_transforms(),gene_data_filename=gene_data_filename)
+        dataset = get_dataset(
+            data_dir_test,
+            [gene],
+            samples=[patient],
+            transforms=get_transforms(None, split='eval'),
+            gene_data_filename=gene_data_filename,
+        )
         print("patient", patient)
         len_dataset = len(dataset)
         for idx, (data, target) in enumerate(dataset):

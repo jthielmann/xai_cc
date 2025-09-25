@@ -61,26 +61,18 @@ _BASE_CRC_BASE: Dict[str, Any] = {
 DATASETS: Dict[str, Dict[str, Any]] = {
     "CRC_N19": {
         **_BASE_CRC_N19,
-        "mean": [0.0555, 0.1002, 0.00617],
-        "std":  [0.991,  0.9826, 0.9967],
         "weights": get_wmse_weights("CRC_N19"),
     },
     "CRC-N19_2": {
         **_BASE_CRC_N19,
-        "mean": [0.5405, 0.2749, 0.5476],
-        "std":  [0.2619, 0.2484, 0.2495],
         "weights": get_wmse_weights("CRC_N19_2"),
     },
     "crc_base": {
         **_BASE_CRC_BASE,
-        "mean": [0.331,  0.632,  0.3946],
-        "std":  [1.1156, 1.1552, 1.1266],
         "weights": get_wmse_weights("crc_base"),
     },
     "pseudospot": {
         **_BASE_CRC_BASE,
-        "mean": [0.331,  0.632,  0.3946],
-        "std":  [1.1156, 1.1552, 1.1266],
         "weights": get_wmse_weights("pseudospot"),
     },
 }

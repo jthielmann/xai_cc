@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 import torch.nn.functional
 from torchvision import transforms
-from script.data_processing.image_transforms import get_transforms
+from script.data_processing.image_transforms import get_eval_transforms, get_transforms
 from typing import Union, Mapping
 DEFAULT_RANDOM_SEED = 42
 
@@ -173,12 +173,8 @@ class STDatasetUMAP(STDataset):
 
 class TileLoader:
     def __init__(self):
-        self.transforms = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            # mean and std of the whole dataset
-            transforms.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])
-            ])
+        # Use centralized ImageNet-normalized eval transforms
+        self.transforms = get_eval_transforms(image_size=224)
 
     def open(self, path):
         a = Image.open(path).convert("RGB")
@@ -553,7 +549,8 @@ def get_dataset_single_file(
 
 def get_dino_dataset(csv_path, dino_transforms=None, max_len=None, bins=1, device_handling=False):
     if dino_transforms is None:
-        dino_transforms = get_transforms()
+        from script.data_processing.image_transforms import get_transforms as _gt
+        dino_transforms = _gt(None, split='train')
     file_df = pd.read_csv(csv_path, nrows=max_len)
     # Ensure STDataset does not attempt to infer gene columns (CSV has none for DINO)
     st_dataset = STDataset(file_df, image_transforms=dino_transforms, inputs_only=True, genes=[])
@@ -729,13 +726,7 @@ def load_gene_weights(
 
 class PlottingDataset(torch.utils.data.Dataset):
     def __init__(self, dataframe, device,
-                 transforms=transforms.Compose([
-                     transforms.Resize((224, 224)),
-                     transforms.ToTensor(),
-                     # mean and std of the whole dataset
-                     transforms.Normalize([0.7406, 0.5331, 0.7059],
-                                          [0.1651, 0.2174, 0.1574])
-                 ])):
+                 transforms=get_eval_transforms(image_size=224)):
         self.dataframe = dataframe
         self.transforms = transforms
         self.device = device

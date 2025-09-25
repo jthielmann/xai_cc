@@ -28,15 +28,10 @@ from data_loader import get_data_loaders, get_dataset, STDataset
 
 
 import torchvision.transforms as T
-from torchvision import transforms
+from script.data_processing.image_transforms import get_eval_transforms
 
 class CRP_Dataset(torch.utils.data.Dataset):
-    def __init__(self, dataframe, device="mps", transforms=transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            # mean and std of the whole dataset
-            transforms.Normalize([0.7406, 0.5331, 0.7059], [0.1651, 0.2174, 0.1574])
-            ])):
+    def __init__(self, dataframe, device="mps", transforms=get_eval_transforms(image_size=224)):
         self.dataframe = dataframe
         self.transforms = transforms
         self.device = device
@@ -120,12 +115,12 @@ for model, model_path in models:
 
         layer_names = get_layer_names(model, [layer_type])
         layer_map = {layer : cc for layer in layer_names}
-        preprocessing =  T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        # Use centralized eval normalization
+        preprocessing =  get_eval_transforms(image_size=224)
         fv = FeatureVisualization(attribution, dataset, layer_map, preprocess_fn=preprocessing, path=fv_path)
         saved_files = fv.run(composite, 0, len(dataset), 32, 100)
         ref_c = fv.get_max_reference(concept_ids, "encoder.layer4.1", "relevance", (0, 8), composite=composite, plot_fn=None)
 
         plot_grid(ref_c, figsize=(6, 9))
-
 
 

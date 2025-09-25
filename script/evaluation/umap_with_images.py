@@ -63,7 +63,7 @@ def plot_umap_with_images(embedding, tile_paths, title, zoom=0.1, output_path=".
             # Open the image and convert to RGB
             img = Image.open(path).convert("RGB")
             # Apply your transform pipeline; assume it returns a tensor in shape (C, H, W)
-            img_tensor = get_transforms(normalize=False)(img)
+            img_tensor = get_transforms(None, split='eval', normalize=False)(img)
 
             # Get current dimensions from the tensor shape (C, H, W)
             C, H, W = img_tensor.shape
@@ -87,7 +87,7 @@ def plot_umap_with_images(embedding, tile_paths, title, zoom=0.1, output_path=".
 
         for (x, y, z), path in zip(embedding, tile_paths):
             img = Image.open(path)
-            img = get_transforms()(img)
+            img = get_transforms(None, split='eval')(img)
             # Optionally, convert to a NumPy array if needed:
             img = np.array(img)
 
@@ -136,7 +136,12 @@ if __name__ == "__main__":
                    if fname.lower().endswith(('.png', '.jpg', '.jpeg', 'tiff', 'tif'))]
 
     samples = ["p007", "p014", "p016", "p020", "p025"]
-    dataset = get_dataset_for_umap("../data/crc_base/Training_Data/", ["RUBCNL"], transforms=get_transforms(), samples=samples)
+    dataset = get_dataset_for_umap(
+        "../data/crc_base/Training_Data/",
+        ["RUBCNL"],
+        transforms=get_transforms(None, split='eval'),
+        samples=samples,
+    )
     loader = DataLoader(dataset, batch_size=32, num_workers=0, collate_fn=custom_collate_fn, shuffle=False)
     # Compute the UMAP embedding using the memory-efficient function
     device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
