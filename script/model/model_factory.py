@@ -1,19 +1,24 @@
 import torch
 import torch.nn as nn
 import torchvision.models as models
+from torchvision.transforms import v2
+
 from script.configs.config_factory import get_dataset_cfg
 import timm
 from typing import Tuple
+from torchvision import transforms
+
 
 def get_encoder(encoder_type: str) -> nn.Module:
-    if encoder_type == "dino":
-        return torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
-    if encoder_type == "resnet50random":
-        return models.resnet50(weights=False)
-    if encoder_type == "resnet50imagenet":
-        return models.resnet50(weights="IMAGENET1K_V2")
-    if encoder_type == "unimodel":
-        return load_uni_model()
+    t = encoder_type.lower() # keep encoder_type var for logging on error later
+    if t == "dino": return torch.hub.load('facebookresearch/dino:main','dino_resnet50')
+    if t.startswith("dinov3"):
+        import os
+        repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "encoders"))
+        return torch.hub.load(repo, t, source="local", weights=os.path.join(repo, f"{t}.pth"))
+    if t == "resnet50random": return models.resnet50(weights=False)
+    if t == "resnet50imagenet": return models.resnet50(weights="IMAGENET1K_V2")
+    if t == "unimodel": return load_uni_model()
     raise ValueError(f"Unknown encoder {encoder_type}")
 
 
@@ -86,3 +91,39 @@ def get_loss_fn(kind: str, dataset: str) -> nn.Module:
         dataset = get_dataset_cfg(name=dataset, debug=False)
         return WMSE(dataset["weights"])
     raise ValueError(f"Unknown loss {kind}")
+
+
+def make_transform_imagenet(resize_size: int = 224):
+    to_tensor = v2.ToImage()
+    resize = v2.Resize((resize_size, resize_size), antialias=True)
+    to_float = v2.ToDtype(torch.float32, scale=True)
+    normalize = v2.Normalize(
+        mean=(0.485, 0.456, 0.406),
+        std=(0.229, 0.224, 0.225),
+    )
+    return v2.Compose([to_tensor, resize, to_float, normalize])
+
+
+def get_encoder_transforms(encoder_type: str):
+    t = (encoder_type or "").lower()
+    # Map encoder types → normalization
+    if t == "dino" or t.startswith("resnet"):
+        # I could not find mean std on the official dinov1 github, however they use imagenet
+        transform = make_transform_imagenet()
+    elif t.startswith("dinov3"):
+        # DINOv3 uses standard ImageNet normalization in the official code: https://github.com/facebookresearch/dinov3
+        transform = make_transform_imagenet()
+    elif t in {"unimodel", "uni2", "uni2-h", "uni2h", "uni"}:
+        # from the hf page: https://huggingface.co/MahmoodLab/UNI2-h
+        transform = transforms.Compose(
+            [
+                v2.Resize(224),
+                v2.ToTensor(),
+                v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]
+        )
+    else:
+        raise RuntimeError(f"Cannot deduct mean std for {encoder_type}")
+
+    return transform
+
