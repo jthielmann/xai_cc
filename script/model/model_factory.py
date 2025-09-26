@@ -1,3 +1,5 @@
+import os
+
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -14,42 +16,35 @@ from pathlib import Path
 from typing import Iterable
 
 def resolve_unique_model_file(
-    encoders_dir: str | Path,
     encoder_type: str,
-    exts: Iterable[str] = (".pth", ".pt", ".ckpt", ".bin"),
-    recursive: bool = False,
+    encoders_dir: str | Path = "../encoders",
 ) -> Path:
-    encoders_dir = Path(encoders_dir)
-    key = encoder_type.strip()
-    if not key:
-        raise ValueError("encoder_type is empty.")
-    direct = encoders_dir / key
-    if direct.is_file():
-        return direct
+    # Map: hub callable name -> checkpoint filename
+    DINOv3_FILEMAP = {
+        "dinov3_convnext_base" : "dinov3_convnext_base_pretrain_lvd1689m-801f2ba9.pth",
+        "dinov3_convnext_large" : "dinov3_convnext_large_pretrain_lvd1689m-61fa432d.pth",
+        "dinov3_convnext_tiny": "dinov3_convnext_tiny_pretrain_lvd1689m-21b726bb.pth",
+        "dinov3_vit7b16": "dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth",
+        "dinov3_vith16plus": "dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth",
+        "dinov3_vitb16": "dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth",
+        "dinov3_vitl16": "dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth",
+        "dinov3_vits16plus": "dinov3_vits16plus_pretrain_lvd1689m-4057cbaa.pth",
+        "dinov3_vits16": "dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
+    }
 
-    exts_lower = {e.lower() for e in exts}
-    files = encoders_dir.rglob("*") if recursive else encoders_dir.glob("*")
-    key_lower = key.lower()
+    t = (encoder_type or "").strip().lower()
 
-    candidates = [
-        p for p in files
-        if p.is_file() and key_lower in p.name.lower() and p.suffix.lower() in exts_lower
-    ]
+    if t in DINOv3_FILEMAP:
+        path = encoders_dir + "/" + DINOv3_FILEMAP[t]
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Resolved '{t}' to '{path.name}', but it does not exist in {encoders_dir}.")
+        return Path(path)
 
-    if len(candidates) == 1:
-        return candidates[0]
-    if len(candidates) == 0:
-        nearby = [p.name for p in encoders_dir.glob("*") if p.is_file()]
-        hint = f"No file containing '{encoder_type}' with extensions {sorted(exts_lower)} in {encoders_dir}."
-        if nearby:
-            hint += f" Nearby files: {sorted(nearby)[:10]}"
-        raise FileNotFoundError(hint)
+    for key, value in DINOv3_FILEMAP.items():
+        if key in encoder_type:
+            return Path(encoders_dir, value)
+    raise RuntimeError(f"{encoder_type} not in {DINOv3_FILEMAP}")
 
-    pretty = "\n  - " + "\n  - ".join(str(p) for p in sorted(candidates))
-    raise ValueError(
-        f"Ambiguous encoder match for '{encoder_type}' — multiple files contain that name:{pretty}\n"
-        f"Please use a more specific key or pass an exact filename."
-    )
 
 
 
@@ -57,8 +52,7 @@ def get_encoder(encoder_type: str) -> nn.Module:
     t = encoder_type.lower() # keep encoder_type var for logging on error later
     if t == "dino": return torch.hub.load('facebookresearch/dino:main','dino_resnet50')
     if t.startswith("dinov3"):
-        enc_dir = "../encoders/"
-        weights = resolve_unique_model_file(enc_dir, encoder_type)
+        weights = resolve_unique_model_file(encoder_type)
         return torch.hub.load("../encoders/", encoder_type, source="local", weights=str(weights))
     if t == "resnet50random": return models.resnet50(weights=False)
     if t == "resnet50imagenet": return models.resnet50(weights="IMAGENET1K_V2")
@@ -174,7 +168,7 @@ def get_encoder_transforms(encoder_type: str,
 
     # All listed encoders here use ImageNet mean/std
     if t == "dino" or t.startswith("resnet") or t.startswith("dinov3") \
-       or t in {"unimodel", "uni2", "uni2-h", "uni2h", "uni"}:
+       or t.startswith("uni"):
         base_pre, norm = _imagenet_parts(resize_size)
     else:
         raise RuntimeError(f"Cannot deduct mean/std for {encoder_type}")

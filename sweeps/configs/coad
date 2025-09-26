@@ -1,5 +1,5 @@
-project: unimodel
-name: train unimodel
+project: redo2 dinov3_vits coad all genes
+name: dinov3_vits coad all genes
 method: grid
 metric:
   name: valid_loss
@@ -32,7 +32,7 @@ parameters:
 
   # Encoder
   encoder_type:
-    value: uni2 #dinov3
+    value: dinov3_vits16 #dinov3
   freeze_encoder:
     value: true
 
