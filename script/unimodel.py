@@ -29,7 +29,7 @@ if __name__ == "__main__":
     cfg.update(ds_cfg)
 
     MODEL_ID   = "hf-hub:MahmoodLab/UNI2-h"
-    MODEL_FILE = "UNI2-h_state.pt"
+    MODEL_FILE = "../encoders/UNI2-h_state.pt"
     CACHE_DIR  = "../../models/h"
 
     # timm kwargs for the UNI2-h backbone

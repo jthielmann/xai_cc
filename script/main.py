@@ -149,7 +149,7 @@ def main():
     params["model_dir"]["value"] = "../models/"
     if is_sweep:
         sweep_config = {
-            "name": read_config_parameter(raw_cfg, "name") if not raw_cfg.get("debug") else "debug_" + random.randbytes(4).hex(),
+            "name": read_config_parameter(raw_cfg, "name") if not read_config_parameter(raw_cfg, "name") else "debug_" + random.randbytes(4).hex(),
             "method": read_config_parameter(raw_cfg, "method"),
             "metric": read_config_parameter(raw_cfg, "metric"),
             "parameters": read_config_parameter(raw_cfg, "parameters"),

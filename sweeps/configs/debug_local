@@ -19,8 +19,13 @@ parameters:
   # Data / loader
   dataset:
     value: CRC_N19
+  genes:
+    value: [RUBCNL]
   gene_data_filename:
     value: gene_data.csv
+
+  image_size:
+    value: 224
   batch_size:
     value: 32
   num_workers:
@@ -28,7 +33,15 @@ parameters:
 
   # Encoder
   encoder_type:
-    value: dinov3
+    value: uni2 #dinov3
+  freeze_encoder:
+    value: true
+
+  # Head
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 200
 
   # Training schedule
   epochs:
@@ -40,12 +53,12 @@ parameters:
 
   # Logging / metrics
   loss_fn_switch:
-    value: DinoLoss
+    value: MSE
   error_metric_name:
     value: DinoLoss
 
   # Runtime (optional but handy)
   precision_auto:
-    value: true               # your code maps this to bf16/16/32 at runtime
-  ddp_find_unused_parameters_false:
-    value: true               # safe for DINO; faster than scanning for unused params
+    value: true
+  strategy:
+    value: "auto"

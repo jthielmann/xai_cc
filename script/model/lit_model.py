@@ -2,32 +2,22 @@ import json
 import logging
 
 import numpy as np
-import torch
 import lightning as L
 import torch.nn as nn
-import torchvision
-import torchmetrics
-import torch.optim as optim
 import wandb
-from script.data_processing.image_transforms import get_transforms
 from script.model.model_factory import get_encoder, infer_encoder_out_dim
 import os
-from script.data_processing.process_csv import generate_results_patient_from_loader
-from script.train.generate_plots import generate_hists_2
 import matplotlib.pyplot as plt
-from script.data_processing.data_loader import get_dataset, load_best_smoothing, load_gene_weights
-from torch.utils.data import DataLoader
-import random
+from script.data_processing.data_loader import load_gene_weights
 import sys
 from io import BytesIO
 from PIL import Image
-from torch.optim.lr_scheduler import OneCycleLR, ChainedScheduler
+from torch.optim.lr_scheduler import OneCycleLR
 sys.path.insert(0, '..')
 from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss
 from script.model.lit_ae import SparseAutoencoder
 from typing import Dict, Any
 from torchmetrics.functional import pearson_corrcoef
-import scipy
 import pandas as pd
 
 import torch
@@ -187,7 +177,7 @@ class GeneExpressionRegressor(L.LightningModule):
                 "lr": getattr(self, f"{g}_lr")
             })
         opt = torch.optim.AdamW(groups)
-        sched = torch.optim.lr_scheduler.OneCycleLR(
+        sched = OneCycleLR(
             opt,
             max_lr=[pg["lr"] for pg in groups],
             total_steps=self.trainer.estimated_stepping_batches

@@ -1,5 +1,5 @@
-project: unimodel sanity
-name: unimodel
+project: dino
+name: train dinov3 on NCT-CRC-HE-100K
 method: grid
 metric:
   name: valid_loss
@@ -10,7 +10,7 @@ parameters:
   log_to_wandb:
     value: true
   debug:
-    value: false
+    value: true
   use_early_stopping:
     value: true
   generate_scatters:
@@ -18,17 +18,17 @@ parameters:
 
   # Data / loader
   dataset:
-    value: CRC_N19
-  split_genes_by:
-    value: 50
+    value: coadx
   gene_data_filename:
-    value: gene_data_log1p.csv
+    value: gene_log1p.csv
   image_size:
     value: 224
   batch_size:
     value: 32
   num_workers:
     value: 2
+  meta_data_dir:
+    value: metadata
 
   # Encoder
   encoder_type:
@@ -48,7 +48,7 @@ parameters:
   optimizer:
     value: adamw
   learning_rate:
-    values: [0.01]
+    value: 0.01
 
   # Logging / metrics
   loss_fn_switch:

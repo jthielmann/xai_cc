@@ -1,53 +1,63 @@
-project: unimodel
-name: compare cms gene performance
+project: dino
+name: train dinov3 on NCT-CRC-HE-100K
 method: grid
 metric:
   name: valid_loss
   goal: minimize
 
 parameters:
-  debug:
-    value: false
+  # Run behavior
   log_to_wandb:
-    value: false
-  # fixed
-  epochs:
-    value: 40
-  dataset:
-    value: CRC_N19
-  encoder_type:
-    value: dino
-  batch_size:
-    value: 64
-  genes:
-    value: [RUBCNL]
-  error_metric_name:
-    value: WMSE
-  encoder_out_dim:
-    value: 2048
-  middle_layer_features:
-    value: 200
-  num_workers:
-    value: 2
-  loss_fn_switch:
-    value: MSE
-  gene_data_filename:
-    value: gene_data_ranknorm.csv
-  image_size:
-    value: 224
-  generate_scatters:
+    value: true
+  debug:
     value: true
   use_early_stopping:
     value: true
-  use_leaky_relu:
-    value: false
-  one_linear_out_layer:
-    value: false
-  lds_weight_csv:
-    value: best_smoothings.csv
-  weight_transform:
-    value: inverse
+  generate_scatters:
+    value: true
 
-  # hyperparams
+  # Data / loader
+  dataset:
+    value: CRC_N19
+  genes:
+    value: [RUBCNL]
+  gene_data_filename:
+    value: gene_data_log1p.csv
+  image_size:
+    value: 224
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+
+  # Encoder
+  encoder_type:
+    value: uni2 #dinov3
   freeze_encoder:
     value: true
+
+  # Head
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 200
+
+  # Training schedule
+  epochs:
+    value: 40
+  optimizer:
+    value: adamw
+  learning_rate:
+    value: 0.01
+
+  # Logging / metrics
+  loss_fn_switch:
+    value: MSE
+  error_metric_name:
+    value: DinoLoss
+
+  # Runtime (optional but handy)
+  precision_auto:
+    value: true
+  strategy:
+    value: "auto"

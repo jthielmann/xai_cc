@@ -724,67 +724,6 @@ def load_gene_weights(
     return gene2weights
 
 
-class PlottingDataset(torch.utils.data.Dataset):
-    def __init__(self, dataframe, device,
-                 transforms=get_eval_transforms(image_size=224)):
-        self.dataframe = dataframe
-        self.transforms = transforms
-        self.device = device
-
-    def __len__(self):
-        return len(self.dataframe)
-
-    def __getitem__(self, index):
-        gene_names = list(self.dataframe)[1:]
-        gene_vals = []
-        row = self.dataframe.iloc[index]
-        a = Image.open(row["tile"]).convert("RGB")
-        for j in gene_names:
-            gene_val = float(row[j])
-            gene_vals.append(gene_val)
-        e = row["tile"]
-        # apply normalization transforms as for pretrained colon classifier
-        a = self.transforms(a)
-        a = a.to(self.device)
-        return a, 0
-
-
-# has the labels set to 0 because that makes it easier to work with the frameworks written for classification
-# the idea is that they filter the attribution by the chosen class, but as we only have one output we always choose y=0
-def get_dataset_for_plotting(data_dir, genes, samples=None,
-                             device="cuda" if torch.cuda.is_available() else
-                             "mps" if torch.backends.mps.is_available() else "cpu"):
-
-    if samples is None:
-        samples = []
-        for subdir in os.listdir(data_dir):
-            if os.path.isdir(data_dir + "/" + subdir):
-                samples.append(subdir)
-
-    columns_of_interest = ["tile"]
-    for gene in genes:
-        columns_of_interest.append(gene)
-    dataset = pd.DataFrame(columns=columns_of_interest)
-
-    # generate training dataframe with all training samples
-    for i in samples:
-        st_dataset = pd.read_csv(data_dir + "/" + i + "/meta_data/gene_data.csv", index_col=-1)
-        st_dataset["tile"] = st_dataset.index
-        st_dataset["tile"] = st_dataset["tile"].apply(
-            lambda x: str(data_dir) + "/" + str(i) + "/tiles/" + str(x)
-        )
-        if dataset.empty:
-            dataset = st_dataset[columns_of_interest]
-        else:
-            # concat
-            dataset = pd.concat([dataset, st_dataset[columns_of_interest]])
-
-    # reset index of dataframes
-    dataset.reset_index(drop=True, inplace=True)
-
-    return PlottingDataset(dataset, device=device)
-
-
 # return_floats -> python float instead of torch
 class STSpatialDataset(Dataset):
     def __init__(

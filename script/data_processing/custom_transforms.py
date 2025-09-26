@@ -1,4 +1,6 @@
 import torch
+import torchvision.transforms.v2 as T
+
 
 def patch_coords(image_size, patch_width, patch_height)-> (int,int):
     assert patch_width <= image_size[0]
@@ -9,8 +11,10 @@ def patch_coords(image_size, patch_width, patch_height)-> (int,int):
 
 
 # to be used as a transform in a torchvision.transforms.Compose
-class Occlude(object):
-    def __init__(self, patch_size_x, patch_size_y, patch_vary_width=0, patch_min_size=10, patch_max_size=100, use_batch=True):
+class Occlude(T.Transform):
+    def __init__(self, patch_size_x, patch_size_y, patch_vary_width=0, patch_min_size=10, patch_max_size=100,
+                 use_batch=True):
+        super().__init__()
         self.patch_size_x = patch_size_x
         self.patch_size_y = patch_size_y
         self.patch_vary_width = patch_vary_width

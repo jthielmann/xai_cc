@@ -26,7 +26,6 @@ from typing import Dict, List
 from script.model.lit_model import get_model
 from script.data_processing.lit_STDataModule import get_data_module
 from script.data_processing.data_loader import get_spatial_dataset
-from script.configs.normalization import resolve_norm
 # Prepare a module logger (configuration should be done in entry-point)
 log = logging.getLogger(__name__)
 from lightning.pytorch import seed_everything
@@ -109,7 +108,7 @@ def _verify_log_frozen(model, freeze_encoder, wandb_run=None):
 
 
 
-def _log_dataset_info(cfg, out_dir, train=None, val=None, test=None, wandb_run=None):
+def _log_dataset_info(cfg, out_dir, train=None, val=None, test=None):
     def split_df(loader, split):
         ds = getattr(loader, "dataset", loader)
         pats = getattr(ds, "patient_per_item", None) or getattr(ds, "patients", None)
@@ -141,13 +140,6 @@ def _log_dataset_info(cfg, out_dir, train=None, val=None, test=None, wandb_run=N
 
     print("[dataset]", meta)
     if not manifest.empty: print("[splits]\n", manifest.head())
-
-    if wandb_run:
-        wandb_run.log({f"data/{k}": v for k,v in meta.items()})
-        import wandb
-        table = wandb.Table(columns=["split","patient","n_items"])
-        for r in manifest.itertuples(index=False): table.add_data(r.split,r.patient,int(r.n_items))
-        wandb_run.log({"data/split_manifest": table})
 
 def _save_spatial_parquets(spatial_df: pd.DataFrame, genes: list[str], out_dir: str) -> None:
     base = os.path.join(out_dir, "spatial_parquet")
@@ -416,8 +408,10 @@ class TrainerPipeline:
         devices = self.config.get("devices", "auto")
 
         strategy = self.config.get("strategy", None)
-        if strategy is None and (devices == "auto" or (isinstance(devices, int) and devices > 1)):
+        if strategy is None and (devices == "auto" or (isinstance(devices, int) and devices > 1)) and torch.cuda.is_available():
             strategy = "ddp_find_unused_parameters_false"
+        else:
+            strategy = "auto"
         precision = _choose_precision()
         trainer = L.Trainer(
             max_epochs=self.config["epochs"] if not self.config.get("debug", False) else 2,
@@ -565,8 +559,7 @@ class TrainerPipeline:
         test_loader = data_module.test_dataloader()
         _log_dataset_info(self.config, self.out_path,
                          train=train_loader, val=val_loader,
-                         test=test_loader if self.config.get("test_samples") else None,
-                         wandb_run=self.wandb_run if self.is_online else None)
+                         test=test_loader if self.config.get("test_samples") else None)
         self.config["out_path"] = self.out_path
         model = get_model(self.config)
 

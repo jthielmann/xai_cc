@@ -6,19 +6,63 @@ from torchvision.transforms import v2
 from script.configs.config_factory import get_dataset_cfg
 import timm
 from typing import Tuple
-from torchvision import transforms
+
+from typing import Iterable, Sequence, Callable, Optional
+
+# resolver.py (or inline in your loader code)
+from pathlib import Path
+from typing import Iterable
+
+def resolve_unique_model_file(
+    encoders_dir: str | Path,
+    encoder_type: str,
+    exts: Iterable[str] = (".pth", ".pt", ".ckpt", ".bin"),
+    recursive: bool = False,
+) -> Path:
+    encoders_dir = Path(encoders_dir)
+    key = encoder_type.strip()
+    if not key:
+        raise ValueError("encoder_type is empty.")
+    direct = encoders_dir / key
+    if direct.is_file():
+        return direct
+
+    exts_lower = {e.lower() for e in exts}
+    files = encoders_dir.rglob("*") if recursive else encoders_dir.glob("*")
+    key_lower = key.lower()
+
+    candidates = [
+        p for p in files
+        if p.is_file() and key_lower in p.name.lower() and p.suffix.lower() in exts_lower
+    ]
+
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) == 0:
+        nearby = [p.name for p in encoders_dir.glob("*") if p.is_file()]
+        hint = f"No file containing '{encoder_type}' with extensions {sorted(exts_lower)} in {encoders_dir}."
+        if nearby:
+            hint += f" Nearby files: {sorted(nearby)[:10]}"
+        raise FileNotFoundError(hint)
+
+    pretty = "\n  - " + "\n  - ".join(str(p) for p in sorted(candidates))
+    raise ValueError(
+        f"Ambiguous encoder match for '{encoder_type}' — multiple files contain that name:{pretty}\n"
+        f"Please use a more specific key or pass an exact filename."
+    )
+
 
 
 def get_encoder(encoder_type: str) -> nn.Module:
     t = encoder_type.lower() # keep encoder_type var for logging on error later
     if t == "dino": return torch.hub.load('facebookresearch/dino:main','dino_resnet50')
     if t.startswith("dinov3"):
-        import os
-        repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "encoders"))
-        return torch.hub.load(repo, t, source="local", weights=os.path.join(repo, f"{t}.pth"))
+        enc_dir = "../encoders/"
+        weights = resolve_unique_model_file(enc_dir, encoder_type)
+        return torch.hub.load("../encoders/", encoder_type, source="local", weights=str(weights))
     if t == "resnet50random": return models.resnet50(weights=False)
     if t == "resnet50imagenet": return models.resnet50(weights="IMAGENET1K_V2")
-    if t == "unimodel": return load_uni_model()
+    if t == "unimodel" or "uni2" or "uni": return load_uni_model()
     raise ValueError(f"Unknown encoder {encoder_type}")
 
 
@@ -46,8 +90,10 @@ def infer_encoder_out_dim(encoder: nn.Module,
 def build_model(**kwargs):
     return timm.create_model(**kwargs)
 
+
+# similar to https://huggingface.co/MahmoodLab/UNI2-h
 def load_uni_model():
-    model_file = "UNI2-h_state.pt"            # local cache of the weights
+    model_file = "../encoders/UNI2-h_state.pt"            # local cache of the weights
     # timm kwargs for the UNI2-h backbone
     timm_kwargs = {
         'model_name': 'vit_giant_patch14_224',
@@ -93,37 +139,44 @@ def get_loss_fn(kind: str, dataset: str) -> nn.Module:
     raise ValueError(f"Unknown loss {kind}")
 
 
-def make_transform_imagenet(resize_size: int = 224):
-    to_tensor = v2.ToImage()
-    resize = v2.Resize((resize_size, resize_size), antialias=True)
-    to_float = v2.ToDtype(torch.float32, scale=True)
-    normalize = v2.Normalize(
-        mean=(0.485, 0.456, 0.406),
-        std=(0.229, 0.224, 0.225),
-    )
-    return v2.Compose([to_tensor, resize, to_float, normalize])
+def _imagenet_parts(resize_size: int = 224):
+    pre = [
+        v2.ToImage(),
+        v2.Resize((resize_size, resize_size), antialias=True),
+        v2.ToDtype(torch.float32, scale=True),
+    ]
+    norm = v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+    return pre, norm
 
 
-def get_encoder_transforms(encoder_type: str):
-    t = (encoder_type or "").lower()
-    # Map encoder types → normalization
-    if t == "dino" or t.startswith("resnet"):
-        # I could not find mean std on the official dinov1 github, however they use imagenet
-        transform = make_transform_imagenet()
-    elif t.startswith("dinov3"):
-        # DINOv3 uses standard ImageNet normalization in the official code: https://github.com/facebookresearch/dinov3
-        transform = make_transform_imagenet()
-    elif t in {"unimodel", "uni2", "uni2-h", "uni2h", "uni"}:
-        # from the hf page: https://huggingface.co/MahmoodLab/UNI2-h
-        transform = transforms.Compose(
-            [
-                v2.Resize(224),
-                v2.ToTensor(),
-                v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ]
-        )
+def _build_pipeline(base_pre: Sequence[Callable], norm: Callable,
+                    extra: Optional[Iterable[Callable]] = None,
+                    place: str = "pre_norm") -> v2.Compose:
+    extra = list(extra or [])
+    if place == "pre_norm":
+        steps = [*base_pre, *extra, norm]
+    elif place == "post_norm":
+        steps = [*base_pre, norm, *extra]
     else:
-        raise RuntimeError(f"Cannot deduct mean std for {encoder_type}")
+        raise ValueError(f"Unknown place='{place}' (use 'pre_norm' or 'post_norm').")
+    return v2.Compose(steps)
 
-    return transform
 
+def get_encoder_transforms(encoder_type: str,
+                           resize_size: int = 224,
+                           extra: Optional[Iterable[Callable]] = None,
+                           place: str = "pre_norm") -> v2.Compose:
+    """
+    `extra`: optional iterable of v2 transforms to insert (default before Normalize).
+    Typical occlusion/erasing goes BEFORE Normalize and AFTER ToDtype.
+    """
+    t = (encoder_type or "").lower()
+
+    # All listed encoders here use ImageNet mean/std
+    if t == "dino" or t.startswith("resnet") or t.startswith("dinov3") \
+       or t in {"unimodel", "uni2", "uni2-h", "uni2h", "uni"}:
+        base_pre, norm = _imagenet_parts(resize_size)
+    else:
+        raise RuntimeError(f"Cannot deduct mean/std for {encoder_type}")
+
+    return _build_pipeline(base_pre, norm, extra=extra, place=place)

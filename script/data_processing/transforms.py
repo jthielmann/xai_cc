@@ -10,7 +10,7 @@ if v2_ready:
 else:
     import torchvision.transforms as T  # type: ignore
 
-from script.configs.normalization import resolve_norm
+from script.model.model_factory import get_encoder_transforms
 from script.data_processing.custom_transforms import Occlude
 
 
@@ -26,54 +26,101 @@ def _assert_single_normalize(seq) -> None:
         pass
 
 
+from typing import Dict, List
+import torch
+import torchvision.transforms.v2 as T
+
+# Assumes your Option-A version:
+# get_encoder_transforms(encoder_type, resize_size=224, extra=None, place="pre_norm")
+
 def build_transforms(cfg: Dict) -> Dict[str, T.Compose]:
-    """Build train/eval transforms using encoder-based normalization.
-
-    Returns a dict with keys: 'train' and 'eval'.
     """
-    encoder_type = cfg.get("encoder_type", "resnet50imagenet")
-    image_size = int(cfg.get("image_size", 256))
-    frozen_encoder = bool(cfg.get("freeze_encoder", False))
+    Build train/eval transforms using encoder-based normalization.
+    Reads optional augs from cfg. Example keys (all optional):
+      encoder_type: str (default 'resnet50imagenet')
+      image_size: int (default 256)
+      freeze_encoder: bool (default False)
+      # geometry
+      hflip: bool (default True)
+      vflip: bool (default False)
+      rot90s: bool (default True)
+      affine: bool (default True)
+      # color
+      color_jitter: bool (default False; auto-disabled if freeze_encoder=True)
+      color_jitter_params: tuple (brightness, contrast, saturation, hue)
+      color_jitter_p: float
+      # occlusion
+      occlude: bool (default False)
+      occ_patch_size_x / occ_patch_size_y / occ_patch_vary_width / occ_patch_min_size /
+      occ_patch_max_size / occ_use_batch
+      # cropping (note: applied after base resize; see comment below)
+      rrc: bool (default False)
+      rrc_scale: tuple (default (0.75, 1.0))
+    """
+    encoder_type = cfg["encoder_type"]
+    image_size   = cfg["image_size"]
+    frozen       = cfg["freeze_encoder"]
 
-    stats = resolve_norm(encoder_type)
+    # --- TRAIN EXTRAS (inserted pre-normalization) ---
+    train_extra: List[T.Transform] = []
 
-    # Geometric and color augs for training
-    train_ops = [
-        T.ToImage(),
-        T.RandomResizedCrop(image_size, scale=(0.75, 1.0), antialias=True),
-        T.RandomHorizontalFlip(p=0.5),
-        T.RandomVerticalFlip(p=0.5),
-        # 0/90/180/270° rotations
-        T.RandomChoice([
+    # Geometry
+    if cfg.get("hflip", True):
+        train_extra.append(T.RandomHorizontalFlip(p=0.5))
+    # vflip default: False — vertical flips can break real-world semantics (orientation)
+    # and add little beyond rot90s + hflip (which already cover all symmetries).
+    # Enable only if your labels are orientation-invariant.
+    if cfg.get("vflip", False):
+        train_extra.append(T.RandomVerticalFlip(p=0.5))
+    if cfg.get("rot90s", True):
+        train_extra.append(T.RandomChoice([
             T.RandomRotation([0, 0]),
             T.RandomRotation([90, 90]),
             T.RandomRotation([180, 180]),
             T.RandomRotation([270, 270]),
-        ], p=[0.25, 0.25, 0.25, 0.25]),
-        T.RandomAffine(degrees=0, translate=(0.02, 0.02), scale=(0.97, 1.03)),
-    ]
-    if not frozen_encoder:
-        train_ops.append(T.RandomApply([T.ColorJitter(0.05, 0.05, 0.03, 0.01)], p=0.2))
+        ], p=[0.25, 0.25, 0.25, 0.25]))
+    if cfg.get("affine", True):
+        train_extra.append(T.RandomAffine(degrees=0, translate=(0.02, 0.02), scale=(0.97, 1.03)))
 
-    # Tensor + Occlude + Normalize
-    train_ops += [
-        T.ToDtype(torch.float32, scale=True),
-        # Occlude after tensor conversion, before Normalize
-        Occlude(patch_size_x=32, patch_size_y=32, patch_vary_width=8, patch_min_size=8, patch_max_size=64, use_batch=False),
-        T.Normalize(mean=stats.mean, std=stats.std),
-    ]
-    train_tf = T.Compose(train_ops)
+    # Optional RandomResizedCrop (note: base pipeline already resizes;
+    # applying RRC here works but reduces multi-scale effect vs doing it *before* resize)
+    if cfg.get("rrc", False):
+        rrc_scale = tuple(cfg.get("rrc_scale", (0.75, 1.0)))
+        train_extra.append(T.RandomResizedCrop(image_size, scale=rrc_scale, antialias=True))
 
-    eval_tf = T.Compose([
-        T.ToImage(),
-        T.Resize((image_size, image_size), antialias=True),
-        T.ToDtype(torch.float32, scale=True),
-        T.Normalize(mean=stats.mean, std=stats.std),
-    ])
+    # Color (skip if encoder is frozen, unless explicitly forced true)
+    if cfg.get("color_jitter", False) and not frozen:
+        b, c, s, h = cfg.get("color_jitter_params", (0.05, 0.05, 0.03, 0.01))
+        cj_p = float(cfg.get("color_jitter_p", 0.2))
+        train_extra.append(T.RandomApply([T.ColorJitter(b, c, s, h)], p=cj_p))
 
-    # Guards
-    _assert_single_normalize(train_tf)
-    _assert_single_normalize(eval_tf)
+    # Occlusion-style aug (expects float tensor, so placing pre-norm is perfect)
+    if cfg.get("occlude", False):
+        train_extra.append(
+            Occlude(
+                patch_size_x=cfg.get("occ_patch_size_x", 32),
+                patch_size_y=cfg.get("occ_patch_size_y", 32),
+                patch_vary_width=cfg.get("occ_patch_vary_width", 8),
+                patch_min_size=cfg.get("occ_patch_min_size", 8),
+                patch_max_size=cfg.get("occ_patch_max_size", 64),
+                use_batch=cfg.get("occ_use_batch", False),
+            )
+        )
+
+    # Build final pipelines by hooking extras *before* Normalize
+    train_tf = get_encoder_transforms(
+        encoder_type=encoder_type,
+        resize_size=image_size,
+        extra=train_extra,
+        place="pre_norm",
+    )
+    eval_tf = get_encoder_transforms(
+        encoder_type=encoder_type,
+        resize_size=image_size,
+        extra=None,
+        place="pre_norm",
+    )
 
     return {"train": train_tf, "eval": eval_tf}
+
 

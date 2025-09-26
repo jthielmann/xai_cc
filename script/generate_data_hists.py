@@ -12,7 +12,7 @@ from torchvision import transforms
 
 gene = "RUBCNL"
 dataset_name = "NCT-CRC-HE-100K"
-from script.data_processing.image_transforms import get_transforms
+from script.data_processing.transforms import get_encoder_transforms
 use_val = False
 use_test = False
 
@@ -292,7 +292,7 @@ for patient in patients:
             data_dir,
             [gene],
             samples=[patient],
-            transforms=get_transforms(None, split='eval', normalize=False),
+            transforms=get_encoder_transforms("resnet50random"),
             gene_data_filename=gene_data_filename,
         )
     print("patient", patient)
@@ -312,7 +312,7 @@ if use_test:
             data_dir_test,
             [gene],
             samples=[patient],
-            transforms=get_transforms(None, split='eval'),
+            transforms=get_encoder_transforms("resnet50random"),
             gene_data_filename=gene_data_filename,
         )
         print("patient", patient)

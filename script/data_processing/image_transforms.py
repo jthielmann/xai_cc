@@ -10,7 +10,6 @@ if v2_ready:
 else:
     import torchvision.transforms as T  # type: ignore
 
-from script.configs.normalization import IMAGENET_MEAN, IMAGENET_STD, resolve_norm
 from script.data_processing.transforms import build_transforms as _build_transforms
 
 

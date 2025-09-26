@@ -42,12 +42,7 @@ def main() -> int:
             df = pd.read_csv(csv_path)
 
             # normalize/clean
-            df["tile"] = df["tile"].astype(str).str.strip()
-
-            # append only if missing (case-insensitive)
-            needs_ext = ~df["tile"].str.lower().str.endswith(".tif")
-            df.loc[needs_ext, "tile"] = df.loc[needs_ext, "tile"] + ".tif"
-
+            df["tile"] = df["tiles"]
             # avoid writing an index column
             df.to_csv(csv_path, index=False)
         except Exception as e:
