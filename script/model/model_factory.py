@@ -49,36 +49,67 @@ def resolve_unique_model_file(
 
 
 def get_encoder(encoder_type: str) -> nn.Module:
-    t = encoder_type.lower() # keep encoder_type var for logging on error later
-    if t == "dino": return torch.hub.load('facebookresearch/dino:main','dino_resnet50')
+    t = encoder_type.lower()  # keep encoder_type var for logging on error later
+    if t == "dino":
+        return torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
     if t.startswith("dinov3"):
         weights = resolve_unique_model_file(encoder_type)
         return torch.hub.load("../encoders/", encoder_type, source="local", weights=str(weights))
-    if t == "resnet50random": return models.resnet50(weights=False)
-    if t == "resnet50imagenet": return models.resnet50(weights="IMAGENET1K_V2")
-    if t == "unimodel" or "uni2" or "uni": return load_uni_model()
+    if t == "resnet50random":
+        return models.resnet50(weights=False)
+    if t == "resnet50imagenet":
+        return models.resnet50(weights="IMAGENET1K_V2")
+    # Fix logic: ensure we only match UNI variants explicitly
+    if t in {"unimodel", "uni2", "uni2-h", "uni2h", "uni"}:
+        return load_uni_model()
     raise ValueError(f"Unknown encoder {encoder_type}")
 
 
-def infer_encoder_out_dim(encoder: nn.Module,
-                          input_size: Tuple[int,int,int]=(3,224,224),
-                          device: torch.device=None) -> int:
+def infer_encoder_out_dim(
+    encoder: nn.Module,
+    input_size: Tuple[int, int, int] = (3, 224, 224),
+    device: torch.device | None = None,
+) -> int:
+    """
+    Infer the feature dimension produced by the encoder for a single image.
+
+    Handles common cases:
+    - (B, C) → C
+    - (B, C, H, W) → C*H*W
+    - (B, T, D) → D (ViT tokens; expect pooling in forward)
+    - ModelOutput with last_hidden_state → use that
+    - tuple/list → take first tensor
+    """
     was_training = encoder.training
     encoder.eval()
     if device is None:
-        device = next(encoder.parameters()).device
+        try:
+            device = next(encoder.parameters()).device
+        except StopIteration:
+            device = torch.device("cpu")
     dummy = torch.zeros(1, *input_size, device=device)
     with torch.no_grad():
         out = encoder(dummy)
 
-    # If encoder outputs spatial maps, flatten them:
-    if out.ndim > 2:
-        out = torch.flatten(out, 1)
+    # Unwrap common containers
+    if isinstance(out, (list, tuple)) and len(out) > 0:
+        out = out[0]
+    if hasattr(out, "last_hidden_state"):
+        out = out.last_hidden_state
 
-    # restore original mode
+    if out.ndim == 2:
+        feat_dim = out.size(1)
+    elif out.ndim == 3:
+        # ViT tokens (B, T, D) → use embedding dim
+        feat_dim = out.size(-1)
+    elif out.ndim == 4:
+        feat_dim = int(torch.flatten(out, 1).size(1))
+    else:
+        feat_dim = int(torch.flatten(out, 1).size(1))
+
     if was_training:
         encoder.train()
-    return out.size(1)
+    return int(feat_dim)
 
 
 def build_model(**kwargs):

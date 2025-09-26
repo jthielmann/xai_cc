@@ -197,6 +197,21 @@ class GeneExpressionRegressor(L.LightningModule):
 
     def forward(self, x):
         z = self.encoder(x)
+        # Normalize encoder outputs to (B, D) for the heads:
+        # - If encoder returns a tuple/list, use first tensor
+        # - If HF-style output with last_hidden_state, use it
+        # - If 4D (B, C, H, W), flatten spatial dims
+        # - If 3D (B, T, D), mean-pool tokens → (B, D)
+        if isinstance(z, (list, tuple)):
+            z = z[0]
+        if hasattr(z, "last_hidden_state"):
+            z = z.last_hidden_state
+        if z.ndim == 4:
+            z = torch.flatten(z, 1)
+        elif z.ndim == 3:
+            z = z.mean(dim=1)
+        if z.ndim != 2:
+            raise RuntimeError(f"Normalized encoder output must be 2D, got {tuple(z.shape)}")
         if self.sae:
             z = self.sae(z)
 
