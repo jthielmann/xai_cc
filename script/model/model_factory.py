@@ -15,14 +15,15 @@ from typing import Iterable, Sequence, Callable, Optional
 from pathlib import Path
 from typing import Iterable
 
+
 def resolve_unique_model_file(
-    encoder_type: str,
-    encoders_dir: str | Path = "../encoders",
+        encoder_type: str,
+        encoders_dir: str | Path = "../encoders",
 ) -> Path:
     # Map: hub callable name -> checkpoint filename
     DINOv3_FILEMAP = {
-        "dinov3_convnext_base" : "dinov3_convnext_base_pretrain_lvd1689m-801f2ba9.pth",
-        "dinov3_convnext_large" : "dinov3_convnext_large_pretrain_lvd1689m-61fa432d.pth",
+        "dinov3_convnext_base": "dinov3_convnext_base_pretrain_lvd1689m-801f2ba9.pth",
+        "dinov3_convnext_large": "dinov3_convnext_large_pretrain_lvd1689m-61fa432d.pth",
         "dinov3_convnext_tiny": "dinov3_convnext_tiny_pretrain_lvd1689m-21b726bb.pth",
         "dinov3_vit7b16": "dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth",
         "dinov3_vith16plus": "dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth",
@@ -46,29 +47,23 @@ def resolve_unique_model_file(
     raise RuntimeError(f"{encoder_type} not in {DINOv3_FILEMAP}")
 
 
-
-
 def get_encoder(encoder_type: str) -> nn.Module:
     t = encoder_type.lower()  # keep encoder_type var for logging on error later
-    if t == "dino":
-        return torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
+    if t == "dino": return torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
     if t.startswith("dinov3"):
         weights = resolve_unique_model_file(encoder_type)
         return torch.hub.load("../encoders/", encoder_type, source="local", weights=str(weights))
-    if t == "resnet50random":
-        return models.resnet50(weights=False)
-    if t == "resnet50imagenet":
-        return models.resnet50(weights="IMAGENET1K_V2")
+    if t == "resnet50random": return models.resnet50(weights=False)
+    if t == "resnet50imagenet": return models.resnet50(weights="IMAGENET1K_V2")
     # Fix logic: ensure we only match UNI variants explicitly
-    if t in {"unimodel", "uni2", "uni2-h", "uni2h", "uni"}:
-        return load_uni_model()
+    if "uni" in t: return load_uni_model()
     raise ValueError(f"Unknown encoder {encoder_type}")
 
 
 def infer_encoder_out_dim(
-    encoder: nn.Module,
-    input_size: Tuple[int, int, int] = (3, 224, 224),
-    device: torch.device | None = None,
+        encoder: nn.Module,
+        input_size: Tuple[int, int, int] = (3, 224, 224),
+        device: torch.device | None = None,
 ) -> int:
     """
     Infer the feature dimension produced by the encoder for a single image.
@@ -118,7 +113,7 @@ def build_model(**kwargs):
 
 # similar to https://huggingface.co/MahmoodLab/UNI2-h
 def load_uni_model():
-    model_file = "../encoders/UNI2-h_state.pt"            # local cache of the weights
+    model_file = "../encoders/UNI2-h_state.pt"  # local cache of the weights
     # timm kwargs for the UNI2-h backbone
     timm_kwargs = {
         'model_name': 'vit_giant_patch14_224',
@@ -154,6 +149,7 @@ class WMSE(nn.Module):
     def forward(self, x, y):
         loss = (x - y).pow(2) * self.w
         return loss.mean()
+
 
 def get_loss_fn(kind: str, dataset: str) -> nn.Module:
     if kind == "MSE":
@@ -199,7 +195,7 @@ def get_encoder_transforms(encoder_type: str,
 
     # All listed encoders here use ImageNet mean/std
     if t == "dino" or t.startswith("resnet") or t.startswith("dinov3") \
-       or t.startswith("uni"):
+            or t.startswith("uni"):
         base_pre, norm = _imagenet_parts(resize_size)
     else:
         raise RuntimeError(f"Cannot deduct mean/std for {encoder_type}")
