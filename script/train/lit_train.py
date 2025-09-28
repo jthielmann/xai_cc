@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 from lightning.pytorch import seed_everything
 import os, json, pandas as pd
 from collections import Counter
+from script.configs.normalization import resolve_norm
 
 def _validate_config_and_shapes(cfg, model, loader):
     # 1. Gene count matches model output

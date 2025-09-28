@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 from torchvision.transforms import v2
+from script.configs.normalization import IMAGENET_MEAN, IMAGENET_STD
 
 from script.configs.config_factory import get_dataset_cfg
 import timm
@@ -166,7 +167,7 @@ def _imagenet_parts(resize_size: int = 224):
         v2.Resize((resize_size, resize_size), antialias=True),
         v2.ToDtype(torch.float32, scale=True),
     ]
-    norm = v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+    norm = v2.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
     return pre, norm
 
 

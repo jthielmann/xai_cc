@@ -11,6 +11,7 @@ else:
     import torchvision.transforms as T  # type: ignore
 
 from script.data_processing.transforms import build_transforms as _build_transforms
+from script.configs.normalization import IMAGENET_MEAN, IMAGENET_STD
 
 
 def get_train_transforms(image_size: int = 256, frozen_encoder: bool = False):
