@@ -21,6 +21,8 @@ from typing import Optional, cast, Any
 import re
 import numpy as np
 from typing import Dict, List
+from pathlib import Path
+from contextlib import contextmanager
 
 # Local application imports
 from script.model.lit_model import get_model
@@ -32,6 +34,22 @@ from lightning.pytorch import seed_everything
 import os, json, pandas as pd
 from collections import Counter
 from script.configs.normalization import resolve_norm
+
+
+@contextmanager
+def _temp_cwd(path: str | os.PathLike):
+    """Temporarily change the current working directory.
+
+    Used to redirect Lightning's lr_find temporary checkpoint ('.lr_find_*.ckpt')
+    into a dedicated dump folder.
+    """
+    old = os.getcwd()
+    os.makedirs(path, exist_ok=True)
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(old)
 
 def _validate_config_and_shapes(cfg, model, loader):
     # 1. Gene count matches model output
@@ -477,13 +495,17 @@ class TrainerPipeline:
         tuner = Tuner(trainer)
 
         attr = f"{key}_lr"
-        finder = tuner.lr_find(
-            model,
-            train_dataloaders=train_dl,
-            num_training=steps,
-            early_stop_threshold=early_stop,
-            attr_name=attr
-        )
+        # Redirect lr_find temporary checkpoint to ../dump (sibling of script/)
+        script_dir = Path(__file__).resolve().parents[1]  # .../script
+        dump_dir = script_dir.parent / "dump"
+        with _temp_cwd(dump_dir):
+            finder = tuner.lr_find(
+                model,
+                train_dataloaders=train_dl,
+                num_training=steps,
+                early_stop_threshold=early_stop,
+                attr_name=attr
+            )
         suggestion = finder.suggestion()
         if suggestion is None:
             raise ValueError(f"no learning rate found for {key}")

@@ -9,6 +9,8 @@ import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 from script.data_processing.process_csv import get_dino_csv
 from lightning.pytorch.tuner.tuning import Tuner
+from pathlib import Path
+from contextlib import contextmanager
 
 # Project-specific imports
 from script.data_processing.data_loader import get_dino_dataset
@@ -16,6 +18,16 @@ from lightly.transforms.dino_transform import DINOTransform
 from script.model.lit_dino import DINO
 
 from main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, read_config_parameter, get_sweep_parameter_names
+
+@contextmanager
+def _temp_cwd(path: str | os.PathLike):
+    old = os.getcwd()
+    os.makedirs(path, exist_ok=True)
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(old)
 
 
 def _train(cfg: dict, run: wandb.sdk.wandb_run.Run | None = None):
@@ -80,7 +92,11 @@ def _train(cfg: dict, run: wandb.sdk.wandb_run.Run | None = None):
         # Use fixed learning rate for debugging to avoid tuning time
         suggested_lr = 1e-4
     else:
-        lr_finder = tuner.lr_find(model, train_dataloaders=dataloader_train, num_training=300 if not debug else 30)
+        # Redirect lr_find temporary checkpoint to ../dump (sibling of script/)
+        script_dir = Path(__file__).resolve().parent  # .../script
+        dump_dir = script_dir.parent / "dump"
+        with _temp_cwd(dump_dir):
+            lr_finder = tuner.lr_find(model, train_dataloaders=dataloader_train, num_training=300 if not debug else 30)
         suggested_lr = lr_finder.suggestion()
         print(f"Suggested LR: {lr_finder.suggestion()}")
     model.update_lr(suggested_lr)
