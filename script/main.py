@@ -201,10 +201,24 @@ def _sweep_run():
         except StopIteration:
             pass
 
-    # Ensure out_path is stable across sweep runs under the project directory
-    model_dir = read_config_parameter(raw_cfg, "model_dir") if "model_dir" in raw_cfg or "model_dir" in raw_cfg.get("parameters", {}) else cfg.get("model_dir", "../models/")
+    # Ensure output roots are defined (move single-run behavior into sweep runs)
+    base_model_dir = None
+    if "model_dir" in raw_cfg or "model_dir" in raw_cfg.get("parameters", {}):
+        try:
+            base_model_dir = read_config_parameter(raw_cfg, "model_dir")
+        except Exception:
+            base_model_dir = None
+    if not base_model_dir:
+        base_model_dir = "../models/"
+
     project = cfg.get("project", "xai")
-    cfg["out_path"] = os.path.join(model_dir, project) if not model_dir.endswith(project) else model_dir
+    project_dir = os.path.join(base_model_dir, project)
+    os.makedirs(project_dir, exist_ok=True)
+    ensure_free_disk_space(project_dir)
+
+    # Align fields so downstream training has what it expects
+    cfg["model_dir"] = project_dir
+    cfg["sweep_dir"] = project_dir
 
     cfg = _prepare_cfg(cfg)
     TrainerPipeline(cfg, run=run).run(); run.finish()
@@ -218,9 +232,6 @@ def main():
     raw_cfg = parse_yaml_config(args.config)
     params = raw_cfg.get("parameters", {})
     is_sweep = any(isinstance(param, dict) and "values" in param for param in params.values())
-    val = params.get("model_dir", "../models/")
-    if not isinstance(val, dict): params["model_dir"] = {"value": str(val)}
-    params["model_dir"]["value"] = "../models/"
     if is_sweep:
         # Only include hyperparameters in the sweep, plus a config_name to locate the base config per run
         def _only_hyperparams(pdict: Dict[str, Any]) -> Dict[str, Any]:
@@ -287,6 +298,11 @@ def main():
             print(f"Initialized new sweep ID: {sweep_id}")
         wandb.agent(sweep_id, function=_sweep_run, project=project)
     else:
+        # Normalize model_dir for single runs
+        val = params.get("model_dir", "../models/")
+        if not isinstance(val, dict):
+            params["model_dir"] = {"value": str(val)}
+        params["model_dir"]["value"] = "../models/"
         cfg = {k: v for k, v in raw_cfg.items() if k != "parameters"}
         for k, p in params.items():
             if isinstance(p, dict) and "value" in p: cfg[k] = p["value"]
