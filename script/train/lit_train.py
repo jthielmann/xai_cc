@@ -32,9 +32,9 @@ from lightning.pytorch import seed_everything
 import os, json, pandas as pd
 from collections import Counter
 
-def _validate_config_and_shapes(cfg, model, data_module):
+def _validate_config_and_shapes(cfg, model, loader):
     # 1. Gene count matches model output
-    dummy_batch = next(iter(data_module.train_dataloader()))
+    dummy_batch = next(iter(loader))
     x, y = dummy_batch[:2]   # first two items are usually (img, expr)
     y_hat = model(x)
     if y_hat.shape[1] != len(cfg["genes"]):
@@ -138,8 +138,8 @@ def _log_dataset_info(cfg, out_dir, train=None, val=None, test=None):
     open(os.path.join(out_dir,"genes.txt"),"w").write("\n".join(cfg.get("genes",[])))
     open(os.path.join(out_dir,"dataset_meta.json"),"w").write(json.dumps(meta,indent=2))
 
-    log.info("[dataset]", meta)
-    if not manifest.empty: log.info("[splits]\n", manifest.head())
+    log.info("[dataset] %s", meta)
+    if not manifest.empty: log.info("[splits]\n%s", manifest.head())
 
 def _save_spatial_parquets(spatial_df: pd.DataFrame, genes: list[str], out_dir: str) -> None:
     base = os.path.join(out_dir, "spatial_parquet")
@@ -171,7 +171,7 @@ def _save_spatial_parquets(spatial_df: pd.DataFrame, genes: list[str], out_dir: 
 
 def _determine_device() -> str:
     if torch.cuda.is_available():
-        return "gpu"
+        return "cuda"
     if torch.backends.mps.is_available():
         return "mps"
     raise RuntimeError("No GPU or MPS device available. Aborting training.")
@@ -448,6 +448,8 @@ class TrainerPipeline:
         return max_stable_lr.item()
 
     def _report_mem(self, msg=""):
+        if not self.device == "cuda":
+            return
         log.info(f"{msg} — allocated: "
               f"{torch.cuda.memory_allocated() / 1e9:.2f} GB, "
               f"reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
@@ -643,7 +645,10 @@ class TrainerPipeline:
             data_module.setup("fit")
             train_loader = data_module.train_dataloader()
             val_loader = data_module.val_dataloader()
-            test_loader = data_module.test_dataloader()
+            if self.config.get("test_samples"):
+                test_loader = data_module.test_dataloader()
+            else:
+                test_loader = None
             _log_dataset_info(self.config, self.out_path,
                              train=train_loader, val=val_loader,
                              test=test_loader if self.config.get("test_samples") else None)
@@ -655,7 +660,7 @@ class TrainerPipeline:
                                    self.wandb_run if self.is_online and
                                    self.config.get("verify_log_frozen", False) else None)
             with torch.inference_mode():
-                _validate_config_and_shapes(self.config, model, data_module)
+                _validate_config_and_shapes(self.config, model, train_loader)
             # learning rate tuning
             self.config.setdefault("learning_rate", 1e-3) # init learning rate
 
@@ -665,7 +670,7 @@ class TrainerPipeline:
             # build lr dict from either tuning or fixed if provided
             lrs = self.tune_learning_rate(model, train_loader, fixed, use_lr_find)
 
-            log.info(f"Tuned learning rates: {lrs}")
+            log.info("Tuned learning rates: %s", lrs)
             model.update_lr(lrs)
             if self.is_online:
                 self.wandb_run.summary.update({"tuned_lr": lrs})
