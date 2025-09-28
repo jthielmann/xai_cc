@@ -25,9 +25,14 @@ def plot_data_hists(
     save_dir: str | Path | None = None,
     overlay_per_gene: bool = False,
 ):
-    genes = config["parameters"].get("genes", None)
-    if genes:
-        genes = genes.get("values")
+    # Accept either flattened configs (preferred) or legacy nested sweep-style
+    genes = config.get("genes", None)
+    if genes is None:
+        p_genes = config.get("parameters", {}).get("genes")
+        if isinstance(p_genes, dict):
+            genes = p_genes.get("values") or p_genes.get("value")
+        else:
+            genes = p_genes
     samples = config["train_samples"]
     data_dir = config["data_dir"]
     hist_bins = int(config.get("bins", 50))  # interpret as HISTOGRAM bins
@@ -66,10 +71,12 @@ def plot_data_hists(
     use_wandb = bool(config.get("log_to_wandb", False))
     run = None
     if use_wandb:
+        # sanitize config to avoid nested parameters/metric blocks in W&B overview
+        wb_config = {k: v for k, v in config.items() if k not in ("parameters", "metric", "method")}
         run = wandb.init(
             project=config.get("project", "histogram"),
             name=config.get("name", f"EDA-{dataset_name}"),
-            config=config,
+            config=wb_config,
             tags=["eda", f"dataset={dataset_name}", "histograms"],
         )
 

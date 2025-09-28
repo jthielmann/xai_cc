@@ -18,13 +18,15 @@ from script.model.lit_dino import DINO
 from main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, read_config_parameter, get_sweep_parameter_names
 
 
-def _train(cfg: dict):
-    # Initialise W&B run
-    run = wandb.init(
-        project=cfg.get("project", "dino"),
-        config=cfg,
-        mode="online" if cfg.get("log_to_wandb", False) else "disabled"
-    )
+def _train(cfg: dict, run: wandb.sdk.wandb_run.Run | None = None):
+    # Initialise W&B run with sanitized config (avoid nested parameters/metric)
+    if run is None:
+        wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
+        run = wandb.init(
+            project=cfg.get("project", "dino"),
+            config=wb_cfg,
+            mode="online" if cfg.get("log_to_wandb", False) else "disabled"
+        )
 
     # Create transforms
     transform = DINOTransform(
@@ -66,7 +68,11 @@ def _train(cfg: dict):
     dataloader_train = torch.utils.data.DataLoader(train_dataset, batch_size=cfg.get("batch_size"), shuffle=True, drop_last=True, num_workers=cfg.get("num_workers", 0))
     dataloader_val = torch.utils.data.DataLoader(val_dataset, batch_size=cfg.get("batch_size"), shuffle=False, drop_last=False, num_workers=cfg.get("num_workers", 0))
     accelerator = "gpu" if torch.cuda.is_available() or torch.backends.mps.is_available() else exit("No GPU available")
-    trainer = L.Trainer(devices=1, accelerator=accelerator, logger=WandbLogger(run.project))
+    trainer = L.Trainer(
+        devices=1,
+        accelerator=accelerator,
+        logger=WandbLogger(project=run.project, experiment=run)
+    )
     model = DINO(cfg)
     model.set_num_training_batches(len(dataloader_train))
     tuner = Tuner(trainer)
@@ -99,7 +105,7 @@ def _sweep_run():
     run = wandb.init()
     cfg = dict(run.config)
     ensure_free_disk_space(cfg.get("out_path", "."))
-    _train(cfg)
+    _train(cfg, run=run)
 
 
 def main():

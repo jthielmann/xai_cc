@@ -13,9 +13,13 @@ flat_params = {
 }
 
 ds_cfg = get_dataset_cfg(flat_params)
-cfg.update(ds_cfg)
+# Build a flattened config for W&B and plotting (avoid nested parameters/metric)
+flat_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
+flat_cfg.update(flat_params)
+flat_cfg.update(ds_cfg)
+
 out_paths = plot_data_hists(
-    config=cfg,
+    config=flat_cfg,
     save_dir="plots/hists/crc_base",
     overlay_per_gene=True
 )
