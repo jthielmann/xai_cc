@@ -1,5 +1,5 @@
-project: coad dino v uni
-name: coad dino v uni
+project: coad dino v uni 5
+name: dino vs uni coad
 method: grid
 metric:
   name: valid_loss
@@ -10,7 +10,7 @@ parameters:
   log_to_wandb:
     value: true
   debug:
-    value: true
+    value: false
   use_early_stopping:
     value: true
   generate_scatters:
