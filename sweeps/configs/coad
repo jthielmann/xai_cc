@@ -1,5 +1,5 @@
-project: redo2 dinov3_vits coad all genes
-name: dinov3_vits coad all genes
+project: coad dino v uni
+name: coad dino v uni
 method: grid
 metric:
   name: valid_loss
@@ -32,7 +32,7 @@ parameters:
 
   # Encoder
   encoder_type:
-    value: dinov3_vits16 #dinov3
+    values: [dinov3_vits16, uni]
   freeze_encoder:
     value: true
 
