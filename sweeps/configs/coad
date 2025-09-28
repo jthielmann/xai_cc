@@ -1,4 +1,4 @@
-project: coad dino v uni 5
+project: coad dino v uni more epochs
 name: dino vs uni coad
 method: grid
 metric:
