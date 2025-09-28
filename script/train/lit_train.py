@@ -75,12 +75,12 @@ def _verify_log_frozen(model, freeze_encoder, wandb_run=None):
         n = p.numel()
         mods[top] = (t + n, tr + (n if p.requires_grad else 0))
 
-    # print summary
+    # log.info summary
     pct = 100.0 * trainable_params / total_params if total_params else 0.0
-    print(f"[verify] freeze_encoder={freeze_encoder} | trainable {trainable_params}/{total_params} ({pct:.1f}%)")
+    log.info(f"[verify] freeze_encoder={freeze_encoder} | trainable {trainable_params}/{total_params} ({pct:.1f}%)")
     for m, (t, tr) in mods.items():
         mpct = 100.0 * tr / t if t else 0.0
-        print(f"  - {m:12s} {tr}/{t} ({mpct:.1f}%)")
+        log.info(f"  - {m:12s} {tr}/{t} ({mpct:.1f}%)")
 
     # wandb logging (single block)
     if wandb_run:
@@ -138,8 +138,8 @@ def _log_dataset_info(cfg, out_dir, train=None, val=None, test=None):
     open(os.path.join(out_dir,"genes.txt"),"w").write("\n".join(cfg.get("genes",[])))
     open(os.path.join(out_dir,"dataset_meta.json"),"w").write(json.dumps(meta,indent=2))
 
-    print("[dataset]", meta)
-    if not manifest.empty: print("[splits]\n", manifest.head())
+    log.info("[dataset]", meta)
+    if not manifest.empty: log.info("[splits]\n", manifest.head())
 
 def _save_spatial_parquets(spatial_df: pd.DataFrame, genes: list[str], out_dir: str) -> None:
     base = os.path.join(out_dir, "spatial_parquet")
@@ -402,7 +402,7 @@ class TrainerPipeline:
         if self.config.get("monitorLr", False):
             callbacks.append(LearningRateMonitor(logging_interval="step"))
         for cb in callbacks:
-            print(cb, type(cb))
+            log.info(cb, type(cb))
 
         accelerator = "auto"
         devices = self.config.get("devices", "auto")
@@ -448,7 +448,7 @@ class TrainerPipeline:
         return max_stable_lr.item()
 
     def _report_mem(self, msg=""):
-        print(f"{msg} — allocated: "
+        log.info(f"{msg} — allocated: "
               f"{torch.cuda.memory_allocated() / 1e9:.2f} GB, "
               f"reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
 
@@ -459,8 +459,7 @@ class TrainerPipeline:
             train_dl: torch.utils.data.DataLoader,
             steps: int = 100,
             early_stop: Optional[float] = None,
-            use_lr_find: bool = True,
-            suggestion_scale_factor: float = None
+            use_lr_find: bool = True
     ) -> float:
         tuner = Tuner(trainer)
 
@@ -476,14 +475,101 @@ class TrainerPipeline:
         if suggestion is None:
             raise ValueError(f"no learning rate found for {key}")
         if use_lr_find:
-            if suggestion_scale_factor:
-                suggestion *= suggestion_scale_factor
+            suggestion_scale_factor = self.config.get("suggestion_scale_factor", 1.0)
+            suggestion *= suggestion_scale_factor
             return suggestion
         max_lr = self._read_max_lr_from_finder(finder)
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         return max_lr + suggestion / 4
+
+    def _generate_spatial_plots(self, model):
+        # Build a spatial dataset (no dataloader: we want per-row tile paths)
+        use_test = self.config.get("test_samples", False)
+        spatial_ds = get_spatial_dataset(
+            data_dir=self.config["data_dir"],
+            genes=self.config["genes"],
+            samples=self.config["test_samples"] if use_test else self.config["val_samples"],
+            meta_data_dir=self.config.get('meta_data_dir', '/meta_data/')
+        )
+
+        # Choose device and eval mode
+        device = _determine_device()
+        model.eval()
+        model.to(device)
+
+        with torch.no_grad():
+            # map genes to output indices once
+            try:
+                gene_to_idx = {g: model.gene_to_idx[g] for g in self.config["genes"]}
+            except ValueError as e:
+                raise ValueError(f"gene not found in spatial_plots in run of TrainerPipeline: {e}")
+
+            for i in range(len(spatial_ds)):
+                # NOTE: STSpatialDataset.__getitem__ returns: img, target, x_t, y_t and maybe patient if return_patient=True
+                img_i, *_ = spatial_ds[i]
+
+                # Shape to (1, C, H, W) and send to device
+                if isinstance(img_i, np.ndarray):
+                    img_t = torch.from_numpy(img_i)
+                else:
+                    img_t = img_i
+                if img_t.dim() == 3:
+                    img_t = img_t.unsqueeze(0)
+                img_t = img_t.to(device)
+
+                out = model(img_t)
+                if isinstance(out, (list, tuple)):
+                    out = out[0]  # assume dim 0 is batch dim
+                out = torch.as_tensor(out)
+
+                # Make a 1D vector for the current tile's predictions
+                if out.dim() > 1:
+                    out_vec = out[0].detach().cpu().flatten().numpy()
+                else:
+                    out_vec = out.detach().cpu().flatten().numpy()
+
+                # Update all pred_{gene} columns for this tile
+                tile_path = spatial_ds.df.iloc[i]["tile"]
+                for g in self.config["genes"]:
+                    gi = gene_to_idx[g]
+                    if gi >= len(out_vec):
+                        raise ValueError(
+                            f"Model output size ({len(out_vec)}) smaller than index for gene {g} ({gi}).")
+                    pred_val = float(out_vec[gi])
+                    spatial_ds.add_result_for_tile(tile_path, pred_val, column=f"pred_{g}")
+
+        for gene in self.config["genes"]:
+            pred_col = f"pred_{gene}"
+
+            df = spatial_ds.df  # includes new prediction columns
+            if pred_col not in df.columns:
+                raise RuntimeError(f"Prediction column {pred_col!r} not found in spatial dataframe.")
+
+            # Patients loop
+            for patient, sub in df.groupby("patient"):
+                if sub.empty:
+                    raise ValueError(f"no data for patient {patient}")
+
+                x = sub["x"].to_numpy(dtype=float)
+                y = sub["y"].to_numpy(dtype=float)
+                y_label = sub[gene].to_numpy(dtype=float)  # labels always present
+                y_pred = sub[pred_col].to_numpy(dtype=float)  # already filled in the NEW block above
+
+                if x.size == 0:
+                    raise ValueError(f"no spatial data for patient {patient}")
+
+                # triptych == art of 3 images side by side
+                _plot_triptych_and_log(
+                    x, y, y_label, y_pred,
+                    patient=patient, gene=gene,
+                    out_path=self.out_path,
+                    is_online=self.is_online,
+                    wandb_run=self.wandb_run if self.is_online else None,
+                )
+        _save_spatial_parquets(spatial_ds.df, self.config["genes"], self.out_path)
+
 
     def tune_learning_rate(
             self,
@@ -553,140 +639,52 @@ class TrainerPipeline:
         seed_everything(42, workers=True)
         self._save_summary("started")
         data_module = get_data_module(self.config)
-        data_module.setup("fit")
-        train_loader = data_module.train_dataloader()
-        val_loader = data_module.val_dataloader()
-        test_loader = data_module.test_dataloader()
-        _log_dataset_info(self.config, self.out_path,
-                         train=train_loader, val=val_loader,
-                         test=test_loader if self.config.get("test_samples") else None)
-        self.config["out_path"] = self.out_path
-        model = get_model(self.config)
+        try:
+            data_module.setup("fit")
+            train_loader = data_module.train_dataloader()
+            val_loader = data_module.val_dataloader()
+            test_loader = data_module.test_dataloader()
+            _log_dataset_info(self.config, self.out_path,
+                             train=train_loader, val=val_loader,
+                             test=test_loader if self.config.get("test_samples") else None)
+            self.config["out_path"] = self.out_path
+            model = get_model(self.config)
 
-        # better save than sorry, also count and log trainable param
-        _verify_log_frozen(model, self.config.get("freeze_encoder", False),
-                               self.wandb_run if self.is_online else None)
+            # better save than sorry, also count and log trainable param
+            _verify_log_frozen(model, self.config.get("freeze_encoder", False),
+                                   self.wandb_run if self.is_online and
+                                   self.config.get("verify_log_frozen", False) else None)
+            with torch.inference_mode():
+                _validate_config_and_shapes(self.config, model, data_module)
+            # learning rate tuning
+            self.config.setdefault("learning_rate", 1e-3) # init learning rate
 
-        _validate_config_and_shapes(self.config, model, data_module)
-        # learning rate tuning
-        self.config.setdefault("learning_rate", 1e-3) # init learning rate
+            # store all results here
+            fixed = self.config.get("global_fix_learning_rate", -1)
+            use_lr_find = self.config.get("use_lr_find", False)
+            # build lr dict from either tuning or fixed if provided
+            lrs = self.tune_learning_rate(model, train_loader, fixed, use_lr_find)
 
-        # store all results here
-        fixed = self.config.get("global_fix_learning_rate", -1)
-        use_lr_find = self.config.get("use_lr_find", False)
-        if use_lr_find:
-            suggestion_scale_factor = self.config.get("suggestion_scale_factor", 1.0)
-        else:
-            suggestion_scale_factor = None
-        # build lr dict from either tuning or fixed if provided
-        lrs = self.tune_learning_rate(model, train_loader, fixed, use_lr_find)
+            log.info(f"Tuned learning rates: {lrs}")
+            model.update_lr(lrs)
+            if self.is_online:
+                self.wandb_run.summary.update({"tuned_lr": lrs})
 
-        print(f"Tuned learning rates: {lrs}")
-        model.update_lr(lrs)
-        if self.is_online:
-            self.wandb_run.log({"tuned_lr": lrs})
+            trainer = self._create_trainer()
+            trainer.fit(model, train_loader, val_loader)
 
-        trainer = self._create_trainer()
-        trainer.fit(model, train_loader, val_loader)
-
-        if self.config.get("test_samples"):
-            trainer.test(
-                model=model,
-                dataloaders=data_module.test_dataloader()
-            )
-
-        data_module.free_memory()
-        self._save_summary("finished")
-        log.info("Finished training")
+            if self.config.get("test_samples"):
+                trainer.test(
+                    model=model,
+                    dataloaders=test_loader
+                )
+        finally:
+            data_module.free_memory()
+            self._save_summary("finished")
+            log.info("Finished training")
 
         if self.config.get("spatial_plots", False):
-            # Build a spatial dataset (no dataloader: we want per-row tile paths)
-            use_test = self.config.get("test_samples", False)
-            spatial_ds = get_spatial_dataset(
-                data_dir=self.config["data_dir"],
-                genes=self.config["genes"],
-                samples=self.config["test_samples"] if use_test else self.config["val_samples"],
-                meta_data_dir=self.config.get('meta_data_dir', '/meta_data/')
-            )
-
-            # Choose device and eval mode
-            device = (
-                    self.config.get("device")
-                    or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-            )
-            model.eval()
-            model.to(device)
-
-            with torch.no_grad():
-                # map genes to output indices once
-                try:
-                    gene_to_idx = {g: spatial_ds.genes.index(g) for g in self.config["genes"]}
-                except ValueError as e:
-                    raise ValueError(f"gene not found in spatial_plots in run of TrainerPipeline: {e}")
-
-                for i in range(len(spatial_ds)):
-                    # NOTE: STSpatialDataset.__getitem__ returns: img, target, x_t, y_t and maybe patient if return_patient=True
-                    img_i, target_i, x_t_i, y_t_i = spatial_ds[i]
-
-                    # Shape to (1, C, H, W) and send to device
-                    if isinstance(img_i, np.ndarray):
-                        img_t = torch.from_numpy(img_i)
-                    else:
-                        img_t = img_i
-                    if img_t.dim() == 3:
-                        img_t = img_t.unsqueeze(0)
-                    img_t = img_t.to(device)
-
-                    out = model(img_t)
-                    if isinstance(out, (list, tuple)):
-                        out = out[0]  # assume dim 0 is batch dim
-                    out = torch.as_tensor(out)
-
-                    # Make a 1D vector for the current tile's predictions
-                    if out.dim() > 1:
-                        out_vec = out[0].detach().cpu().flatten().numpy()
-                    else:
-                        out_vec = out.detach().cpu().flatten().numpy()
-
-                    # Update all pred_{gene} columns for this tile
-                    tile_path = spatial_ds.df.iloc[i]["tile"]
-                    for g in self.config["genes"]:
-                        gi = gene_to_idx[g]
-                        if gi >= len(out_vec):
-                            raise ValueError(
-                                f"Model output size ({len(out_vec)}) smaller than index for gene {g} ({gi}).")
-                        pred_val = float(out_vec[gi])
-                        spatial_ds.add_result_for_tile(tile_path, pred_val, column=f"pred_{g}")
-
-            for gene in self.config["genes"]:
-                pred_col = f"pred_{gene}"
-
-                df = spatial_ds.df  # includes new prediction columns
-                if pred_col not in df.columns:
-                    raise RuntimeError(f"Prediction column {pred_col!r} not found in spatial dataframe.")
-
-                # Patients loop
-                for patient, sub in df.groupby("patient"):
-                    if sub.empty:
-                        raise ValueError(f"no data for patient {patient}")
-
-                    x = sub["x"].to_numpy(dtype=float)
-                    y = sub["y"].to_numpy(dtype=float)
-                    y_label = sub[gene].to_numpy(dtype=float)  # labels always present
-                    y_pred = sub[pred_col].to_numpy(dtype=float)  # already filled in the NEW block above
-
-                    if x.size == 0:
-                        raise ValueError(f"no spatial data for patient {patient}")
-
-                    # triptych == art of 3 images side by side
-                    _plot_triptych_and_log(
-                        x, y, y_label, y_pred,
-                        patient=patient, gene=gene,
-                        out_path=self.out_path,
-                        is_online=self.is_online,
-                        wandb_run=self.wandb_run if self.is_online else None,
-                    )
-            _save_spatial_parquets(spatial_ds, self.config["genes"], self.out_path)
+            self._generate_spatial_plots(model)
 
     def _save_summary(self, status):
         serializable_cfg = {k: v for k, v in self.config.items() \
