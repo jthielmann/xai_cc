@@ -146,9 +146,9 @@ def _sweep_run():
         # search common config roots
         search_roots = [
             ".",
-            "sweeps/configs",
-            "sweeps/configs/sweep",
-            "sweeps/configs/single",
+            "../sweeps/configs",
+            "../sweeps/configs/sweep",
+            "../sweeps/configs/single",
         ]
         for root in search_roots:
             cand = os.path.join(root, name)
