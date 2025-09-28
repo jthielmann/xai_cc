@@ -173,7 +173,7 @@ class STDataModule(L.LightningDataModule):
             batch_size=self.cfg['batch_size'],
             shuffle=True,
             num_workers=self.cfg.get('num_workers', 0),
-            pin_memory=False
+            pin_memory=torch.cuda.is_available()
         )
 
     def val_dataloader(self):
@@ -182,7 +182,7 @@ class STDataModule(L.LightningDataModule):
             batch_size=self.cfg['batch_size'],
             shuffle=False,
             num_workers=self.cfg.get('num_workers', 0),
-            pin_memory=False
+            pin_memory=torch.cuda.is_available()
         )
 
     def test_dataloader(self):
@@ -191,7 +191,7 @@ class STDataModule(L.LightningDataModule):
             batch_size=self.cfg['batch_size'],
             shuffle=False,
             num_workers=self.cfg.get('num_workers', 0),
-            pin_memory=False
+            pin_memory=torch.cuda.is_available()
         ) if self.test_dataset else None
 
     def free_memory(self):

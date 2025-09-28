@@ -37,7 +37,9 @@ def seed_everything(seed=DEFAULT_RANDOM_SEED):
     seed_torch(seed)
 
 
-seed_everything(seed=DEFAULT_RANDOM_SEED)
+# Avoid seeding at import time unless explicitly requested via env var
+if os.environ.get("ST_SEED_DATA_LOADER_ON_IMPORT", "0") == "1":
+    seed_everything(seed=DEFAULT_RANDOM_SEED)
 
 
 def log_training(date, training_log):
@@ -410,7 +412,7 @@ def get_dataset_for_umap(data_dir, genes, transforms=None, samples=None, meta_da
     if samples is None:
         samples = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
     gene_data_df = get_base_dataset(data_dir, genes, samples, meta_data_dir=meta_data_dir, max_len=max_len, bins=bins)
-    st_dataset = STDataset_umap(gene_data_df, image_transforms=transforms, inputs_only=only_inputs)
+    st_dataset = STDatasetUMAP(gene_data_df, image_transforms=transforms, inputs_only=only_inputs)
     return st_dataset
 
 

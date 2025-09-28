@@ -1,5 +1,12 @@
+import importlib
 import torch
-import torchvision.transforms.v2 as T
+
+# Support torchvision v2 if available; otherwise fall back to v1 API.
+v2_ready = importlib.util.find_spec("torchvision.transforms.v2") is not None
+if v2_ready:
+    from torchvision.transforms import v2 as T
+else:
+    import torchvision.transforms as T  # type: ignore
 
 
 def patch_coords(image_size, patch_width, patch_height)-> (int,int):
@@ -11,10 +18,9 @@ def patch_coords(image_size, patch_width, patch_height)-> (int,int):
 
 
 # to be used as a transform in a torchvision.transforms.Compose
-class Occlude(T.Transform):
+class Occlude:
     def __init__(self, patch_size_x, patch_size_y, patch_vary_width=0, patch_min_size=10, patch_max_size=100,
-                 use_batch=True):
-        super().__init__()
+                 use_batch=False):
         self.patch_size_x = patch_size_x
         self.patch_size_y = patch_size_y
         self.patch_vary_width = patch_vary_width
@@ -40,3 +46,9 @@ class Occlude(T.Transform):
             sample[:, x:x + patch_size_x, y:y + patch_size_y] = 0
 
         return sample
+
+    def __repr__(self) -> str:
+        return (
+            f"Occlude(psx={self.patch_size_x}, psy={self.patch_size_y}, vary={self.patch_vary_width}, "
+            f"min={self.patch_min_size}, max={self.patch_max_size}, use_batch={self.use_batch})"
+        )

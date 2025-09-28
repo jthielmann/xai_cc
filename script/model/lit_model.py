@@ -163,6 +163,25 @@ class GeneExpressionRegressor(L.LightningModule):
         self.best_r: list[float] = [float("nan")] * len(self.genes)
         self.last_r: list[float] = [float("nan")] * len(self.genes)
 
+    def train(self, mode: bool = True):
+        """Ensure frozen encoders do not update BatchNorm running stats.
+
+        When `freeze_encoder` is True, keep the encoder in eval mode even
+        while the overall module is in train mode.
+        """
+        super().train(mode)
+        if getattr(self, "freeze_encoder", False):
+            # keep encoder/BNS in eval to prevent running-stat drift
+            try:
+                self.encoder.eval()
+                for m in self.encoder.modules():
+                    if isinstance(m, nn.modules.batchnorm._BatchNorm):
+                        m.eval()
+            except Exception:
+                # best-effort; don't crash training if encoder lacks BN
+                pass
+        return self
+
 
     def configure_optimizers(self):
         groups = []

@@ -494,6 +494,38 @@ class TrainerPipeline:
             torch.cuda.empty_cache()
         return max_lr + suggestion / 4
 
+    def _log_batch_stats(self, loader: torch.utils.data.DataLoader, split: str) -> None:
+        """Log min/max/mean/std (global and per-channel) for a single batch after transforms.
+
+        Best-effort: swallow exceptions so training is not blocked if a loader is empty or custom.
+        """
+        if not loader:
+            return
+        try:
+            batch = next(iter(loader))
+            x = batch[0] if isinstance(batch, (list, tuple)) else batch
+            if not torch.is_tensor(x):
+                return
+            x = x.detach().float()
+            shape = tuple(x.shape)
+            gmin = float(x.min())
+            gmax = float(x.max())
+            gmean = float(x.mean())
+            gstd = float(x.std(unbiased=False))
+            log.info(f"[stats] {split}: shape={shape} dtype={x.dtype} min={gmin:.4f} max={gmax:.4f} mean={gmean:.4f} std={gstd:.4f}")
+            if x.dim() == 4:  # (B,C,H,W)
+                ch_mean = x.mean(dim=(0, 2, 3))
+                ch_std  = x.std(dim=(0, 2, 3), unbiased=False)
+                log.info(
+                    f"[stats] {split}: per_channel_mean={[round(float(m),4) for m in ch_mean]} "
+                    f"per_channel_std={[round(float(s),4) for s in ch_std]}"
+                )
+        except Exception as e:
+            try:
+                log.debug(f"[stats] Unable to log {split} batch stats: {e}")
+            except Exception:
+                pass
+
     def _generate_spatial_plots(self, model):
         # Build a spatial dataset (no dataloader: we want per-row tile paths)
         use_test = self.config.get("test_samples", False)
@@ -657,6 +689,13 @@ class TrainerPipeline:
                 test_loader = data_module.test_dataloader()
             else:
                 test_loader = None
+            # Log batch stats after transforms for sanity (min/max/mean/std)
+            if self.config.get("log_batch_stats", True):
+                self._log_batch_stats(train_loader, "train")
+                if val_loader:
+                    self._log_batch_stats(val_loader, "val")
+                if test_loader:
+                    self._log_batch_stats(test_loader, "test")
             _log_dataset_info(self.config, self.out_path,
                              train=train_loader, val=val_loader,
                              test=test_loader if self.config.get("test_samples") else None)

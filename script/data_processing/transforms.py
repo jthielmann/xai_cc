@@ -1,5 +1,5 @@
 import importlib
-from typing import Dict
+from typing import Dict, List
 
 import torch
 
@@ -17,18 +17,12 @@ from script.data_processing.custom_transforms import Occlude
 def _assert_single_normalize(seq) -> None:
     """Best-effort guard: ensure exactly one Normalize op in a composed pipeline."""
     try:
-        # v2 Compose exposes .transforms, old Compose also does
         ops = getattr(seq, "transforms", None) or []
         n = sum(1 for t in ops if isinstance(t, T.Normalize))
         assert n == 1, f"Expected exactly one Normalize, found {n}"
     except Exception:
         # Non-fatal: only guard in common cases
         pass
-
-
-from typing import Dict, List
-import torch
-import torchvision.transforms.v2 as T
 
 # Assumes your Option-A version:
 # get_encoder_transforms(encoder_type, resize_size=224, extra=None, place="pre_norm")
@@ -58,11 +52,11 @@ def build_transforms(cfg: Dict) -> Dict[str, T.Compose]:
       rrc_scale: tuple (default (0.75, 1.0))
     """
     encoder_type = cfg["encoder_type"]
-    image_size   = cfg["image_size"]
+    image_size   = int(cfg.get("image_size", 256))
     frozen       = cfg["freeze_encoder"]
 
     # --- TRAIN EXTRAS (inserted pre-normalization) ---
-    train_extra: List[T.Transform] = []
+    train_extra: List = []
 
     # Geometry
     if cfg.get("hflip", True):
@@ -121,6 +115,10 @@ def build_transforms(cfg: Dict) -> Dict[str, T.Compose]:
         place="pre_norm",
     )
 
-    return {"train": train_tf, "eval": eval_tf}
+    # Optional guard: catch double-normalization mistakes in debug runs
+    if cfg.get("debug", False):
+        _assert_single_normalize(train_tf)
+        _assert_single_normalize(eval_tf)
 
+    return {"train": train_tf, "eval": eval_tf}
 

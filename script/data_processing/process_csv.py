@@ -73,7 +73,7 @@ def generate_results_patient(model, device, data_dir, patient, genes, filepath, 
     print("generating results for patient", patient)
     if dataset is None:
         dataset = get_dataset(data_dir, genes, transform, [patient], max_len=max_len)
-    loader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=0, pin_memory=False)
+    loader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=0, pin_memory=torch.cuda.is_available())
 
     columns = []
 

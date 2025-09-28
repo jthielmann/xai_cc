@@ -37,10 +37,11 @@ def resolve_unique_model_file(
     t = (encoder_type or "").strip().lower()
 
     if t in DINOv3_FILEMAP:
-        path = encoders_dir + "/" + DINOv3_FILEMAP[t]
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Resolved '{t}' to '{path.name}', but it does not exist in {encoders_dir}.")
-        return Path(path)
+        base = Path(encoders_dir)
+        path = base / DINOv3_FILEMAP[t]
+        if not path.exists():
+            raise FileNotFoundError(f"Resolved '{t}' to '{path.name}', but it does not exist in {base}.")
+        return path
 
     for key, value in DINOv3_FILEMAP.items():
         if key in encoder_type:
