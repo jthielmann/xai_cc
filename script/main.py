@@ -129,14 +129,84 @@ def _train(cfg: Dict[str, Any]) -> None:
 
 def _sweep_run():
     run = wandb.init()
-    # In some W&B versions, sweep metadata can appear in run.config; drop it from the cfg we pass around
-    cfg_run = {k: v for k, v in dict(run.config).items() if k not in ("parameters", "metric", "method")}
-    chunks = cfg_run.get("gene_chunks", None)
-    if chunks:
-        chosen = cfg_run["genes"]
-        idx = next(i for i, ch in enumerate(chunks) if ch == chosen)
-        run.config.update({"genes_id": str(idx)}, allow_val_change=True)
-    cfg = _prepare_cfg(cfg_run)
+    # Extract hyperparameters chosen by the sweep plus our config name
+    rcfg = dict(run.config)
+
+    # Resolve base config from the provided config name
+    config_name = rcfg.get("config_name")
+    if not config_name:
+        raise RuntimeError("Sweep run missing 'config_name' in parameters")
+
+    # Locate the config by name or path
+    def _resolve_config_path(name: str) -> str:
+        if os.path.isabs(name) and os.path.isfile(name):
+            return name
+        if os.path.isfile(name):
+            return name
+        # search common config roots
+        search_roots = [
+            ".",
+            "sweeps/configs",
+            "sweeps/configs/sweep",
+            "sweeps/configs/single",
+        ]
+        for root in search_roots:
+            cand = os.path.join(root, name)
+            if os.path.isfile(cand):
+                return cand
+        # fallback: recursive search under sweeps/configs
+        for root, _dirs, files in os.walk("sweeps/configs"):
+            if os.path.basename(name) in files:
+                return os.path.join(root, os.path.basename(name))
+        raise FileNotFoundError(f"Could not resolve config_name '{name}' to a file path")
+
+    base_cfg_path = _resolve_config_path(config_name)
+    raw_cfg = parse_yaml_config(base_cfg_path)
+
+    # Start from base config (top-level keys except 'parameters')
+    cfg = {k: v for k, v in raw_cfg.items() if k != "parameters"}
+
+    # Overlay fixed parameters from base config
+    for k, p in raw_cfg.get("parameters", {}).items():
+        if isinstance(p, dict) and "value" in p:
+            cfg[k] = p["value"]
+
+    # Overlay chosen hyperparameters from the sweep run
+    # Exclude W&B-internal keys and our helper keys
+    exclude = {"parameters", "metric", "method", "_wandb", "config_name"}
+    for k, v in rcfg.items():
+        if k not in exclude:
+            cfg[k] = v
+
+    # Recompute gene chunks from the resolved config so we can log genes_id deterministically
+    # Build a temporary cfg to infer gene list without forcing a previously chosen chunk
+    tmp_cfg = dict(cfg)
+    chosen_genes = rcfg.get("genes")
+    if chosen_genes is not None:
+        # prevent short-circuit in _prepare_gene_list
+        tmp_cfg.pop("genes", None)
+    tmp_cfg.update(get_dataset_cfg(tmp_cfg))
+    try:
+        gene_chunks = _prepare_gene_list(tmp_cfg)
+    except Exception:
+        gene_chunks = None
+
+    if gene_chunks and chosen_genes is not None:
+        # normalize chunks to list-of-lists
+        if isinstance(gene_chunks, list) and gene_chunks and isinstance(gene_chunks[0], str):
+            gene_chunks = [gene_chunks]
+        try:
+            idx = next(i for i, ch in enumerate(gene_chunks) if ch == chosen_genes)
+            run.config.update({"genes_id": str(idx)}, allow_val_change=True)
+        except StopIteration:
+            pass
+
+    # Ensure out_path is stable across sweep runs under the project directory
+    model_dir = read_config_parameter(raw_cfg, "model_dir") if "model_dir" in raw_cfg or "model_dir" in raw_cfg.get("parameters", {}) else cfg.get("model_dir", "../models/")
+    project = cfg.get("project", "xai")
+    cfg["out_path"] = os.path.join(model_dir, project) if not model_dir.endswith(project) else model_dir
+
+    cfg = _prepare_cfg(cfg)
     TrainerPipeline(cfg, run=run).run(); run.finish()
 
 def log_runtime_banner():
@@ -152,19 +222,34 @@ def main():
     if not isinstance(val, dict): params["model_dir"] = {"value": str(val)}
     params["model_dir"]["value"] = "../models/"
     if is_sweep:
+        # Only include hyperparameters in the sweep, plus a config_name to locate the base config per run
+        def _only_hyperparams(pdict: Dict[str, Any]) -> Dict[str, Any]:
+            out: Dict[str, Any] = {}
+            for k, v in pdict.items():
+                if isinstance(v, dict) and ("values" in v or "distribution" in v):
+                    out[k] = v
+            return out
+
+        hyper_params = _only_hyperparams(read_config_parameter(raw_cfg, "parameters"))
+
+        # Add config name so each run can load the base config for fixed parameters
+        config_name = os.path.basename(args.config)
+        hyper_params["config_name"] = {"value": config_name}
+
         sweep_config = {
             "name": read_config_parameter(raw_cfg, "name") if not read_config_parameter(raw_cfg, "name") else "debug_" + random.randbytes(4).hex(),
             "method": read_config_parameter(raw_cfg, "method"),
             "metric": read_config_parameter(raw_cfg, "metric"),
-            "parameters": read_config_parameter(raw_cfg, "parameters"),
+            "parameters": hyper_params,
             "project": read_config_parameter(raw_cfg, "project"),
             "description": " ".join(get_sweep_parameter_names(raw_cfg)),
         }
         project = sweep_config["project"] if not read_config_parameter(raw_cfg,"debug") else "_debug_" + random.randbytes(4).hex()
-        sweep_dir = sweep_config["parameters"]["model_dir"]["value"] + project
+        # Determine model_dir from the base config (not from parameters)
+        model_dir = read_config_parameter(raw_cfg, "model_dir") if "model_dir" in raw_cfg or "model_dir" in raw_cfg.get("parameters", {}) else "../models/"
+        sweep_dir = os.path.join(model_dir, project)
         if not os.path.exists(sweep_dir): os.makedirs(sweep_dir, exist_ok=True)
         ensure_free_disk_space(sweep_dir)
-        sweep_config["parameters"]["sweep_dir"] = {"value": sweep_dir}
         print(f"Project: {project}")
         sweep_id_dir = os.path.join("..", "wandb_sweep_ids", project, sweep_config["name"])
         os.makedirs(sweep_id_dir, exist_ok=True)
@@ -175,36 +260,24 @@ def main():
         else:
             # start from raw_cfg to get non-parameter fields like data_dir, filenames, etc.
             tmp_cfg = {k: v for k, v in raw_cfg.items() if k != "parameters"}
-            # overlay parameter values (resolve {"value": ...} into plain values)
-            for k, v in sweep_config["parameters"].items():
-                tmp_cfg[k] = v["value"] if isinstance(v, dict) and "value" in v else v
+            # overlay fixed parameter values from the raw config
+            for k, v in raw_cfg.get("parameters", {}).items():
+                if isinstance(v, dict) and "value" in v:
+                    tmp_cfg[k] = v["value"]
             tmp_cfg.update(get_dataset_cfg(tmp_cfg))
             gene_chunks = _prepare_gene_list(tmp_cfg)  # flat list or list-of-lists
             if gene_chunks: # is None if specific gene list was provided in config, e.g. not chunking all genes
-            # normalize to list-of-lists so the sweep can iterate values
+                # normalize to list-of-lists so the sweep can iterate values
                 if isinstance(gene_chunks[0], str):
                     gene_chunks = [gene_chunks]
-
-                # inject as sweep param
+                # inject as sweep param (hyperparameter)
                 sweep_config["parameters"]["genes"] = {"values": gene_chunks}
-
-                sweep_config["parameters"]["gene_chunks"] = {"value": gene_chunks}
             else:
                 g = tmp_cfg["genes"]
                 sweep_config["parameters"]["genes"] = (
                     {"values": g} if g and isinstance(g[0], list) else {"values": [g]}
                 )
-
-            swept_names = [
-                k for k, v in sweep_config["parameters"].items()
-                if isinstance(v, dict) and ("values" in v or "distribution" in v)
-            ]
-            swept_names.append("genes_id")
-            if "genes" in swept_names:
-                swept_names.remove("genes")
-            sweep_config["parameters"]["sweep_parameter_names"] = {"value": swept_names}
-
-            # prevent double splitting in runs
+            # prevent double splitting within the runner; we'll recompute chunks per run
             sweep_config["parameters"].pop("split_genes_by", None)
             sweep_config["method"] = sweep_config.get("method") or "grid"
 
