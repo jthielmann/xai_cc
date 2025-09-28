@@ -174,6 +174,8 @@ def _sweep_run():
     # Name the run based on chosen hyperparameters (ignore provided config name)
     try:
         sweep_param_names = get_sweep_parameter_names(raw_cfg)
+        # expose names to downstream so TrainerPipeline can detect sweep context
+        run.config.update({"sweep_parameter_names": sweep_param_names}, allow_val_change=True)
         run_name = make_run_name_from_config(rcfg, sweep_param_names)
         run.name = run_name
         # also surface it in config for filtering if desired

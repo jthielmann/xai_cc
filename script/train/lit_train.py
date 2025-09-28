@@ -26,6 +26,7 @@ from contextlib import contextmanager
 
 # Local application imports
 from script.model.lit_model import get_model
+from script.main_utils import make_run_name_from_config
 from script.data_processing.lit_STDataModule import get_data_module
 from script.data_processing.data_loader import get_spatial_dataset
 # Prepare a module logger (configuration should be done in entry-point)
@@ -305,27 +306,9 @@ class TrainerPipeline:
         else: # online logging to wandb
             self.project   = self.wandb_run.project
             if self.is_sweep:
-                abbr = {
-                    "learning_rate": "lr",
-                    "batch_size": "bs",
-                    "dropout_rate": "dr",
-                    "loss_fn_switch": "loss",
-                    "encoder_type": "encdr",
-                    "middle_layer_features": "mfeatures",
-                    "gene_data_filename": "file",
-                    "freeze_encoder": "f_encdr",
-                    "one_linear_out_layer": "1linLr",
-                    "use_leaky_relu": "lkReLu",
-                    "use_early_stopping": "eStop"
-                }
-
-                parts = []
-                for k in self.wandb_run.config.sweep_parameter_names:
-                    short = abbr.get(k, k)
-                    val = self.config.get(k)
-                    parts.append(f"{short}={val}")
-
-                name = ", ".join(parts)
+                # Build compact name from sweep hyperparameters
+                param_names = list(getattr(self.wandb_run.config, "sweep_parameter_names", []))
+                name = make_run_name_from_config(self.config, param_names).replace("-", ", ")
             else:
                 name = self.config["project"] + " " + self.config["name"]
             gid = self.config.get("genes_id")
