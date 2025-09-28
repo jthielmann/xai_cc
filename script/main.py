@@ -257,6 +257,14 @@ def _sweep_run():
     cfg["model_dir"] = project_dir
     cfg["sweep_dir"] = project_dir
 
+    # Proactively surface resolved config at sweep-run start so W&B columns
+    # are populated immediately (not only after training begins).
+    try:
+        wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
+        run.config.update(wb_cfg, allow_val_change=True)
+    except Exception:
+        pass
+
     cfg = _prepare_cfg(cfg)
     TrainerPipeline(cfg, run=run).run(); run.finish()
 
