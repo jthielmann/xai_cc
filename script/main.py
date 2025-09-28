@@ -129,12 +129,14 @@ def _train(cfg: Dict[str, Any]) -> None:
 
 def _sweep_run():
     run = wandb.init()
-    chunks = run.config.get("gene_chunks", None)
+    # In some W&B versions, sweep metadata can appear in run.config; drop it from the cfg we pass around
+    cfg_run = {k: v for k, v in dict(run.config).items() if k not in ("parameters", "metric", "method")}
+    chunks = cfg_run.get("gene_chunks", None)
     if chunks:
-        chosen = run.config["genes"]
+        chosen = cfg_run["genes"]
         idx = next(i for i, ch in enumerate(chunks) if ch == chosen)
         run.config.update({"genes_id": str(idx)}, allow_val_change=True)
-    cfg = _prepare_cfg(dict(run.config))
+    cfg = _prepare_cfg(cfg_run)
     TrainerPipeline(cfg, run=run).run(); run.finish()
 
 def log_runtime_banner():

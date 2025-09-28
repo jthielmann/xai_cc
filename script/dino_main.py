@@ -103,7 +103,8 @@ def _train(cfg: dict, run: wandb.sdk.wandb_run.Run | None = None):
 
 def _sweep_run():
     run = wandb.init()
-    cfg = dict(run.config)
+    # drop sweep metadata keys from the cfg we pass into training
+    cfg = {k: v for k, v in dict(run.config).items() if k not in ("parameters", "metric", "method")}
     ensure_free_disk_space(cfg.get("out_path", "."))
     _train(cfg, run=run)
 

@@ -315,9 +315,12 @@ class TrainerPipeline:
                 name = f"{name}, genes_id={gid}"
             self.wandb_run.name = name
             self.wandb_run.notes = f"Training {self.wandb_run.name} on {self.wandb_run.project}"
+            # Reuse the existing W&B run created in the entrypoint (sweeps or single runs)
+            # to avoid spawning a second run with its own config.
             self.logger = WandbLogger(
                 project=self.wandb_run.project,
-                name=name
+                name=name,
+                experiment=self.wandb_run,
             )
 
 
