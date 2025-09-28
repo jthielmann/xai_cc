@@ -333,7 +333,7 @@ class TrainerPipeline:
 
         self.device  = _determine_device()
         self.out_path = self._prepare_output_dir()
-        # Log normalization choice (encoder-only policy)
+        # Normalize: capture stats without logging panels to W&B
         try:
             stats = resolve_norm(self.config.get("encoder_type", ""))
             norm_meta = {
@@ -342,16 +342,14 @@ class TrainerPipeline:
                 "mean": list(stats.mean),
                 "std": list(stats.std),
             }
+            # expose mean/std in config so results CSV can include them (cfg_normalize_mean/std)
+            self.config["normalize_mean"] = norm_meta["mean"]
+            self.config["normalize_std"] = norm_meta["std"]
+            # still save to run folder for traceability
             os.makedirs(self.out_path, exist_ok=True)
             with open(os.path.join(self.out_path, "normalization.json"), "w") as f:
                 json.dump(norm_meta, f, indent=2)
-            if self.is_online and self.wandb_run:
-                self.wandb_run.log({
-                    "normalize/mode": norm_meta["mode"],
-                    "normalize/mean": norm_meta["mean"],
-                    "normalize/std": norm_meta["std"],
-                    "normalize/encoder_type": norm_meta["encoder_type"],
-                })
+            # intentionally do NOT log normalize/* to wandb
         except Exception:
             pass
 
