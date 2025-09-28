@@ -116,7 +116,9 @@ def _get_active_chunk_idx(cfg: Dict[str, Any], chunk: Optional[List[str]] = None
 
 
 def _train(cfg: Dict[str, Any]) -> None:
-    run = wandb.init(project=cfg.get("project","xai"), config=cfg) if cfg.get("log_to_wandb", False) else None
+    # Sanitize config for W&B: avoid nested sweep keys showing as empty columns
+    wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
+    run = wandb.init(project=cfg.get("project","xai"), config=wb_cfg) if cfg.get("log_to_wandb", False) else None
     cfg = _prepare_cfg(dict(run.config) if run else cfg)
 
     if cfg.get("genes") is None:
