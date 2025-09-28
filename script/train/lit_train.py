@@ -322,6 +322,15 @@ class TrainerPipeline:
 
 
 
+        # Ensure a project root (sweep root) exists for project-specific outputs
+        try:
+            if not self.config.get("sweep_dir"):
+                proj = self.config.get("project", "project")
+                self.config["sweep_dir"] = os.path.join(self.config["model_dir"], proj)
+            os.makedirs(self.config["sweep_dir"], exist_ok=True)
+        except Exception:
+            pass
+
         self.device  = _determine_device()
         self.out_path = self._prepare_output_dir()
         # Log normalization choice (encoder-only policy)
