@@ -4,7 +4,15 @@ from typing import Dict, Any, List, Union, Optional
 sys.path.insert(0, '..')
 from script.configs.dataset_config import get_dataset_cfg
 from script.train.lit_train import TrainerPipeline
-from main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, read_config_parameter, get_sweep_parameter_names
+from main_utils import (
+    ensure_free_disk_space,
+    parse_args,
+    parse_yaml_config,
+    read_config_parameter,
+    get_sweep_parameter_names,
+    make_run_name_from_config,
+    make_sweep_name_from_space,
+)
 
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     cfg = dict(cfg); cfg.update(get_dataset_cfg(cfg))
@@ -163,6 +171,16 @@ def _sweep_run():
     base_cfg_path = _resolve_config_path(config_name)
     raw_cfg = parse_yaml_config(base_cfg_path)
 
+    # Name the run based on chosen hyperparameters (ignore provided config name)
+    try:
+        sweep_param_names = get_sweep_parameter_names(raw_cfg)
+        run_name = make_run_name_from_config(rcfg, sweep_param_names)
+        run.name = run_name
+        # also surface it in config for filtering if desired
+        run.config.update({"auto_run_name": run_name}, allow_val_change=True)
+    except Exception:
+        pass
+
     # Start from base config (top-level keys except 'parameters')
     cfg = {k: v for k, v in raw_cfg.items() if k != "parameters"}
 
@@ -191,7 +209,24 @@ def _sweep_run():
     except Exception:
         gene_chunks = None
 
-    if gene_chunks and chosen_genes is not None:
+    # Only log genes_id if the original config requested splitting by chunks
+    def _had_split_genes(cfg_dict: Dict[str, Any]) -> bool:
+        # check top-level
+        if "split_genes_by" in cfg_dict and cfg_dict["split_genes_by"] is not None:
+            try:
+                return int(cfg_dict["split_genes_by"]) > 0
+            except Exception:
+                return False
+        # check parameters.value
+        p = cfg_dict.get("parameters", {}).get("split_genes_by")
+        if isinstance(p, dict) and "value" in p and p["value"] is not None:
+            try:
+                return int(p["value"]) > 0
+            except Exception:
+                return False
+        return False
+
+    if gene_chunks and chosen_genes is not None and _had_split_genes(raw_cfg):
         # normalize chunks to list-of-lists
         if isinstance(gene_chunks, list) and gene_chunks and isinstance(gene_chunks[0], str):
             gene_chunks = [gene_chunks]
@@ -248,14 +283,19 @@ def main():
         hyper_params["config_name"] = {"value": config_name}
 
         sweep_config = {
-            "name": read_config_parameter(raw_cfg, "name") if not read_config_parameter(raw_cfg, "name") else "debug_" + random.randbytes(4).hex(),
+            # Ignore config 'name'; build from hyperparameter space
+            "name": make_sweep_name_from_space(raw_cfg),
             "method": read_config_parameter(raw_cfg, "method"),
             "metric": read_config_parameter(raw_cfg, "metric"),
             "parameters": hyper_params,
-            "project": read_config_parameter(raw_cfg, "project"),
-            "description": " ".join(get_sweep_parameter_names(raw_cfg)),
+            # Avoid adding project/description into the sweep config so they don't leak into run.config
         }
-        project = sweep_config["project"] if not read_config_parameter(raw_cfg,"debug") else "_debug_" + random.randbytes(4).hex()
+        # carry project separately for wandb.sweep(..., project=project)
+        # if project isn't in the raw config parameters or top-level, default
+        try:
+            project = read_config_parameter(raw_cfg, "project") if not read_config_parameter(raw_cfg, "debug") else "_debug_" + random.randbytes(4).hex()
+        except Exception:
+            project = "xai"
         # Determine model_dir from the base config (not from parameters)
         model_dir = read_config_parameter(raw_cfg, "model_dir") if "model_dir" in raw_cfg or "model_dir" in raw_cfg.get("parameters", {}) else "../models/"
         sweep_dir = os.path.join(model_dir, project)

@@ -140,11 +140,10 @@ def main():
             "method": read_config_parameter(raw_cfg, "method"),
             "metric": read_config_parameter(raw_cfg, "metric"),
             "parameters": read_config_parameter(raw_cfg, "parameters"),
-            "project": read_config_parameter(raw_cfg, "project"),
-            "description": " ".join(get_sweep_parameter_names(raw_cfg))
+            # Keep sweep metadata minimal; avoid 'project'/'description' in dict to reduce leakage into run.config
         }
         # Determine project and sweep directory
-        project = sweep_config["project"] if not read_config_parameter(raw_cfg, "debug") else "debug_" + random.randbytes(4).hex()
+        project = read_config_parameter(raw_cfg, "project") if not read_config_parameter(raw_cfg, "debug") else "debug_" + random.randbytes(4).hex()
         outpath = sweep_config["parameters"].get("out_path").get("value")
         if not os.path.exists(outpath):
             os.makedirs(outpath)

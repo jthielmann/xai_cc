@@ -3,7 +3,8 @@ import shutil
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Any, Iterable
+import os
 
 
 def ensure_free_disk_space(path: str, min_gb: int = 20) -> None:
@@ -86,3 +87,99 @@ def get_sweep_parameter_names(config: dict) -> list[str]:
         for name, param in config.get("parameters", {}).items()
         if isinstance(param, dict) and "values" in param
     ]
+
+
+# --- Naming helpers ---------------------------------------------------------
+
+_KEY_ALIASES: Dict[str, str] = {
+    # common training
+    "learning_rate": "lr",
+    "lr": "lr",
+    "weight_decay": "wd",
+    "epochs": "ep",
+    "batch_size": "bs",
+    "optimizer": "opt",
+    "scheduler": "sch",
+    # data/model
+    "dataset": "ds",
+    "encoder_type": "enc",
+    "encoder_out_dim": "eod",
+    "middle_layer_features": "ml",
+    "image_size": "sz",
+    "num_workers": "nw",
+    "loss_fn_switch": "loss",
+    "freeze_encoder": "fe",
+    "one_linear_out_layer": "1l",
+    "gene_data_filename": "gdf",
+    "bins": "b",
+    "genes": "g",
+}
+
+
+def _abbr_key(key: str) -> str:
+    if key in _KEY_ALIASES:
+        return _KEY_ALIASES[key]
+    # fallback: take first chars of snake-case parts, max 3 parts
+    parts = [p for p in str(key).replace("-", "_").split("_") if p]
+    if not parts:
+        return str(key)[:3]
+    if len(parts) == 1:
+        return parts[0][:3]
+    return "".join(p[0] for p in parts[:3])
+
+
+def _abbr_value(val: Any, key: str = "") -> str:
+    # lists: summarize by length (esp. genes)
+    if isinstance(val, (list, tuple)):
+        try:
+            n = len(val)
+        except Exception:
+            n = 0
+        return f"n{n}"
+    # booleans
+    if isinstance(val, bool):
+        return "t" if val else "f"
+    # ints
+    if isinstance(val, int) and not isinstance(val, bool):
+        return str(val)
+    # floats
+    if isinstance(val, float):
+        # concise formatting; keep significant digits without trailing zeros
+        s = f"{val:g}"
+        return s
+    # strings (filenames → stem; compact common gene_data_* patterns)
+    if isinstance(val, str):
+        stem = os.path.splitext(os.path.basename(val))[0]
+        stem = stem.replace("gene_data_", "")
+        return stem[:20]
+    # fallback
+    return str(val)[:20]
+
+
+def make_run_name_from_config(cfg: Dict[str, Any], param_names: Iterable[str]) -> str:
+    """Build a compact run name from chosen hyperparameters.
+
+    Only includes parameters that are part of the sweep (param_names).
+    Produces tokens like "lr=0.01-bs=32-gdf=ranknorm".
+    """
+    keys = list(dict.fromkeys(param_names))  # stable unique
+    tokens = []
+    for k in keys:
+        if k in cfg:
+            v = cfg[k]
+            ak = _abbr_key(k)
+            av = _abbr_value(v, key=k)
+            tokens.append(f"{ak}={av}")
+    name = "-".join(tokens) if tokens else "auto"
+    # hard limit to keep names manageable
+    return name[:128]
+
+
+def make_sweep_name_from_space(config: Dict[str, Any]) -> str:
+    """Build a generic sweep name from the hyperparameter space (keys only)."""
+    keys = get_sweep_parameter_names(config)
+    if not keys:
+        return "sweep-auto"
+    toks = [_abbr_key(k) for k in keys]
+    base = "swp-" + "+".join(toks)
+    return base[:64]
