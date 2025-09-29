@@ -154,9 +154,10 @@ def _log_dataset_info(cfg, out_dir, train=None, val=None, test=None):
     }
 
     os.makedirs(out_dir, exist_ok=True)
-    manifest.to_csv(os.path.join(out_dir,"split_manifest.csv"), index=False)
-    open(os.path.join(out_dir,"genes.txt"),"w").write("\n".join(cfg.get("genes",[])))
-    open(os.path.join(out_dir,"dataset_meta.json"),"w").write(json.dumps(meta,indent=2))
+    run_tag = os.path.basename(os.path.abspath(out_dir)) or "run"
+    manifest.to_csv(os.path.join(out_dir, f"{run_tag}_split_manifest.csv"), index=False)
+    open(os.path.join(out_dir, f"{run_tag}_genes.txt"), "w").write("\n".join(cfg.get("genes", [])))
+    open(os.path.join(out_dir, f"{run_tag}_meta.json"), "w").write(json.dumps(meta, indent=2))
 
     log.info("[dataset] %s", meta)
     if not manifest.empty: log.info("[splits]\n%s", manifest.head())

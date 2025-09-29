@@ -8,7 +8,8 @@ if [[ $# -eq 2 ]]; then
 fi
 
 cfg="$1"
-name="$(basename "$cfg")"
+# Derive a safer, more descriptive job name from the config
+name="$(python script/cli/print_job_name.py "$cfg" 2>/dev/null || basename "$cfg")"
 name="${name%.*}"
 
 # Get absolute path to cfg (fallback if readlink -f is unavailable(on m)
