@@ -2,18 +2,23 @@
 # submit.sh — generate a tailored SLURM script and submit it
 set -euo pipefail
 
-if [[ $# -eq 2 ]]; then
+if [[ $# -ne 1 ]]; then
   echo "Usage: ./submit.sh <config_path>"
   exit 1
 fi
 
 cfg="$1"
+
+# Resolve repo root so we can call helper regardless of CWD
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 # Derive a safer, more descriptive job name from the config
-name="$(python script/cli/print_job_name.py "$cfg" 2>/dev/null || basename "$cfg")"
+name="$(python "${REPO_ROOT}/script/cli/print_job_name.py" "$cfg" 2>/dev/null || basename "$cfg")"
 name="${name%.*}"
 
-# Get absolute path to cfg (fallback if readlink -f is unavailable(on m)
-cfg_abs="$(readlink -f "$cfg")"
+# Absolute config path
+cfg_abs="$(readlink -f "$cfg" 2>/dev/null || python -c 'import os,sys;print(os.path.abspath(sys.argv[1]))' "$cfg")"
 mkdir -p logs
 
 tmp="$(mktemp -t "${name}_sbatch_XXXXXX.sh")"
