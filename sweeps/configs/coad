@@ -1,4 +1,4 @@
-project: coad dino v uni more epochs
+project: coad dino v uni redo
 name: dino vs uni coad
 method: grid
 metric:
@@ -22,7 +22,7 @@ parameters:
   gene_data_filename:
     value: gene_log1p.csv
   image_size:
-    value: 512
+    value: 256
   batch_size:
     value: 32
   num_workers:
@@ -44,17 +44,15 @@ parameters:
 
   # Training schedule
   epochs:
-    value: 80
+    value: 40
   optimizer:
     value: adamw
-  learning_rate:
+  global_fixed_learning_rate:
     value: 0.01
 
   # Logging / metrics
   loss_fn_switch:
     value: MSE
-  error_metric_name:
-    value: DinoLoss
 
   # Runtime (optional but handy)
   precision_auto:
