@@ -12,9 +12,15 @@ cfg="$1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Derive a safer, more descriptive job name from the config
-name="$(python "${REPO_ROOT}/script/cli/print_job_name.py" "$cfg" 2>/dev/null || basename "$cfg")"
-name="${name%.*}"
+# Derive a safer, more descriptive job name from the config; fail if it cannot be derived
+name=""
+name_result=$(python "${REPO_ROOT}/script/cli/print_job_name.py" "$cfg")
+rc=$?
+if [[ $rc -ne 0 || -z "$name_result" ]]; then
+  echo "Error: failed to derive job name from config '$cfg' (exit $rc)." >&2
+  exit 1
+fi
+name="${name_result%.*}"
 
 # Get absolute path to cfg
 cfg_abs="$(readlink -f "$cfg" 2>/dev/null || python -c 'import os,sys;print(os.path.abspath(sys.argv[1]))' "$cfg")"
