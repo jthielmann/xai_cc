@@ -180,35 +180,85 @@ def grid_search_lds(
     return df
 
 
+def _get_param_scalar(params: dict, key: str, *, required: bool = False):
+    """Extract a scalar param that may be stored as {'value': x} or {'values': [x]}.
+    Raises if multiple values are provided for a scalar.
+    """
+    if key not in params:
+        if required:
+            raise KeyError(f"Missing required parameter: {key}")
+        return None
+    v = params[key]
+    if isinstance(v, dict):
+        if "value" in v:
+            return v["value"]
+        if "values" in v:
+            vals = v["values"]
+            if not isinstance(vals, (list, tuple)) or len(vals) != 1:
+                raise ValueError(f"Parameter '{key}' expects exactly one value; got {vals!r}")
+            return vals[0]
+    return v
+
+
+def _get_param_list(params: dict, key: str, *, required: bool = False) -> list:
+    """Extract a list param from {'values': [...]} or a direct list."""
+    if key not in params:
+        if required:
+            raise KeyError(f"Missing required parameter: {key}")
+        return []
+    v = params[key]
+    if isinstance(v, dict):
+        if "values" in v:
+            vals = v["values"]
+            if not isinstance(vals, (list, tuple)):
+                raise ValueError(f"Parameter '{key}.values' must be a list")
+            return list(vals)
+        if "value" in v:
+            vv = v["value"]
+            if isinstance(vv, (list, tuple)):
+                return list(vv)
+            return [vv]
+    if isinstance(v, (list, tuple)):
+        return list(v)
+    return [v]
+
+
 def main():
     args = parse_args()
     cfg = parse_yaml_config(args.config)
+    # Merge dataset defaults (train/val samples) into parameters
     ds_cfg = get_dataset_cfg_lds(cfg.get("parameters", {}))
     cfg.get("parameters", {}).update(ds_cfg)
     params = cfg.get("parameters", {})
 
-    data_dir = get_dataset_data_dir(params["dataset"].get("value"))
+    # Dataset roots and CSV names
+    dataset_name = _get_param_scalar(params, "dataset", required=True)
+    data_dir = get_dataset_data_dir(dataset_name)
+    gene_data_filename = _get_param_scalar(params, "gene_data_filename", required=True)
+    meta_data_dir = _get_param_scalar(params, "meta_data_dir") or "/meta_data/"
+
+    train_samples = params.get("train_samples")
+    if not train_samples:
+        raise ValueError("train_samples not resolved; ensure your config provides them or the dataset defaults exist.")
+
+    # LDS sweep configuration
+    kernel_type = _get_param_scalar(params, "kernel_type") or "gaussian"  # {'gaussian','silverman','triang','laplace'}
+    genes = _get_param_list(params, "genes", required=True)
+    bin_space = _get_param_list(params, "bin_space") or [20, 30, 40, 50, 100]
+    ks_space = _get_param_list(params, "ks_space") or [7, 9, 11]
+    sigma_space = _get_param_list(params, "sigma_space") or [0.8, 1.0, 1.2, 1.5, 2.0]
+
+    # Outputs
+    out_csv = Path(_get_param_scalar(params, "lds_out_csv") or "best_smoothing.csv")
+    out_plots = Path(_get_param_scalar(params, "lds_out_plots_dir") or "lds_plots")
+
     dataset = label_dataset(
         data_dir=data_dir,
-        samples=params["train_samples"],
-        gene_data_filename=params["gene_data_filename"].get("values")[0],
+        samples=train_samples,
+        gene_data_filename=gene_data_filename,
+        meta_data_dir=meta_data_dir,
         max_len=100 if params.get("debug", {}).get("value") else None,
     )
-
-    # ---- config you likely tweak ----
-    kernel_type = "gaussian"  # {"gaussian","silverman","triang","laplace"}
-    genes = [
-        "TNNT1", "AQP5", "RAMP1", "ADGRG6", "SECTM1", "DPEP1", "CHP2",
-        "RUBCNL", "SLC9A3", "VAV3", "MUC2", "PIGR", "TFF1", "KIAA1324",
-        "ZBTB7C", "SERPINA1", "SPOCK1", "FBLN1", "ANTXR1", "TNS1",
-        "MYL9", "HSPB8"
-    ]
-    bin_space = [20, 30, 40, 50, 100]
-    ks_space = [7, 9, 11]
-    sigma_space = [0.8, 1.0, 1.2, 1.5, 2.0]
-
-    out_csv = Path("best_smoothing.csv")
-    out_plots = Path("lds_plots")
 
     lds = LDS(kernel_type=kernel_type, dataset=dataset)
     df = grid_search_lds(lds, genes, bin_space, ks_space, sigma_space)
@@ -219,13 +269,13 @@ def main():
 
     # generate plots (optional)
     for _, row in df.iterrows():
-        params = LDSParams(
+        params_obj = LDSParams(
             bins=int(row["bins"]),
             kernel_size=int(row["kernel_size"]),
             sigma=float(row["sigma"]),
         )
         weights = np.array(json.loads(row["weights_json"]), dtype=np.float32)
-        lds.compare_plot(str(row["gene"]), params, weights, out_path=out_plots)
+        lds.compare_plot(str(row["gene"]), params_obj, weights, out_path=out_plots)
 
 
 if __name__ == "__main__":

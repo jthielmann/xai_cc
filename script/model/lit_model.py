@@ -8,7 +8,6 @@ import wandb
 from script.model.model_factory import get_encoder, infer_encoder_out_dim
 import os
 import matplotlib.pyplot as plt
-from script.data_processing.data_loader import load_gene_weights
 import sys
 from io import BytesIO
 from PIL import Image
@@ -132,13 +131,13 @@ class GeneExpressionRegressor(L.LightningModule):
 
         for g in self.genes:
             setattr(self, f"{g}_lr", default_lr)
-        if self.config["loss_fn_switch"] == "MSE":
+        loss_switch = str(self.config["loss_fn_switch"]).lower()
+        if loss_switch == "mse":
             self.loss_fn = nn.MSELoss()
-        elif self.config["loss_fn_switch"] == "WMSE" or self.config["loss_fn_switch"] == "weighted MSE":
-            weight_dir = self.config["lds_weight_csv"]
-            weights = load_gene_weights(weight_dir, self.genes)
-            self.loss_fn = MultiGeneWeightedMSE(weights)
-        elif self.config["loss_fn_switch"] == "pearson":
+        elif loss_switch in {"wmse", "weighted mse"}:
+            # Strict WMSE: expects per-sample weights from the dataset
+            self.loss_fn = MultiGeneWeightedMSE()
+        elif loss_switch == "pearson":
             self.loss_fn = PearsonCorrLoss()
         else:
             raise ValueError(f"loss_fn_switch {self.config['loss_fn_switch']} not implemented")
@@ -291,10 +290,22 @@ class GeneExpressionRegressor(L.LightningModule):
         run.log_artifact(art, aliases=["best", "latest"])
 
     def _step(self, batch):
-        if isinstance(batch, (list, tuple)) and len(batch) == 3:
-            x, y, _ = batch
+        loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
+        if loss_switch in {"wmse", "weighted mse"}:
+            if not (isinstance(batch, (list, tuple)) and len(batch) == 3):
+                raise ValueError(
+                    "Expected (x, y, w) batch for WMSE. Ensure 'lds_weight_csv' is set and DataModule passes weights."
+                )
+            x, y, w = batch
         else:
+            # Plain MSE or other losses expect (x, y) only
+            if not (isinstance(batch, (list, tuple)) and len(batch) == 2):
+                raise ValueError(
+                    f"Expected (x, y) batch for loss '{self.config.get('loss_fn_switch')}'. "
+                    "Remove LDS weights or use WMSE."
+                )
             x, y = batch
+            w = None
 
         y_hat = self(x)
 
@@ -304,7 +315,14 @@ class GeneExpressionRegressor(L.LightningModule):
         if y_hat.shape != y.shape:
             raise ValueError(f"Shape mismatch: {y_hat.shape} vs {y.shape}")
 
-        loss = self.loss_fn(y_hat, y)
+        if loss_switch in {"wmse", "weighted mse"}:
+            if w is None:
+                raise ValueError("Missing sample weights for WMSE.")
+            if w.shape != y.shape:
+                raise ValueError(f"Weight shape {tuple(w.shape)} must match targets {tuple(y.shape)}")
+            loss = self.loss_fn(y_hat, y, w)
+        else:
+            loss = self.loss_fn(y_hat, y)
         return loss, y_hat, y
 
     def _compute_per_gene_pearson(self, y_hat: torch.Tensor, y_true: torch.Tensor) -> list[float]:
@@ -384,10 +402,13 @@ class GeneExpressionRegressor(L.LightningModule):
             if self.is_online:
                 self.log_dict({f"pearson_{g}": r for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
 
-            try:
-                val_loss_mean = float(self.loss_fn(y_hat, y_true))
-            except Exception:
-                val_loss_mean = float(torch.mean((y_hat - y_true) ** 2))
+            # Use the aggregated validation loss computed during validation_step
+            loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
+            if loss_switch in {"mse", "wmse", "weighted mse"}:
+                val_loss_mean = float(self.val_loss_total / max(self.val_loss_count, 1))
+            else:
+                # For Pearson, keep average over batches semantics
+                val_loss_mean = float(self.val_loss_total / max(self.val_loss_count, 1))
 
             r_mean = float(np.nanmean(per_gene_r)) if per_gene_r else float("nan")
             loss_switch = str(self.config.get("loss_fn_switch", "")).lower()

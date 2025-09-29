@@ -44,52 +44,29 @@ class CompositeLoss(nn.Module):
 
 
 class MultiGeneWeightedMSE(nn.Module):
-    def __init__(self, gene_weight_arr: Dict[str, Union[float, torch.Tensor]]):
+    """Strict weighted MSE for multi-gene regression.
+
+    Expects per-sample weights aligned with predictions/targets and will
+    raise on any mismatch. No internal binning or fallback logic.
+    """
+    def __init__(self, eps: float = 1e-8):
         super().__init__()
-        self.genes = list(gene_weight_arr.keys())
+        self.eps = float(eps)
 
-        # register every weight tensor so it moves with .to(device)
-        for gene, w in gene_weight_arr.items():
-            w_tensor = torch.as_tensor(w, dtype=torch.float32)
-            self.register_buffer(f"{gene}_weights", w_tensor)
+    def forward(self, pred: torch.Tensor, target: torch.Tensor, sample_weights: torch.Tensor) -> torch.Tensor:
+        if pred.shape != target.shape:
+            raise ValueError(f"Shape mismatch pred{tuple(pred.shape)} vs target{tuple(target.shape)}")
+        if sample_weights is None:
+            raise ValueError("sample_weights must be provided for MultiGeneWeightedMSE")
+        if sample_weights.shape != pred.shape:
+            raise ValueError(
+                f"sample_weights must match pred/target shape. Got weights{tuple(sample_weights.shape)} vs pred{tuple(pred.shape)}"
+            )
 
-    def _get_pred_tgt(self, x, gene, idx):
-        if isinstance(x, dict):
-            return x[gene].view(-1)  # (B,)
-        else:
-            return x[:, idx].view(-1)
-
-    def _sample_weights(self, t: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
-        """
-        Map each target value in `t` to its bin weight from `w`.
-        Assumes:
-          • w has length K  (one weight per bin)
-          • bins are EQUALLY spaced between min(t) and max(t)   (≈ the cache)
-        """
-        K        = w.numel()
-        edges    = torch.linspace(t.min(), t.max(), K + 1, device=t.device)
-        bin_idx  = torch.bucketize(t, edges, right=True) - 1
-        bin_idx  = bin_idx.clamp_(0, K - 1)
-        return w[bin_idx]                      # (B,)
-
-    def forward(self, pred, target):
-        losses = []
-        for idx, gene in enumerate(self.genes):
-            p = self._get_pred_tgt(pred,   gene, idx)    # (B,)
-            t = self._get_pred_tgt(target, gene, idx)    # (B,)
-            w_vec = getattr(self, f"{gene}_weights")     # (K,) or scalar
-
-            if w_vec.ndim == 0:                          # scalar
-                w_sample = w_vec
-            elif w_vec.numel() == t.numel():             # already per-sample
-                w_sample = w_vec.view_as(t)
-            else:                                        # (K,) – need lookup
-                w_sample = self._sample_weights(t, w_vec)
-
-            per_elem = F.mse_loss(p, t, reduction="none")
-            losses.append((per_elem * w_sample).mean())
-
-        return losses[0] if len(losses) == 1 else torch.stack(losses).mean()
+        per_elem = (pred - target) ** 2  # shape (B, G)
+        w = sample_weights
+        w_sum = torch.clamp(w.sum(), min=self.eps)
+        return (per_elem * w).sum() / w_sum
 
 
 class PearsonCorrLoss(nn.Module):
@@ -116,4 +93,3 @@ class PearsonCorrLoss(nn.Module):
         elif self.reduction == "sum":
             return loss.sum()
         return loss
-

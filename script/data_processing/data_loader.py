@@ -246,7 +246,11 @@ def make_weights(
             t = (math.log10(ratio) - math.log10(r1)) / (math.log10(r2) - math.log10(r1))
             alpha = 1.0 - t
         w2 = torch.log1p(w) if alpha == 0.0 else (w / w.mean()) ** alpha
-        w2 = (w2 / w2.mean()).clamp(max=clip_max)
+        # Normalize, clamp, then re-normalize to keep mean ~ 1
+        eps = 1e-12
+        w2 = w2 / torch.clamp(w2.mean(), min=eps)
+        w2 = torch.clamp(w2, max=clip_max)
+        w2 = w2 / torch.clamp(w2.mean(), min=eps)
         scaled[g] = w2.to(dtype=torch.float32)
     return scaled
 

@@ -29,6 +29,13 @@ class STDataModule(L.LightningDataModule):
         # Determine max_len for debug mode
         max_len = 100 if self.cfg.get('debug', False) else None
 
+        # Determine if WMSE is selected; only then attach LDS weights
+        loss_switch = str(self.cfg.get('loss_fn_switch', '')).lower()
+        wmse_selected = loss_switch in {"wmse", "weighted mse"}
+        if wmse_selected and not self.cfg.get('lds_weight_csv'):
+            raise ValueError("WMSE selected but 'lds_weight_csv' is not set in config.")
+        lds_csv = self.cfg.get('lds_weight_csv', None) if wmse_selected else None
+
         if stage in (None, 'fit'):
             # Validate mutually exclusive CSV config
             if self.cfg.get('single_csv_path') and (
@@ -51,7 +58,7 @@ class STDataModule(L.LightningDataModule):
                     transforms=self.transforms_train,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
-                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir'),
                     split='train',
                     split_col_name=self.cfg.get('split_col_name', 'split')
@@ -64,7 +71,7 @@ class STDataModule(L.LightningDataModule):
                     transforms=self.transforms_train,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
-                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir')
                 )
             else:
@@ -77,7 +84,7 @@ class STDataModule(L.LightningDataModule):
                     gene_data_filename=self.cfg['gene_data_filename'],
                     meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                     max_len=max_len,
-                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
+                    lds_smoothing_csv=lds_csv
                 )
 
             if self.cfg.get('single_csv_path'):
@@ -94,7 +101,7 @@ class STDataModule(L.LightningDataModule):
                     transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
-                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir'),
                     split='val',
                     split_col_name=self.cfg.get('split_col_name', 'split')
@@ -107,7 +114,7 @@ class STDataModule(L.LightningDataModule):
                     transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
-                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir')
                 )
             else:
@@ -120,7 +127,7 @@ class STDataModule(L.LightningDataModule):
                     gene_data_filename=self.cfg['gene_data_filename'],
                     meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                     max_len=max_len,
-                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
+                    lds_smoothing_csv=lds_csv
                 )
         if stage in (None, 'test'):
             if self.cfg.get('single_csv_path'):
@@ -137,7 +144,7 @@ class STDataModule(L.LightningDataModule):
                     transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
-                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir'),
                     split='test',
                     split_col_name=self.cfg.get('split_col_name', 'split')
@@ -150,7 +157,7 @@ class STDataModule(L.LightningDataModule):
                     transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
-                    lds_smoothing_csv=self.cfg.get("lds_weight_csv", None),
+                    lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir')
                 )
             else:
@@ -164,7 +171,7 @@ class STDataModule(L.LightningDataModule):
                         gene_data_filename=self.cfg['gene_data_filename'],
                         meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                         max_len=max_len,
-                        lds_smoothing_csv=self.cfg.get("lds_weight_csv", None)
+                        lds_smoothing_csv=lds_csv
                     )
 
     def train_dataloader(self):
