@@ -14,6 +14,54 @@ from main_utils import (
     make_sweep_name_from_space,
 )
 
+from pathlib import Path
+
+def setup_dump_env(dump_dir: Optional[str] = None) -> str:
+    """Configure env vars so incidental outputs go under a single dump dir.
+
+    Returns the resolved dump_dir path.
+    """
+    try:
+        repo_root = Path(__file__).resolve().parents[1]
+    except Exception:
+        repo_root = Path.cwd()
+    dd = Path(
+        dump_dir
+        or os.environ.get("XAI_DUMP_DIR")
+        or (repo_root / "dump")
+    ).resolve()
+    os.makedirs(dd, exist_ok=True)
+
+    # W&B local dirs (run files and cache)
+    os.environ.setdefault("WANDB_DIR", str(dd / "wandb"))
+    os.environ.setdefault("WANDB_CACHE_DIR", str(dd / "wandb_cache"))
+    os.environ.setdefault("WANDB_CONFIG_DIR", str(dd / "wandb_config"))
+    # Torch / torchvision cache (pretrained weights, etc.)
+    os.environ.setdefault("TORCH_HOME", str(dd / "torch_cache"))
+    # Matplotlib cache
+    os.environ.setdefault("MPLCONFIGDIR", str(dd / "mpl-cache"))
+    # Common ML caches (harmless if unused)
+    os.environ.setdefault("HF_HOME", str(dd / "hf_cache"))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(dd / "hf_cache"))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(dd / "hf_cache"))
+
+    # Ensure directories exist
+    for k in [
+        "WANDB_DIR",
+        "WANDB_CACHE_DIR",
+        "WANDB_CONFIG_DIR",
+        "TORCH_HOME",
+        "MPLCONFIGDIR",
+        "HF_HOME",
+        "TRANSFORMERS_CACHE",
+        "HUGGINGFACE_HUB_CACHE",
+    ]:
+        try:
+            Path(os.environ[k]).mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+    return str(dd)
+
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     cfg = dict(cfg); cfg.update(get_dataset_cfg(cfg))
     out = cfg.get("out_path") or cfg.get("sweep_dir") or cfg.get("model_dir")
@@ -127,7 +175,10 @@ def _train(cfg: Dict[str, Any]) -> None:
     # Sanitize config for W&B: avoid nested sweep keys showing as empty columns
     wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
     run = wandb.init(project=cfg.get("project","xai"), config=wb_cfg) if cfg.get("log_to_wandb", False) else None
-    cfg = _prepare_cfg(dict(run.config) if run else cfg)
+    # Ensure dump_dir is present in cfg and env
+    cfg = dict(run.config) if run else cfg
+    cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
+    cfg = _prepare_cfg(cfg)
 
     if cfg.get("genes") is None:
         cfg["genes"] = _prepare_gene_list(cfg)
@@ -136,6 +187,8 @@ def _train(cfg: Dict[str, Any]) -> None:
     if run: run.finish()
 
 def _sweep_run():
+    # Ensure dump env in agent subprocess before init
+    setup_dump_env()
     run = wandb.init()
     # Extract hyperparameters chosen by the sweep plus our config name
     rcfg = dict(run.config)
@@ -265,6 +318,8 @@ def _sweep_run():
     except Exception:
         pass
 
+    # Ensure dump_dir present and env set before training
+    cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
     cfg = _prepare_cfg(cfg)
     TrainerPipeline(cfg, run=run).run(); run.finish()
 
@@ -274,6 +329,16 @@ def log_runtime_banner():
 
 def main():
     args = parse_args()
+    # Set up dump env early so any libs honor it
+    dump_dir = None
+    try:
+        # Allow dump_dir override via the config file if top-level key exists
+        tmp = parse_yaml_config(args.config)
+        if isinstance(tmp, dict) and tmp.get("dump_dir"):
+            dump_dir = str(tmp.get("dump_dir"))
+    except Exception:
+        pass
+    setup_dump_env(dump_dir)
     raw_cfg = parse_yaml_config(args.config)
     params = raw_cfg.get("parameters", {})
     is_sweep = any(isinstance(param, dict) and "values" in param for param in params.values())

@@ -297,6 +297,21 @@ class TrainerPipeline:
         self.config    = config
         self.debug     = self.config.get("debug")
 
+        # Resolve a central dump directory for incidental outputs (logs, temps)
+        try:
+            # Prefer explicit config, then env, then repo-root/dump
+            repo_root = Path(__file__).resolve().parents[2]
+        except Exception:
+            repo_root = Path.cwd()
+        self.dump_dir = str(
+            Path(
+                self.config.get("dump_dir")
+                or os.environ.get("XAI_DUMP_DIR")
+                or (repo_root / "dump")
+            ).resolve()
+        )
+        os.makedirs(self.dump_dir, exist_ok=True)
+
         self.is_sweep = hasattr(self.wandb_run.config, "sweep_parameter_names")
 
         self.is_online = self.config.get("log_to_wandb")
@@ -322,6 +337,7 @@ class TrainerPipeline:
                 project=self.wandb_run.project,
                 name=name,
                 experiment=self.wandb_run,
+                save_dir=self.dump_dir,
             )
 
 
@@ -400,7 +416,7 @@ class TrainerPipeline:
                 export_to_chrome=True,
                 profile_memory=True,
                 on_trace_ready=torch.profiler.tensorboard_trace_handler(
-                    self.config.get("profile_log_dir", "./logs")
+                    self.config.get("profile_log_dir", os.path.join(self.dump_dir, "profiles"))
                 )
             )
 
@@ -436,7 +452,8 @@ class TrainerPipeline:
             accelerator=accelerator,
             devices=self.config.get("devices", 1),
             deterministic=True,
-            strategy=strategy
+            strategy=strategy,
+            default_root_dir=self.dump_dir,
         )
         return trainer
 
@@ -478,10 +495,8 @@ class TrainerPipeline:
         tuner = Tuner(trainer)
 
         attr = f"{key}_lr"
-        # Redirect lr_find temporary checkpoint to ../dump (sibling of script/)
-        script_dir = Path(__file__).resolve().parents[1]  # .../script
-        dump_dir = script_dir.parent / "dump"
-        with _temp_cwd(dump_dir):
+        # Redirect lr_find temporary checkpoint into dump_dir
+        with _temp_cwd(self.dump_dir):
             finder = tuner.lr_find(
                 model,
                 train_dataloaders=train_dl,
@@ -753,5 +768,17 @@ class TrainerPipeline:
         summary['status'] = status
         content = json.dumps(summary, indent=2)
         path = os.path.join(self.out_path, "config")
-        with open(path, 'w') as f:
-            f.write(content)
+        try:
+            with open(path, 'w') as f:
+                f.write(content)
+        except OSError as e:
+            # Fallback to dump_dir if writing to out_path fails (e.g., quota)
+            try:
+                os.makedirs(self.dump_dir, exist_ok=True)
+                alt = os.path.join(self.dump_dir, f"config_fallback.json")
+                with open(alt, 'w') as f:
+                    f.write(content)
+                log.warning("Failed to write summary to %s (%s). Wrote fallback to %s", path, e, alt)
+            except Exception:
+                # Last resort: ignore to avoid training crash
+                log.error("Failed to persist summary to both %s and dump_dir: %s", path, e)
