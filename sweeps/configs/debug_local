@@ -33,7 +33,7 @@ parameters:
 
   # Encoder
   encoder_type:
-    value: uni2 #dinov3
+    value: dinov3_vits16 #dinov3
   freeze_encoder:
     value: true
 

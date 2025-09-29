@@ -418,32 +418,27 @@ class GeneExpressionRegressor(L.LightningModule):
             self._update_best(criterion, int(self.current_epoch), out_path, r_mean, per_gene_r)
 
             # Track best Pearson mean across epochs independently of loss type
-            try:
-                if np.isfinite(r_mean):
-                    if not hasattr(self, "best_pearson_mean"):
-                        self.best_pearson_mean = float("-inf")
-                        self.best_pearson_epoch = None
-                        self.best_pearson_per_gene = [float("nan")] * len(self.genes)
-                    if r_mean > (self.best_pearson_mean if np.isfinite(getattr(self, "best_pearson_mean", float("nan"))) else float("-inf")):
-                        self.best_pearson_mean = float(r_mean)
-                        self.best_pearson_epoch = int(self.current_epoch)
-                        self.best_pearson_per_gene = [float(x) for x in per_gene_r]
-                        if self.is_online and wandb.run:
-                            wandb.run.summary.update({
-                                "best_pearson_mean": self.best_pearson_mean,
-                                "best_pearson_epoch": self.best_pearson_epoch,
-                            })
-                            # Also expose per-gene bests as flat summary metrics
-                            for g, r in zip(self.genes, self.best_pearson_per_gene):
-                                wandb.run.summary[f"best_pearson_{g}"] = float(r)
-            except Exception:
-                pass
+            if np.isfinite(r_mean):
+                if not hasattr(self, "best_pearson_mean"):
+                    self.best_pearson_mean = float("-inf")
+                    self.best_pearson_epoch = None
+                    self.best_pearson_per_gene = [float("nan")] * len(self.genes)
+                if r_mean > (self.best_pearson_mean if np.isfinite(getattr(self, "best_pearson_mean", float("nan"))) else float("-inf")):
+                    self.best_pearson_mean = float(r_mean)
+                    self.best_pearson_epoch = int(self.current_epoch)
+                    self.best_pearson_per_gene = [float(x) for x in per_gene_r]
+                    if self.is_online and wandb.run:
+                        wandb.run.summary.update({
+                            "best_pearson_mean": self.best_pearson_mean,
+                            "best_pearson_epoch": self.best_pearson_epoch,
+                        })
+                        # Also expose per-gene bests as flat summary metrics
+                        for g, r in zip(self.genes, self.best_pearson_per_gene):
+                            wandb.run.summary[f"best_pearson_{g}"] = float(r)
+
 
             # Log current epoch Pearson mean for visibility
-            try:
-                self.log("val_pearson_mean", r_mean, on_epoch=True)
-            except Exception:
-                pass
+            self.log("val_pearson_mean", r_mean, on_epoch=True)
 
             # Optional scatter plots
             if self.config.get("generate_scatters", False):

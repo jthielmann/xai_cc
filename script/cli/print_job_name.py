@@ -35,9 +35,9 @@ def _read_top_level_keys(path: str) -> dict:
                     continue
                 k, v = m.group(1), m.group(2)
                 v = v.strip().strip('"\'')
-                if k in ("project", "name") and k not in keys:
+                if k in ("project") and k not in keys:
                     keys[k] = v
-                if "project" in keys and "name" in keys:
+                if "project" in keys:
                     break
     except Exception:
         pass
@@ -51,12 +51,7 @@ def main() -> int:
     cfg_path = sys.argv[1]
     keys = _read_top_level_keys(cfg_path)
     project = str(keys.get("project", "xai") or "xai")
-    name = keys.get("name")
-    if name is None:
-        # fallback to config filename without extension
-        name = os.path.splitext(os.path.basename(cfg_path))[0]
-    name = str(name)
-    run = f"{project}-{name}"
+    run = f"{project}"
     print(sanitize_job_name(run))
     return 0
 

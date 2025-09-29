@@ -682,11 +682,6 @@ class TrainerPipeline:
 
             tuned_max_lrs[key] = self.tune_component_lr(model, key, tmp_trainer, train_loader, steps, early_stop, use_lr_find)
 
-            if self.wandb_run is not None and self.config.get("log_lr", False):
-                run = cast(Run, self.wandb_run)
-                run.log(data={f"tuned_lr/{key}": tuned_max_lrs[key]})
-
-
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -743,7 +738,7 @@ class TrainerPipeline:
 
             log.info("Tuned learning rates: %s", lrs)
             model.update_lr(lrs)
-            if self.is_online:
+            if self.is_online and self.config.get("log_lr"):
                 self.wandb_run.summary.update({"tuned_lr": lrs})
 
             trainer = self._create_trainer()
