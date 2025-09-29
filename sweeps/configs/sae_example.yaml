@@ -1,0 +1,49 @@
+# Example config for training Sparse Autoencoders on encoder features
+
+# List one or more encoders; run with submitSAE.sh to loop over all
+encoders:
+  - resnet50imagenet
+  # - dinov3_vitb16     # requires local weights under ./encoders
+
+# Data (choose ONE of the following blocks)
+
+# Option A: Single CSV with a 'split' column (values: train/val)
+single_csv_path: /path/to/tiles_and_genes.csv   # each row has 'tile' and gene columns
+data_dir: /path/to/dataset_root                 # used to resolve relative tile paths
+tile_subdir: tiles                              # optional; joined with data_dir for relative tiles
+split_col_name: split                           # name of the col that has train/val labels
+
+# Option B: Separate CSVs (uncomment to use)
+# train_csv_path: /path/to/train.csv
+# val_csv_path: /path/to/val.csv
+# data_dir: /path/to/dataset_root
+# tile_subdir: tiles
+
+# Option C: Directory + patient/sample IDs (uncomment to use)
+# data_dir: /path/to/dataset_root
+# train_samples: [PATIENT_001, PATIENT_002]
+# val_samples:   [PATIENT_003]
+# gene_data_filename: gene_data.csv
+# meta_data_dir: /meta_data/
+
+# Training
+epochs: 10
+batch_size: 64
+num_workers: 8
+image_size: 224
+precision: 16-mixed
+
+# SAE hyperparameters (can also be provided at top level)
+sae:
+  d_hidden: 2048
+  k: 128
+  allow_negative_topk: false
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-2
+
+# Optional augs (respected by train_sae)
+hflip: true
+rot90s: true
+affine: true
+color_jitter: false
+
