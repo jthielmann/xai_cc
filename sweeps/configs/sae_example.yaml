@@ -40,6 +40,10 @@ sae:
   allow_negative_topk: false
   learning_rate: 1.0e-3
   weight_decay: 1.0e-2
+  # Optional selection/normalization (can also be set at top level)
+  topk_by_magnitude: false      # Use |x| selection when sign shouldn't bias
+  feature_norm: none            # none|standardize|whiten|auto; std for small B, whiten to decorrelate
+  whiten_eps: 1.0e-5            # ridge term for whitening stability
 
 # Optional augs (respected by train_sae)
 hflip: true

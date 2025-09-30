@@ -1,0 +1,90 @@
+import argparse
+import json
+import os
+from typing import Any, Dict, Optional, Tuple, List
+from pathlib import Path
+
+import lightning as L
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.optim.lr_scheduler import OneCycleLR
+from lightning.pytorch.loggers import WandbLogger
+
+from script.model.model_factory import get_encoder, infer_encoder_out_dim
+
+
+class TopKActivation(nn.Module):
+    """
+    Activation layer that retains only the top-k values along the last dimension.
+
+    If `allow_negative_topk` is False, the selection and outputs are based on
+    ReLU(x), i.e., negative activations are zeroed and never selected.
+
+    If `by_magnitude` is True, selection is by |x| but the original sign is kept.
+    """
+    def __init__(self, k: int, allow_negative_topk: bool = False, by_magnitude: bool = False):
+        super().__init__()
+        self.k = k
+        self.allow_negative_topk = allow_negative_topk
+        self.by_magnitude = by_magnitude
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.by_magnitude:
+            # Use |x| to pick strongest units regardless of sign
+            scores = x.abs()
+            # Handle small dimensions gracefully
+            k = min(self.k, scores.shape[-1])
+            _, topk_indices = torch.topk(scores, k, dim=-1)
+            mask = torch.zeros_like(scores)
+            mask.scatter_(-1, topk_indices, 1)
+            return x * mask
+        else:
+            scores = x if self.allow_negative_topk else F.relu(x)
+            # Handle small dimensions gracefully
+            k = min(self.k, scores.shape[-1])
+            _, topk_indices = torch.topk(scores, k, dim=-1)
+            mask = torch.zeros_like(scores)
+            mask.scatter_(-1, topk_indices, 1)
+            return scores * mask
+
+
+
+class SparseAutoencoder(nn.Module):
+    """
+    Sparse linear autoencoder with TopK activation and truly tied weights.
+
+    Config keys used:
+      - d_in (int): input dimension
+      - d_hidden (int): hidden (code) dimension
+      - k (int): number of active units in TopK
+      - allow_negative_topk (bool, optional): if False, negatives are zeroed before TopK
+    """
+    def __init__(self, config):
+        super().__init__()
+
+        d_in = config.get("d_in")
+        d_hidden = config.get("d_hidden")
+        k = config.get("k")
+        allow_neg = bool(config.get("allow_negative_topk", False))
+        by_mag = bool(config.get("topk_by_magnitude", False))  # Select by |x| when negatives carry signal
+
+        # Basic validation to fail fast with clear messages
+        if not isinstance(d_in, int) or not isinstance(d_hidden, int) or not isinstance(k, int):
+            raise ValueError("SparseAutoencoder requires integer d_in, d_hidden, and k")
+        if not (1 <= k <= d_hidden):
+            raise ValueError(f"k must satisfy 1 <= k <= d_hidden ({d_hidden}), got k={k}")
+
+        self.encoder = nn.Linear(d_in, d_hidden, bias=True)
+        self.topk_activation = TopKActivation(k, allow_negative_topk=allow_neg, by_magnitude=by_mag)
+        # True weight tying: decode with encoder.weight.T and a separate bias
+        self.decoder_bias = nn.Parameter(torch.zeros(d_in))
+        self.last_sparse = None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        encoded = self.encoder(x)
+        sparse = self.topk_activation(encoded)
+        self.last_sparse = sparse.detach()
+        # Decode via tied weights (encoder.weight.T) and learned bias
+        decoded = F.linear(sparse, self.encoder.weight.t(), self.decoder_bias)
+        return decoded
