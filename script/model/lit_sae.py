@@ -7,6 +7,7 @@ from pathlib import Path
 import lightning as L
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import OneCycleLR
 from lightning.pytorch.loggers import WandbLogger
@@ -88,3 +89,57 @@ class SparseAutoencoder(nn.Module):
         # Decode via tied weights (encoder.weight.T) and learned bias
         decoded = F.linear(sparse, self.encoder.weight.t(), self.decoder_bias)
         return decoded
+
+class LitSparseAutoencoder(L.LightningModule):
+    """
+    A minimal Lightning wrapper for the SparseAutoencoder model.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.save_hyperparameters()
+        self.config = config
+        self.sae = SparseAutoencoder(config)
+        self.loss_fn = nn.MSELoss()
+
+    def forward(self, x):
+        # The SAE is unsupervised, so the forward pass takes an input x
+        # and returns its reconstruction. The lightning module will not be part of the
+        # forward pass of the main model
+        return self.sae(x)
+
+    def _step(self, batch):
+        # The SAE is unsupervised. We assume the batch is either just the input `x`
+        # or a tuple `(x, y)` from a supervised dataloader, in which case we ignore `y`.
+        if isinstance(batch, (list, tuple)):
+            x = batch[0]
+        else:
+            x = batch
+
+        reconstruction = self(x)
+        loss = self.loss_fn(reconstruction, x)
+        return loss
+
+    def training_step(self, batch, batch_idx):
+        loss = self._step(batch)
+        self.log('train_loss_sae', loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss = self._step(batch)
+        self.log('val_loss_sae', loss, on_epoch=True)
+        return loss
+
+    def configure_optimizers(self):
+        lr = self.config.get("lr", 1e-3)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=lr)
+
+        if self.trainer.estimated_stepping_batches is None:
+             # handle case where trainer is not available, e.g. during testing
+            return optimizer
+
+        scheduler = OneCycleLR(
+            optimizer,
+            max_lr=lr,
+            total_steps=self.trainer.estimated_stepping_batches
+        )
+        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
