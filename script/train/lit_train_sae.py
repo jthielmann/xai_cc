@@ -15,7 +15,7 @@ from script.model.model_factory import get_encoder
 class SAETrainerPipeline:
     def __init__(self, config: dict, run: wandb.sdk.wandb_run.Run):
         self.config = config
-        self.run = run
+        self.wandb_run = run
         self.sae = None
         self.data_module = get_data_module(self.config)
         self.data_module.setup("fit")
@@ -86,8 +86,8 @@ class SAETrainerPipeline:
         plt.title("UMAP of Validation Set Features")
         plt.xlabel("UMAP 1")
         plt.ylabel("UMAP 2")
-        if self.run is not None:
-            self.run.log({
+        if self.wandb_run is not None:
+            self.wandb_run.log({
                 "umap_plot": wandb.Image(plt)
             })
         else:
