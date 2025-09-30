@@ -75,6 +75,10 @@ class SAETrainerPipeline:
 
         features_list = []
         paths_list = []  # For plotting: stores original images
+        
+        batch_size = self.config['batch_size']
+        dataset = self.data_module.val_dataset
+
         # Resolve device from trainer; fall back to CPU if missing
         device = getattr(self.trainer, "device", None)
         if device is None:
@@ -83,12 +87,17 @@ class SAETrainerPipeline:
             )
         self.sae.to(device)
         with torch.no_grad():
-            for imgs, paths in self.val_loader:
+            for batch_idx, imgs in enumerate(self.val_loader):
                 imgs = imgs.to(device)
                 # Extract features (assumes model returns feature vectors)
                 features = self.sae(imgs)
                 features_list.append(features.cpu().numpy())
-                paths_list.extend(paths)
+                
+                start_idx = batch_idx * batch_size
+                # Use len(imgs) to handle the last, possibly smaller, batch
+                end_idx = start_idx + len(imgs)
+                for i in range(start_idx, end_idx):
+                    paths_list.append(dataset.get_tilename(i))
 
         # Concatenate features from all batches
         features_np = np.concatenate(features_list, axis=0)
