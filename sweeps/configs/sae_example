@@ -1,0 +1,52 @@
+project: sae
+name: sae on encoder features
+method: grid
+metric:
+  name: val_loss
+  goal: minimize
+
+parameters:
+  # Run behavior
+  train_sae:
+    value: true
+  log_to_wandb:
+    value: true
+  debug:
+    value: false
+
+  # Data / loader (aligns with other configs)
+  dataset:
+    value: coad
+  gene_data_filename:
+    value: gene_log1p.csv
+  meta_data_dir:
+    value: metadata
+  image_size:
+    value: 224
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+
+  # Encoder
+  encoder_type:
+    value: dinov3_vits16
+  freeze_encoder:
+    value: true
+
+  # SAE training schedule
+  epochs:
+    value: 10
+  learning_rate:
+    value: 0.001
+  weight_decay:
+    value: 0.01
+
+  # SAE hyperparameters
+  d_hidden:
+    value: 2048
+  k:
+    value: 128
+  allow_negative_topk:
+    value: false
+

@@ -94,26 +94,26 @@ class LitSparseAutoencoder(L.LightningModule):
     """
     A minimal Lightning wrapper for the SparseAutoencoder model.
     """
-    def __init__(self, config):
+    def __init__(self, config, encoder: nn.Module):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=['encoder'])
         self.config = config
         self.sae = SparseAutoencoder(config)
         self.loss_fn = nn.MSELoss()
+        self.encoder = encoder
+        self.encoder.freeze()
 
     def forward(self, x):
-        # The SAE is unsupervised, so the forward pass takes an input x
-        # and returns its reconstruction. The lightning module will not be part of the
-        # forward pass of the main model
         return self.sae(x)
 
-    def _step(self, batch):
-        # The SAE is unsupervised. We assume the batch is either just the input `x`
-        # or a tuple `(x, y)` from a supervised dataloader, in which case we ignore `y`.
-        if isinstance(batch, (list, tuple)):
-            x = batch[0]
-        else:
-            x = batch
+    def _step(self, batch: tuple | list):
+        # Assuming batch is a tuple/list where the first element is the input tensor
+        x = batch[0]
+
+        # If an encoder is present, use it to get embeddings
+        if self.encoder:
+            with torch.no_grad():
+                x = self.encoder(x)
 
         reconstruction = self(x)
         loss = self.loss_fn(reconstruction, x)
@@ -126,7 +126,7 @@ class LitSparseAutoencoder(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         loss = self._step(batch)
-        self.log('val_loss_sae', loss, on_epoch=True)
+        self.log(f'val_{self.loss_fn.__class__.__name__}_sae', loss, on_epoch=True)
         return loss
 
     def configure_optimizers(self):

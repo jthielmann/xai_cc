@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Union, Optional
 sys.path.insert(0, '..')
 from script.configs.dataset_config import get_dataset_cfg
 from script.train.lit_train import TrainerPipeline
-from script.train.train_sae import run_sae_training
+from script.train.lit_train_sae import run_sae_training
 from main_utils import (
     ensure_free_disk_space,
     parse_args,

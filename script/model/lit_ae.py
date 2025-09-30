@@ -115,6 +115,115 @@ class Autoencoder(L.LightningModule):
     def set_num_training_batches(self, n: int):
         self.num_training_batches = n
 
+class SparseAutoencoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        d_in = config['d_in']
+        d_hidden = config['d_hidden']
+        self.encoder = nn.Linear(d_in, d_hidden, bias=config.get('encoder_bias', False))
+        self.topk_activation = TopKActivation(config['k'])
+        # True weight tying: decode with encoder.weight.T and a separate bias
+        self.decoder_bias = nn.Parameter(torch.zeros(d_in))
+        self.last_sparse = None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        encoded = self.encoder(x)
+        sparse = self.topk_activation(encoded)
+        self.last_sparse = sparse.detach()
+        # Decode via tied weights (encoder.weight.T) and learned bias
+        decoded = F.linear(sparse, self.encoder.weight.t(), self.decoder_bias)
+        return decoded
+
+
+class LitSparseAutoencoder(L.LightningModule):
+    """
+    LightningModule for training a SparseAutoencoder.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.save_hyperparameters(config)
+        self.sae = SparseAutoencoder(config)
+        self.loss_fn = nn.MSELoss()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.sae(x)
+
+    def training_step(self, batch, batch_idx):
+        x = batch[0] if isinstance(batch, (tuple, list)) else batch
+        recon = self(x)
+        loss = self.loss_fn(recon, x)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x = batch[0] if isinstance(batch, (tuple, list)) else batch
+        recon = self(x)
+        loss = self.loss_fn(recon, x)
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True)
+        return loss
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        x = batch[0] if isinstance(batch, (tuple, list)) else batch
+        encoded = self.sae.encoder(x)
+        sparse = self.sae.topk_activation(encoded)
+        return sparse
+
+    def configure_optimizers(self):
+        lr = float(self.hparams.get("learning_rate") or self.hparams.get("lr") or 1e-3)
+        wd = float(self.hparams.get("weight_decay") or 1e-2)
+        opt = optim.AdamW(self.parameters(), lr=lr, weight_decay=wd)
+        # OneCycleLR over full training
+        sched = OneCycleLR(
+            opt,
+            max_lr=lr,
+            total_steps=self.trainer.estimated_stepping_batches,
+        )
+        return {"optimizer": opt, "lr_scheduler": {"scheduler": sched, "interval": "step"}}
+
+
+
+
+class LitSparseAutoencoder(L.LightningModule):
+    """
+    LightningModule for training a SparseAutoencoder.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.save_hyperparameters(config)
+        self.sae = SparseAutoencoder(config)
+        self.loss_fn = nn.MSELoss()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.sae(x)
+
+    def training_step(self, batch, batch_idx):
+        x = batch[0] if isinstance(batch, (tuple, list)) else batch
+        recon = self(x)
+        loss = self.loss_fn(recon, x)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x = batch[0] if isinstance(batch, (tuple, list)) else batch
+        recon = self(x)
+        loss = self.loss_fn(recon, x)
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self):
+        lr = float(self.hparams.get("learning_rate") or self.hparams.get("lr") or 1e-3)
+        wd = float(self.hparams.get("weight_decay") or 1e-2)
+        opt = optim.AdamW(self.parameters(), lr=lr, weight_decay=wd)
+        # OneCycleLR over full training
+        sched = OneCycleLR(
+            opt,
+            max_lr=lr,
+            total_steps=self.trainer.estimated_stepping_batches,
+        )
+        return {"optimizer": opt, "lr_scheduler": {"scheduler": sched, "interval": "step"}}
+
+
+
 def get_autoencoder(config:dict):
     ae_type = config.get("ae_type")
     if ae_type == "sparse":

@@ -1,0 +1,73 @@
+project: sae
+name: debug SAE on encoder features
+method: grid
+metric:
+  name: val_loss
+  goal: minimize
+
+parameters:
+  # Run behavior
+  train_sae:
+    value: true
+  log_to_wandb:
+    value: false
+  debug:
+    value: true
+  umap:
+    value: true
+  umap_n_components:
+    value: 2
+  umap_n_neighbors:
+    value: 15
+
+  # Data / loader
+  dataset:
+    value: coad
+  tile_subdir:
+    value: tiles
+  split_col_name:
+    value: split
+  image_size:
+    value: 128
+  batch_size:
+    value: 8
+  num_workers:
+    value: 0
+
+  # Encoder
+  encoder_type:
+    value: resnet50imagenet
+  freeze_encoder:
+    value: true
+
+  # SAE hyperparameters
+  d_hidden:
+    value: 512
+  k:
+    value: 32
+  allow_negative_topk:
+    value: false
+  topk_by_magnitude:
+    value: false
+  lr:
+    value: 0.001
+
+  # Training schedule
+  epochs:
+    value: 2
+
+  # Runtime
+  precision:
+    value: 32
+  deterministic:
+    value: true
+
+  # Augmentations
+  hflip:
+    value: false
+  rot90s:
+    value: false
+  affine:
+    value: false
+  color_jitter:
+    value: false

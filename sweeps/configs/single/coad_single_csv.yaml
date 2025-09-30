@@ -1,0 +1,70 @@
+project: coad
+name: coad_from_single_csv
+method: grid
+metric:
+  name: val_MSE
+  goal: minimize
+
+parameters:
+  # I/O
+  dataset:
+    value: coad                  # provides mean/std; data_dir can be overridden below
+  meta_data_dir:
+    value: metadata
+  single_csv_path:
+    value: ../data/COAD/hvg_cmmn_std.csv   # single metadata file at top level
+  split_col_name:
+    value: split                 # set to your actual split column name
+  # tile_subdir:
+  #   value: tiles               # only set if CSV's tile paths are just filenames
+
+  # Train basics
+  debug:
+    value: false
+  log_to_wandb:
+    value: false
+  epochs:
+    value: 40
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+  image_size:
+    value: 224
+
+  # Model & loss
+  encoder_type:
+    value: resnet50random        # switch to resnet50imagenet/dino if available
+  loss_fn_switch:
+    value: MSE                   # or 'pearson' or 'WMSE' if using weights
+  freeze_encoder:
+    value: false
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 200
+
+  # Options
+  bins:
+    value: 1
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: false
+
+  # Output base
+  model_dir:
+    value: ../models/
+
+  # If using weighted MSE (optional):
+  # lds_weight_csv:
+  #   value: ../data/COAD/best_smoothings.csv
+  # weight_transform:
+  #   value: inverse
+
+# Notes:
+# - The CSV should contain at least: tile + numeric gene columns.
+# - Optional: a 'split' column with values in {train,val,test}; set split_col_name accordingly.
+# - If 'tile' values are relative (e.g., patient/tiles/img.png), we join data_dir/tile.
+# - If 'tile' values are just filenames, set tile_subdir so we join data_dir/tile_subdir/tile.
+# - If there's no split column, you can instead provide train_csv_path and val_csv_path separately.

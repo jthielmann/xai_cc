@@ -1,0 +1,70 @@
+project: coad 4
+name: coad_r50_mse
+method: grid
+metric:
+  name: val_MSE
+  goal: minimize
+
+parameters:
+  # Runtime
+  debug:
+    value: false
+  log_to_wandb:
+    value: false
+
+  # Training basics
+  epochs:
+    value: 40
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+  image_size:
+    value: 224
+
+  # Dataset selection (uses script/configs/dataset_config.py)
+  dataset:
+    value: coad
+  # Optionally switch to e.g. gene_data_ranknorm.csv
+  gene_data_filename:
+    value: gene_log1p.csv
+  meta_data_dir:
+    value: metadata
+
+  # Model and loss
+  encoder_type:
+    value: resnet50random   # safe offline. Use 'resnet50imagenet' or 'dino' if available
+  loss_fn_switch:
+    value: MSE              # or 'pearson' or 'WMSE' with lds_weight_csv
+  freeze_encoder:
+    value: false            # set true if using a strong pretrained encoder
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 200
+  use_leaky_relu:
+    value: false
+
+  # Optional knobs
+  bins:
+    value: 1                # >1 enables simple bin-balanced resampling
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: false
+
+  # Output base dir (script/main.py will place runs under this by project name)
+  model_dir:
+    value: ../models/
+
+  # If you want weighted MSE, also set these two:
+  # lds_weight_csv:
+  #   value: best_smoothings.csv  # path to CSV with per-gene LDS weights
+  # weight_transform:
+  #   value: inverse
+
+# Note:
+# - Genes are auto-detected from gene_data.csv if not provided.
+# - To restrict genes manually, add under parameters:
+#   genes:
+#     value: [RUBCNL]
