@@ -48,7 +48,7 @@ lit
 script
 
 srun --ntasks=1 --gpus=1 --cpus-per-gpu=4 \\
-     python main.py --config "${cfg_abs}"
+     python "${REPO_ROOT}/script/main.py" --config "${cfg_abs}"
 EOF
 
 chmod +x "$tmp"
