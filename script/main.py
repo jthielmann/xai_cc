@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Union, Optional
 sys.path.insert(0, '..')
 from script.configs.dataset_config import get_dataset_cfg
 from script.train.lit_train import TrainerPipeline
+from script.train.train_sae import run_sae_training
 from main_utils import (
     ensure_free_disk_space,
     parse_args,
@@ -180,10 +181,14 @@ def _train(cfg: Dict[str, Any]) -> None:
     cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
     cfg = _prepare_cfg(cfg)
 
-    if cfg.get("genes") is None:
-        cfg["genes"] = _prepare_gene_list(cfg)
-
-    TrainerPipeline(cfg, run=run).run()
+    # SAE path: only train sparse autoencoder, no gene heads/lr find.
+    if bool(cfg.get("train_sae", False)):
+        # No gene list inference needed — training uses encoder features only
+        run_sae_training(cfg, run=run)
+    else:
+        if cfg.get("genes") is None:
+            cfg["genes"] = _prepare_gene_list(cfg)
+        TrainerPipeline(cfg, run=run).run()
     if run: run.finish()
 
 def _sweep_run():
@@ -321,7 +326,11 @@ def _sweep_run():
     # Ensure dump_dir present and env set before training
     cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
     cfg = _prepare_cfg(cfg)
-    TrainerPipeline(cfg, run=run).run(); run.finish()
+    if bool(cfg.get("train_sae", False)):
+        run_sae_training(cfg, run=run)
+    else:
+        TrainerPipeline(cfg, run=run).run()
+    run.finish()
 
 def log_runtime_banner():
     dev = "cuda" if torch.cuda.is_available() else ("mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else "cpu")
