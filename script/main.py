@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Union, Optional
 sys.path.insert(0, '..')
 from script.configs.dataset_config import get_dataset_cfg
 from script.train.lit_train import TrainerPipeline
-from script.train.lit_train_sae import run_sae_training
+from script.train.lit_train_sae import SAETrainerPipeline
 from main_utils import (
     ensure_free_disk_space,
     parse_args,
@@ -184,7 +184,7 @@ def _train(cfg: Dict[str, Any]) -> None:
     # SAE path: only train sparse autoencoder, no gene heads/lr find.
     if bool(cfg.get("train_sae", False)):
         # No gene list inference needed — training uses encoder features only
-        run_sae_training(cfg, run=run)
+        SAETrainerPipeline(cfg, run=run)
     else:
         if cfg.get("genes") is None:
             cfg["genes"] = _prepare_gene_list(cfg)
@@ -327,7 +327,7 @@ def _sweep_run():
     cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
     cfg = _prepare_cfg(cfg)
     if bool(cfg.get("train_sae", False)):
-        run_sae_training(cfg, run=run)
+        SAETrainerPipeline(cfg, run=run)
     else:
         TrainerPipeline(cfg, run=run).run()
     run.finish()

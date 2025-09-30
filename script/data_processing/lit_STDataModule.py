@@ -54,37 +54,40 @@ class STDataModule(L.LightningDataModule):
                 self.train_dataset = get_dataset_single_file(
                     csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
-                    genes=self.cfg['genes'],
+                    genes=self.cfg.get('genes',None),
                     transforms=self.transforms_train,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir'),
                     split='train',
-                    split_col_name=self.cfg.get('split_col_name', 'split')
+                    split_col_name=self.cfg.get('split_col_name', 'split'),
+                    only_inputs=self.cfg.get("train_sae", False)
                 )
             elif self.cfg.get('train_csv_path'):
                 self.train_dataset = get_dataset_single_file(
                     csv_path=self.cfg['train_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
-                    genes=self.cfg['genes'],
+                    genes=self.cfg.get('genes',None),
                     transforms=self.transforms_train,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
-                    tile_subdir=self.cfg.get('tile_subdir')
+                    tile_subdir=self.cfg.get('tile_subdir'),
+                    only_inputs=self.cfg.get("train_sae", False)
                 )
             else:
                 self.train_dataset = get_dataset(
                     self.cfg['data_dir'],
-                    genes=self.cfg['genes'],
+                    genes=self.cfg.get('genes',None),
                     samples=self.cfg['train_samples'],
                     transforms=self.transforms_train,
                     bins=self.cfg.get("bins", 0),
                     gene_data_filename=self.cfg['gene_data_filename'],
                     meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                     max_len=max_len,
-                    lds_smoothing_csv=lds_csv
+                    lds_smoothing_csv=lds_csv,
+                    only_inputs=self.cfg.get("train_sae", False)
                 )
 
             if self.cfg.get('single_csv_path'):
@@ -97,37 +100,40 @@ class STDataModule(L.LightningDataModule):
                 self.val_dataset = get_dataset_single_file(
                     csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
-                    genes=self.cfg['genes'],
+                    genes=self.cfg.get('genes',None),
                     transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir'),
                     split='val',
-                    split_col_name=self.cfg.get('split_col_name', 'split')
+                    split_col_name=self.cfg.get('split_col_name', 'split'),
+                    only_inputs=self.cfg.get("train_sae", False)
                 )
             elif self.cfg.get('val_csv_path'):
                 self.val_dataset = get_dataset_single_file(
                     csv_path=self.cfg['val_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
-                    genes=self.cfg['genes'],
+                    genes=self.cfg.get('genes',None),
                     transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
-                    tile_subdir=self.cfg.get('tile_subdir')
+                    tile_subdir=self.cfg.get('tile_subdir'),
+                    only_inputs=self.cfg.get("train_sae", False)
                 )
             else:
                 self.val_dataset = get_dataset(
                     self.cfg['data_dir'],
-                    genes=self.cfg['genes'],
+                    genes=self.cfg.get('genes',None),
                     samples=self.cfg['val_samples'],
                     transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     gene_data_filename=self.cfg['gene_data_filename'],
                     meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                     max_len=max_len,
-                    lds_smoothing_csv=lds_csv
+                    lds_smoothing_csv=lds_csv,
+                    only_inputs=self.cfg.get("train_sae", False)
                 )
         if stage in (None, 'test'):
             if self.cfg.get('single_csv_path'):
@@ -140,38 +146,41 @@ class STDataModule(L.LightningDataModule):
                 self.test_dataset = get_dataset_single_file(
                     csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
-                    genes=self.cfg['genes'],
+                    genes=self.cfg.get('genes',None),
                     transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir'),
                     split='test',
-                    split_col_name=self.cfg.get('split_col_name', 'split')
+                    split_col_name=self.cfg.get('split_col_name', 'split'),
+                    only_inputs=self.cfg.get("train_sae", False)
                 )
             elif self.cfg.get('test_csv_path'):
                 self.test_dataset = get_dataset_single_file(
                     csv_path=self.cfg['test_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
-                    genes=self.cfg['genes'],
+                    genes=self.cfg.get('genes',None),
                     transforms=self.transforms_eval,
                     bins=self.cfg.get("bins", 0),
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
-                    tile_subdir=self.cfg.get('tile_subdir')
+                    tile_subdir=self.cfg.get('tile_subdir'),
+                    only_inputs=self.cfg.get("train_sae", False)
                 )
             else:
                 if self.cfg.get('test_samples'):
                     self.test_dataset = get_dataset(
                         self.cfg['data_dir'],
-                        genes=self.cfg['genes'],
+                        self.cfg.get('genes',None),
                         samples=self.cfg['test_samples'],
                         transforms=self.transforms_eval,
                         bins=self.cfg.get("bins", 0),
                         gene_data_filename=self.cfg['gene_data_filename'],
                         meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                         max_len=max_len,
-                        lds_smoothing_csv=lds_csv
+                        lds_smoothing_csv=lds_csv,
+                    only_inputs=self.cfg.get("train_sae", False)
                     )
 
     def train_dataloader(self):

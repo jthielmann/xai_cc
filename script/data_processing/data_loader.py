@@ -273,6 +273,8 @@ def get_base_dataset(
     weight_transform: str = "inverse",
     weight_clamp: int = 10
 ):
+    if lds_smoothing_csv is not None and genes is None:
+        raise RuntimeError(f"lds_smoothing_csv is not None ({lds_smoothing_csv}) and genes is None")
     # normalize meta data directory token (support 'meta_data', '/meta_data', 'meta_data/')
     meta_dir = meta_data_dir.strip("/")
     columns_of_interest = ["tile"] + (genes or []) if genes else None
@@ -286,6 +288,8 @@ def get_base_dataset(
         dfs.append(df)
 
     base_df = pd.concat(dfs, ignore_index=True)
+
+
 
     if lds_smoothing_csv is not None:
         gene2weights = load_gene_weights(lds_smoothing_csv, genes=genes,weight_transform=weight_transform)

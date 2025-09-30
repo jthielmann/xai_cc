@@ -1,0 +1,65 @@
+project: coad best by N19 hvg
+name: coad best hvg
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  # Run behavior
+  log_to_wandb:
+    value: true
+  debug:
+    value: false
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: true
+
+  # Data / loader
+  dataset:
+    value: coad
+  gene_data_filename:
+    value: gene_log1p.csv
+  image_size:
+    value: 224
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+  meta_data_dir:
+    value: metadata
+  genes:
+    value: [ACAA1, ADGRE5, ADGRG1, ALAS1, ANKRD10, ANP32E, APOE, ARL4C, ATP6V0B, BACE2, BECN1, CASK, CD320, CD44, CHMP4A, CLSTN1, CLTC, CNPY3, COASY, COL1A1, CPNE3, CREG1, CTNND1, CYCS, DDR1, DECR1, DHRS7, DLD, DNAJC15, DSG2, EBNA1BP2, EBP, ECH1, EFCAB14, EIF5, EPB41L2, ERBB2, ERO1A, FAT1, FIS1, FPGS, GFPT1, GRN, HSD17B10, HSPA8, HSPD1, ID1, IFNAR1, IGF2R, IL13RA1, IQGAP1, JPT1, JUN, KDELR2, KLHDC2, LAGE3, LBR, LIPA, LRPAP1, LSR, MAP7, MAPK13, MAT2A, MCM5, MET, MIF, MLEC, MMP2, MPC2, MYC, NENF, NFKBIB, NGRN, NOTCH1, NUDCD3, P4HTM, PAICS, PCBD1, PGRMC1, PHKA1, PHKG2, PIN1, PLEKHJ1, PLOD3, PLP2, POLR2I, POLR2K, PPP2R5A, PSMB10, PSMD2, PSMD9, PSME1, PSME2, PSMF1, PTPN12, PTPN6, PTPRF, PUF60, PYCR1, RALA, RNPS1, SCAND1, SCP2, SMARCD2, SOX9, SPTAN1, SQSTM1, STX4, SYPL1, TFDP1, TIMP2, TM9SF2, TMED10, TOMM70, TP53BP1, TPD52L2, TPX2, TRIM2, TSPAN6, TSTA3, UBE2A, UFM1, USP7, YKT6]
+  split_genes_by:
+    value: 50
+
+  # Encoder
+  encoder_type:
+    values: [dinov3_vits16, uni, dinov3_vitl16, dinov3_vitb16]
+  freeze_encoder:
+    value: true
+
+  # Head
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 256
+
+  # Training schedule
+  epochs:
+    value: 20
+  optimizer:
+    value: adamw
+  global_fix_learning_rate:
+    value: 0.01
+
+  # Logging / metrics
+  loss_fn_switch:
+    value: MSE
+
+  # Runtime (optional but handy)
+  precision_auto:
+    value: true
+  strategy:
+    value: "auto"
