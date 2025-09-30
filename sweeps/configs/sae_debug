@@ -1,4 +1,4 @@
-project: sae
+project: sae tester
 name: debug SAE on encoder features
 method: grid
 metric:
@@ -10,9 +10,9 @@ parameters:
   train_sae:
     value: true
   log_to_wandb:
-    value: false
-  debug:
     value: true
+  debug:
+    value: false
   umap:
     value: true
   umap_n_components:
@@ -22,23 +22,23 @@ parameters:
 
   # Data / loader
   dataset:
-    value: crc_base
+    value: coad
   tile_subdir:
     value: tiles
   split_col_name:
     value: split
   image_size:
-    value: 128
+    value: 224
   batch_size:
     value: 8
   num_workers:
     value: 0
   gene_data_filename: # for tile names
-    value: gene_data.csv
+    value: gene_log1p.csv
 
   # Encoder
   encoder_type:
-    value: resnet50imagenet
+    value: uni
   freeze_encoder:
     value: true
 

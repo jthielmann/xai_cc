@@ -90,7 +90,8 @@ class SAETrainerPipeline:
             for batch_idx, imgs in enumerate(self.val_loader):
                 imgs = imgs.to(device)
                 # Extract features (assumes model returns feature vectors)
-                features = self.sae(imgs)
+                features = self.encoder(imgs)
+                features = self.sae(features)
                 features_list.append(features.cpu().numpy())
                 
                 start_idx = batch_idx * batch_size

@@ -101,7 +101,8 @@ class LitSparseAutoencoder(L.LightningModule):
         self.sae = SparseAutoencoder(config)
         self.loss_fn = nn.MSELoss()
         self.encoder = encoder
-        self.encoder.freeze()
+        for p in self.encoder.parameters():
+            p.requires_grad = False
 
     def forward(self, x):
         return self.sae(x)
