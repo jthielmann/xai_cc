@@ -107,8 +107,11 @@ class LitSparseAutoencoder(L.LightningModule):
         return self.sae(x)
 
     def _step(self, batch: tuple | list):
-        # Assuming batch is a tuple/list where the first element is the input tensor
-        x = batch[0]
+        if isinstance(batch, torch.Tensor):
+            x = batch
+        else:
+            # Assuming batch is a tuple/list where the first element is the input tensor
+            x = batch[0]
 
         # If an encoder is present, use it to get embeddings
         if self.encoder:

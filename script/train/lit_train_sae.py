@@ -1,3 +1,4 @@
+import os
 import lightning as L
 import numpy as np
 import torch
@@ -58,7 +59,12 @@ class SAETrainerPipeline:
 
         features_list = []
         paths_list = []  # For plotting: stores original images
-        device = self.trainer.device
+        # Resolve device from trainer; fall back to CPU if missing
+        device = getattr(self.trainer, "device", None)
+        if device is None:
+            device = getattr(getattr(self.trainer, "strategy", None), "root_device", None) or (
+                torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+            )
         self.sae.to(device)
         with torch.no_grad():
             for imgs, paths in self.val_loader:
@@ -80,10 +86,14 @@ class SAETrainerPipeline:
         plt.title("UMAP of Validation Set Features")
         plt.xlabel("UMAP 1")
         plt.ylabel("UMAP 2")
-        
-        self.run.log({
-            "umap_plot": wandb.Image(plt)
-        })
+        if self.run is not None:
+            self.run.log({
+                "umap_plot": wandb.Image(plt)
+            })
+        else:
+            out_dir = self.config.get("out_path") or self.config.get("sweep_dir") or self.config.get("model_dir") or "."
+            os.makedirs(out_dir, exist_ok=True)
+            plt.savefig(os.path.join(out_dir, "umap_val.png"), dpi=150, bbox_inches="tight")
         plt.close()
         
         return embedding, paths_list

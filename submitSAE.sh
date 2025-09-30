@@ -13,6 +13,6 @@ if [[ ! -f "$CONFIG" ]]; then
 fi
 
 # Single call: the Python script iterates all encoders from the config
-python -m script.train.train_sae -c "$CONFIG"
+python -m script.main -c "$CONFIG"
 
 echo "\nDone. SAE outputs are under ./sae/<encoder>/"
