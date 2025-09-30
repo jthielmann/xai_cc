@@ -28,6 +28,22 @@ class SAETrainerPipeline:
     def setup(self):
 
         self.encoder = get_encoder(self.config.get("encoder_type"))
+
+        # Infer d_in from the encoder output if not specified
+        if "d_in" not in self.config:
+            sample_batch = next(iter(self.train_loader))
+            # The batch is either a tensor or a list/tuple.
+            if isinstance(sample_batch, (list, tuple)):
+                sample_input = sample_batch[0]
+            else:
+                sample_input = sample_batch
+            
+            with torch.no_grad():
+                encoder_output = self.encoder(sample_input)
+            
+            d_in = encoder_output.shape[-1]
+            self.config['d_in'] = d_in
+
         self.sae = LitSparseAutoencoder(self.config, encoder=self.encoder)
 
         logger = None
