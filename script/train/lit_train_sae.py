@@ -3,7 +3,7 @@ import lightning as L
 import numpy as np
 import torch
 import wandb
-from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from matplotlib import pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
@@ -69,6 +69,15 @@ class SAETrainerPipeline:
             logger = WandbLogger(project=self.config["project"], name=self.config["name"])
 
         callbacks = [UMAPCallback(self)]
+        
+        if self.config.get("model_dir"):
+            checkpoint_callback = ModelCheckpoint(
+                dirpath=self.config.get("model_dir"),
+                filename='{epoch}-{val_loss:.2f}',
+                save_top_k=1,
+                monitor='val_loss'
+            )
+            callbacks.append(checkpoint_callback)
 
         self.trainer = L.Trainer(
             max_epochs=self.config["epochs"],
