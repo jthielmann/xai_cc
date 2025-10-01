@@ -19,8 +19,6 @@ parameters:
     value: 2
   umap_n_neighbors:
     value: 15
-  model_dir: #save them here
-    value: "../models"
 
   # Data / loader
   dataset:
