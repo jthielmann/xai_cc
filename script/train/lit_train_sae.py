@@ -68,14 +68,14 @@ class SAETrainerPipeline:
         if self.config.get("log_to_wandb"):
             logger = WandbLogger(project=self.config["project"], name=self.config["name"])
 
-        callbacks = [UMAPCallback(self)]
+        callbacks: list[Callback] = [UMAPCallback(self)]
         
         if self.config.get("model_dir"):
             checkpoint_callback = ModelCheckpoint(
                 dirpath=self.config.get("model_dir"),
-                filename='{epoch}-{val_loss:.2f}',
+                filename='{epoch}-{val_MSELoss_sae:.2f}',
                 save_top_k=1,
-                monitor='val_loss'
+                monitor='val_MSELoss_sae'
             )
             callbacks.append(checkpoint_callback)
 
