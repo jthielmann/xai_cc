@@ -22,7 +22,7 @@ parameters:
 
   # Data / loader
   dataset:
-    value: coad
+    value: crc_base
   tile_subdir:
     value: tiles
   split_col_name:
@@ -34,9 +34,9 @@ parameters:
   num_workers:
     value: 0
   gene_data_filename: # for tile names
-    value: gene_log1p.csv
+    value: gene_data.csv
   meta_data_dir:
-    value: metadata
+    value: meta_data
 
   # Encoder
   encoder_type:

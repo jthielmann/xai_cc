@@ -58,6 +58,7 @@ class SAETrainerPipeline:
         )
 
     def run(self):
+        print("sae run debug")
         if not self.trainer:
             self.setup()
 

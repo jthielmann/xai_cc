@@ -1,10 +1,24 @@
-import csv, sys, os, random, numpy, torch, yaml, pandas as pd, wandb
-from typing import Dict, Any, List, Union, Optional
+import os
+# Make numba avoid OpenMP/TBB to prevent clashes with PyTorch/MKL on HPC
+os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
+# Keep thread pools small to reduce runtime conflicts
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+# Headless-safe Matplotlib backend (prevents some backend segfaults)
+os.environ.setdefault("MPLBACKEND", "Agg")
+# Optional last-resort for duplicate OpenMP (use only if still crashing)
+# os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+import numpy as np
+import torch
+from umap import UMAP
 
+import csv, sys, os, random, numpy, torch, yaml, pandas as pd, wandb
 sys.path.insert(0, '..')
+from script.train.lit_train_sae import SAETrainerPipeline
+
+from typing import Dict, Any, List, Union, Optional
 from script.configs.dataset_config import get_dataset_cfg
 from script.train.lit_train import TrainerPipeline
-from script.train.lit_train_sae import SAETrainerPipeline
 from main_utils import (
     ensure_free_disk_space,
     parse_args,
@@ -184,6 +198,7 @@ def _train(cfg: Dict[str, Any]) -> None:
     # SAE path: only train sparse autoencoder, no gene heads/lr find.
     if bool(cfg.get("train_sae", False)):
         # No gene list inference needed — training uses encoder features only
+        print("SAETrainerPipeline debug")
         SAETrainerPipeline(cfg, run=run).run()
     else:
         if cfg.get("genes") is None:
@@ -337,6 +352,7 @@ def log_runtime_banner():
     print(f"[runtime] torch={torch.__version__} cuda={torch.version.cuda} device={dev} bf16_supported={torch.cuda.is_bf16_supported() if dev=='cuda' else False}")
 
 def main():
+    print("main debug")
     args = parse_args()
     # Set up dump env early so any libs honor it
     dump_dir = None
