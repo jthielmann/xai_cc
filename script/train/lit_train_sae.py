@@ -104,6 +104,10 @@ class SAETrainerPipeline:
         # Concatenate features from all batches
         features_np = np.concatenate(features_list, axis=0)
 
+        # Reshape 3D features to 2D for UMAP
+        if features_np.ndim == 3:
+            features_np = features_np.reshape(features_np.shape[0], -1)
+
         # Compute the UMAP embedding on the aggregated features
         umap_model = UMAP(n_components=n_components, random_state=42, n_neighbors=n_neighbors)
         embedding = umap_model.fit_transform(features_np)
