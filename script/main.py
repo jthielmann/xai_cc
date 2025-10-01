@@ -271,6 +271,9 @@ def _sweep_run():
         if k not in exclude:
             cfg[k] = v
 
+    if cfg.get("encoder_type") in ["dinov3_vits16plus"]:
+        cfg["image_size"] = 384
+
     # Recompute gene chunks from the resolved config so we can log genes_id deterministically
     # Build a temporary cfg to infer gene list without forcing a previously chosen chunk
     tmp_cfg = dict(cfg)
