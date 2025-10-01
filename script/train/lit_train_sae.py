@@ -90,6 +90,7 @@ class SAETrainerPipeline:
     def generate_umap(self, epoch=None):
         # --- 1. Feature Extraction ---
         features_list = []
+        paths_list = []
         dataset = self.data_module.val_dataset
 
         device = getattr(self.trainer, "device", None)
@@ -99,19 +100,24 @@ class SAETrainerPipeline:
             )
         self.sae.to(device)
         with torch.no_grad():
-            for imgs in self.val_loader:
+            for batch_idx, imgs in enumerate(self.val_loader):
                 imgs = imgs.to(device)
                 features = self.encoder(imgs)
                 features = self.sae(features)
                 features_list.append(features.cpu().numpy())
-        
+                
+                start_idx = batch_idx * self.config['batch_size']
+                end_idx = start_idx + len(imgs)
+                for i in range(start_idx, end_idx):
+                    paths_list.append(dataset.get_tilename(i))
+
         features_np = np.concatenate(features_list, axis=0)
         if features_np.ndim == 3:
             features_np = features_np.reshape(features_np.shape[0], -1)
 
         # --- 2. UMAP Hyperparameter Sweep ---
         
-        # Define the sweep configuration
+        should_generate_image_plots = self.config.get("umap_generate_image_plots", False)
         umap_sweep_params = self.config.get("umap_sweep_params", {
             "n_neighbors": [15, 30, 50],
             "min_dist": [0.1, 0.25, 0.5]
@@ -119,30 +125,31 @@ class SAETrainerPipeline:
         n_neighbors_list = umap_sweep_params.get("n_neighbors", [15])
         min_dist_list = umap_sweep_params.get("min_dist", [0.1])
         
-        # Prepare W&B Table if logging is enabled
         table = None
         if self.wandb_run:
-            table = wandb.Table(columns=["Epoch", "n_neighbors", "min_dist", "UMAP Plot"])
+            table_columns = ["Epoch", "n_neighbors", "min_dist", "Patient-Colored UMAP"]
+            if should_generate_image_plots:
+                table_columns.append("Image UMAP")
+            table = wandb.Table(columns=table_columns)
 
-        # Common data for plotting
         patient_ids = dataset.df['patient'].tolist()
         unique_patients = sorted(list(set(patient_ids)))
         cmap = plt.get_cmap('tab20', len(unique_patients))
         patient_to_color = {p: cmap(i) for i, p in enumerate(unique_patients)}
+        out_dir = self.config.get("out_path") or self.config.get("sweep_dir") or self.config.get("model_dir") or "."
+        os.makedirs(out_dir, exist_ok=True)
 
-        # --- Loop through hyperparameters ---
         for n_neighbors in n_neighbors_list:
             for min_dist in min_dist_list:
-                # Compute UMAP embedding
                 umap_model = UMAP(
                     n_components=self.config.get("umap_n_components", 2),
                     n_neighbors=n_neighbors,
                     min_dist=min_dist,
-                    random_state=42
+                    random_state=42,
+                    n_jobs=1
                 )
                 embedding = umap_model.fit_transform(features_np)
 
-                # --- Generate Patient-Colored Plot ---
                 plt.figure(figsize=(14, 10))
                 for patient in unique_patients:
                     idx = [i for i, p in enumerate(patient_ids) if p == patient]
@@ -157,17 +164,49 @@ class SAETrainerPipeline:
                 plt.setp(legend.get_title(), fontsize=12)
                 plt.tight_layout(rect=[0, 0, 0.85, 1])
 
-                # Add plot to W&B Table or save locally
-                if table is not None:
-                    table.add_data(epoch, n_neighbors, min_dist, wandb.Image(plt))
-                else:
-                    out_dir = self.config.get("out_path") or self.config.get("sweep_dir") or self.config.get("model_dir") or "."
-                    os.makedirs(out_dir, exist_ok=True)
-                    filename = f"umap_epoch_{epoch}_nn_{n_neighbors}_md_{min_dist}.png"
+                patient_plot_image = wandb.Image(plt) if self.wandb_run else None
+                if not self.wandb_run:
+                    filename = f"patient_colored_umap_epoch_{epoch}_nn_{n_neighbors}_md_{min_dist}.png"
                     plt.savefig(os.path.join(out_dir, filename), dpi=300, bbox_inches="tight")
-                
                 plt.close()
 
-        # --- 3. Log the W&B Table ---
+                image_plot_image = None
+                if should_generate_image_plots:
+                    plt.figure(figsize=(25, 20))
+                    ax = plt.gca()
+                    embedding_norm = (embedding - embedding.min(0)) / (embedding.max(0) - embedding.min(0))
+                    
+                    for i, (x, y) in enumerate(embedding_norm):
+                        try:
+                            img = Image.open(paths_list[i])
+                            img.thumbnail((128, 128))
+                            im = OffsetImage(img, zoom=0.35)
+                            ab = AnnotationBbox(im, (x, y), frameon=False, pad=0.0)
+                            ax.add_artist(ab)
+                        except FileNotFoundError:
+                            print(f"Warning: Image not found at {paths_list[i]}")
+
+                    ax.update_datalim(embedding_norm)
+                    ax.set_xlim(-0.1, 1.1)
+                    ax.set_ylim(-0.1, 1.1)
+                    ax.set_aspect('equal', adjustable='box')
+                    plt.title(f'Image UMAP (nn={n_neighbors}, md={min_dist}, epoch={epoch})', fontsize=22)
+                    plt.xlabel('UMAP 1', fontsize=15)
+                    plt.ylabel('UMAP 2', fontsize=15)
+                    plt.tick_params(axis='both', which='both', bottom=False, top=False, left=False, right=False, labelbottom=False, labelleft=False)
+
+                    if self.wandb_run:
+                        image_plot_image = wandb.Image(plt)
+                    else:
+                        filename = f"image_umap_epoch_{epoch}_nn_{n_neighbors}_md_{min_dist}.png"
+                        plt.savefig(os.path.join(out_dir, filename), dpi=300, bbox_inches="tight")
+                    plt.close()
+
+                if table is not None:
+                    row = [epoch, n_neighbors, min_dist, patient_plot_image]
+                    if should_generate_image_plots:
+                        row.append(image_plot_image)
+                    table.add_data(*row)
+
         if table is not None:
             self.wandb_run.log({f"UMAP_Hyperparameter_Sweep_Epoch_{epoch}": table})
