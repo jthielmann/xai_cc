@@ -58,7 +58,9 @@ def _build_timm_backbone(model_name: str, **kwargs):
 
 def _load_model(timm_name: str, weights: Optional[str], *, img_size: int = 224, **kwargs):
     # Pass img_size only to non-ConvNeXt models
-    if "convnext" not in timm_name:
+    if "convnext" in timm_name:
+        kwargs.pop("img_size", None)
+    else:
         kwargs["img_size"] = img_size
     model = _build_timm_backbone(timm_name, **kwargs)
     sd = _load_local_state_dict(weights)
