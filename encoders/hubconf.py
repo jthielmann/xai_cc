@@ -80,7 +80,7 @@ _VIT_MAP: Dict[str, Tuple[str, int]] = {
     "dinov3_vitb16": ("vit_base_patch16_224", 224),
     "dinov3_vitl16": ("vit_large_patch16_224", 224),
     # Best-effort maps for larger variants (require recent timm)
-    "dinov3_vith16plus": ("vit_huge_patch14_224", 224),
+    "dinov3_vith16plus": ("vit_huge_patch16_224", 224),
     "dinov3_vit7b16": ("vit_giant_patch14_224", 224),
 }
 
