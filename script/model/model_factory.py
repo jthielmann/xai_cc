@@ -136,7 +136,7 @@ def load_uni_model():
 
     print("loading model from local file")
     model = build_model(**timm_kwargs)
-    state_dict = torch.load(model_file, map_location="cpu")
+    state_dict = torch.load(model_file, map_location="cpu", weights_only=True)
     model.load_state_dict(state_dict)
     return model
 

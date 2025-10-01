@@ -73,16 +73,14 @@ def measure_peak_train_step(model, batch, criterion, optimizer, amp=True, device
 def load_model(path: str, config: Dict[str, Any]) -> L.LightningModule:
     device = "cpu"
     model = GeneExpressionRegressor(config)
-    state = torch.load(path, map_location=device)
-    model.load_state_dict(state, strict=False)
+            state = torch.load(path, map_location=device, weights_only=True)    model.load_state_dict(state, strict=False)
     model.to(device).eval()
     return model
 
 def load_model2(config: Dict[str, Any], model_name = "/best_model.pth") -> L.LightningModule:
     device = "cpu"
     model = GeneExpressionRegressor(config)
-    state = torch.load(config["out_path"] + model_name, map_location=device)
-    model.load_state_dict(state, strict=False)
+            state = torch.load(config["out_path"] + model_name, map_location=device, weights_only=True)    model.load_state_dict(state, strict=False)
     model.to(device).eval()
     return model
 

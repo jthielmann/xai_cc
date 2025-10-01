@@ -102,6 +102,9 @@ class SAETrainerPipeline:
         paths_list = []
         dataset = self.data_module.val_dataset
 
+        max_samples = self.config.get("umap_max_samples")
+        num_samples = 0
+
         device = getattr(self.trainer, "device", None)
         if device is None:
             device = getattr(getattr(self.trainer, "strategy", None), "root_device", None) or (
@@ -110,22 +113,29 @@ class SAETrainerPipeline:
         self.sae.to(device)
         with torch.no_grad():
             for batch_idx, imgs in enumerate(self.val_loader):
+                if max_samples is not None and num_samples >= max_samples:
+                    break
                 imgs = imgs.to(device)
                 features = self.encoder(imgs)
                 features = self.sae(features)
                 features_list.append(features.cpu().numpy())
-                
+
                 start_idx = batch_idx * self.config['batch_size']
                 end_idx = start_idx + len(imgs)
                 for i in range(start_idx, end_idx):
                     paths_list.append(dataset.get_tilename(i))
+                num_samples += len(imgs)
 
         features_np = np.concatenate(features_list, axis=0)
+        if max_samples is not None and features_np.shape[0] > max_samples:
+            features_np = features_np[:max_samples]
+            paths_list = paths_list[:max_samples]
+
         if features_np.ndim == 3:
             features_np = features_np.reshape(features_np.shape[0], -1)
 
         # --- 2. UMAP Hyperparameter Sweep ---
-        
+
         should_generate_image_plots = self.config.get("umap_generate_image_plots", False)
         umap_sweep_params = self.config.get("umap_sweep_params", {
             "n_neighbors": [15, 30, 50],
@@ -133,7 +143,7 @@ class SAETrainerPipeline:
         })
         n_neighbors_list = umap_sweep_params.get("n_neighbors", [15])
         min_dist_list = umap_sweep_params.get("min_dist", [0.1])
-        
+
         table = None
         if self.wandb_run:
             table_columns = ["Epoch", "n_neighbors", "min_dist", "Patient-Colored UMAP"]
@@ -142,6 +152,9 @@ class SAETrainerPipeline:
             table = wandb.Table(columns=table_columns)
 
         patient_ids = dataset.df['patient'].tolist()
+        if max_samples is not None:
+            patient_ids = patient_ids[:max_samples]
+            
         unique_patients = sorted(list(set(patient_ids)))
         cmap = plt.get_cmap('tab20', len(unique_patients))
         patient_to_color = {p: cmap(i) for i, p in enumerate(unique_patients)}
@@ -164,7 +177,7 @@ class SAETrainerPipeline:
                     idx = [i for i, p in enumerate(patient_ids) if p == patient]
                     if not idx: continue
                     plt.scatter(embedding[idx, 0], embedding[idx, 1], s=25, color=patient_to_color[patient], label=patient)
-                
+
                 title = f'UMAP (nn={n_neighbors}, md={min_dist}, epoch={epoch})'
                 plt.title(title, fontsize=18)
                 plt.xlabel('UMAP 1', fontsize=12)
@@ -184,7 +197,7 @@ class SAETrainerPipeline:
                     plt.figure(figsize=(25, 20))
                     ax = plt.gca()
                     embedding_norm = (embedding - embedding.min(0)) / (embedding.max(0) - embedding.min(0))
-                    
+
                     for i, (x, y) in enumerate(embedding_norm):
                         try:
                             img = Image.open(paths_list[i])

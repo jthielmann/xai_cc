@@ -15,6 +15,8 @@ parameters:
     value: true
   umap:
     value: true
+  umap_max_samples:
+    value: 20000
   umap_n_components:
     value: 2
   umap_n_neighbors:

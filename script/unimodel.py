@@ -61,7 +61,7 @@ if __name__ == "__main__":
     if os.path.exists(MODEL_FILE):
         print("loading model from local file")
         model = build_model(encoder=False, **timm_kwargs)  # no net access
-        state_dict = torch.load(MODEL_FILE, map_location="cpu")
+        state_dict = torch.load(MODEL_FILE, map_location="cpu", weights_only=True)
         model.load_state_dict(state_dict)
     else:
         print("downloading model")

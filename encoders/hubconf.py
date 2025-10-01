@@ -35,7 +35,7 @@ def _load_local_state_dict(weights: Optional[str]):
         return None
     if not os.path.isfile(weights):
         raise FileNotFoundError(f"Checkpoint not found: {weights}")
-    obj = torch.load(weights, map_location="cpu")
+    obj = torch.load(weights, map_location="cpu", weights_only=True)
     if isinstance(obj, dict):
         for k in ("model_ema", "model", "state_dict", "params"):
             if k in obj and isinstance(obj[k], dict):
