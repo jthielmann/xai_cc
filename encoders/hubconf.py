@@ -43,22 +43,24 @@ def _load_local_state_dict(weights: Optional[str]):
     # Fallback: assume it's already a state_dict
     return obj
 
-def _build_timm_backbone(model_name: str, img_size: int = 224, **kwargs):
+def _build_timm_backbone(model_name: str, **kwargs):
     """
     Create a TIMM backbone that returns features (not logits).
-    Adjust 'img_size' only if your TIMM variant needs it (e.g., 384 for some '+').
+    'img_size' may be passed in via kwargs if the TIMM variant needs it (e.g., 384 for some '+').
     """
     return timm.create_model(
         model_name,
         pretrained=False,
         num_classes=0,
         global_pool="",
-        img_size=img_size,
         **kwargs,
     )
 
 def _load_model(timm_name: str, weights: Optional[str], *, img_size: int = 224, **kwargs):
-    model = _build_timm_backbone(timm_name, img_size=img_size, **kwargs)
+    # Pass img_size only to non-ConvNeXt models
+    if "convnext" not in timm_name:
+        kwargs["img_size"] = img_size
+    model = _build_timm_backbone(timm_name, **kwargs)
     sd = _load_local_state_dict(weights)
     if sd is not None:
         missing, unexpected = model.load_state_dict(sd, strict=False)
