@@ -1,0 +1,88 @@
+project: sae grid
+name: debug SAE on encoder features
+method: grid
+metric:
+  name: val_loss
+  goal: minimize
+
+parameters:
+  # Run behavior
+  train_sae:
+    value: true
+  log_to_wandb:
+    value: true
+  debug:
+    value: true
+  umap:
+    value: true
+  umap_n_components:
+    value: 2
+  umap_n_neighbors:
+    value: 15
+
+  # Data / loader
+  dataset:
+    value: coad
+  tile_subdir:
+    value: tiles
+  split_col_name:
+    value: split
+  image_size:
+    value: 224
+  batch_size:
+    value: 8
+  num_workers:
+    value: 0
+  gene_data_filename: # for tile names
+    value: gene_log1p.csv
+  meta_data_dir:
+    value: metadata
+
+  # Encoder
+  encoder_type:
+    values:
+      - dinov3_vits16
+      - dinov3_vits16plus
+      - dinov3_vitb16
+      - dinov3_vitl16
+      - dinov3_vith16plus
+      - dinov3_vit7b16
+      - dinov3_convnext_tiny
+      - dinov3_convnext_small
+      - dinov3_convnext_base
+      - dinov3_convnext_large
+      - resnet50imagenet
+  freeze_encoder:
+    value: true
+
+  # SAE hyperparameters
+  d_hidden:
+    value: 512
+  k:
+    value: 32
+  allow_negative_topk:
+    value: false
+  topk_by_magnitude:
+    value: false
+  lr:
+    value: 0.001
+
+  # Training schedule
+  epochs:
+    value: 2
+
+  # Runtime
+  precision:
+    value: 32
+  deterministic:
+    value: true
+
+  # Augmentations
+  hflip:
+    value: false
+  rot90s:
+    value: false
+  affine:
+    value: false
+  color_jitter:
+    value: false
