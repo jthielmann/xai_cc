@@ -161,7 +161,7 @@ class SAETrainerPipeline:
             try:
                 img = Image.open(paths_list[i])
                 img.thumbnail((128, 128)) # Resize for thumbnail
-                im = OffsetImage(img, zoom=0.7) # Zoom can be adjusted
+                im = OffsetImage(img, zoom=0.35) # Zoom can be adjusted
                 ab = AnnotationBbox(im, (x, y), frameon=False, pad=0.0)
                 ax.add_artist(ab)
             except FileNotFoundError:
