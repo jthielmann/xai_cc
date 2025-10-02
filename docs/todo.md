@@ -1,66 +1,54 @@
-# ST-XAI pipeline checklist
+# Todo List
 
-## Core training & orchestration
-- [x] Lightning trainer wiring (W&B logger, callbacks, profiler stubs)
-- [x] Run naming → output dir creation
-- [x] Train/val/test flow + summary dump
-- [x] EarlyStopping monitor key matches logged metric
-- [x] Deterministic runs (seed_everything, deterministic=True)
+## Task 1: Train ResNet50 v2
 
-## Devices & performance
-- [x] AMP on GPU, 32-bit on CPU/MPS
-- [x] Robust accelerator/device selection (CUDA vs MPS vs CPU)
+1.  **Update Configuration**:
+    *   Modify your training configuration file (e.g., a YAML or Python config).
+    *   Set the `encoder_type` parameter to `"resnet50imagenet"`. Based on `script/model/model_factory.py`, this will load a ResNet50 with ImageNet V2 weights.
 
-## Data module & splits
-- [ ] Enforce patient-stratified splits + log split manifests
-- [ ] Tech-aware settings (Visium vs Xenium) for patching/alignment
+2.  **Start Training**:
+    *   Run your main training script, likely `script/main.py`, pointing it to the updated configuration file.
+    *   Example: `python script/main.py --config /path/to/your/config.yml`
 
-## LR tuning
-- [x] Per-component lr_find loop
-- [x] Restore state between tuning steps
-- [x] Fix variable name in error (`g` → `key`)
-- [x] Skip encoder tuning when `freeze_encoder=True` (verify)
+3.  **Monitor and Evaluate**:
+    *   Track the training progress using your logger (WandB or TensorBoard).
+    *   After training, find the results and model checkpoints in the `out_path` directory specified in your config. The performance metrics will be in the `results/` directory as outlined in `script/model/lit_model.py`.
 
-## Model integration
-- [x] `get_model(config)` + `model.update_lr(lrs)`
-- [x] Expose `gene→output_idx` mapping
+## Task 2: Train SAE per Spatial Location
 
-## Logging & W&B
-- [x] Fix abbrev typo: loss_fn_switch → loss_fn_switch
-- [x] Log dataset meta, splits, gene panel
-- [x] Save config + best checkpoint as W&B artifacts
+The current SAE implementation in `lit_model.py` and `lit_train_sae.py` applies the autoencoder to the flattened and pooled feature vector from the encoder. To train an SAE on the features at each spatial location (h, w), you will need to make some modifications.
 
-## Spatial predictions & plots
-- [x] Write preds back to spatial df
-- [x] Triptych plots + W&B upload
-- [x] Confirm coordinate frame; choose global vs per-patient vmin/vmax
-- [x] Save per-patient parquet (x,y,label,pred,diff)
+1.  **Modify the Model's Forward Pass**:
+    *   In `script/model/lit_model.py`, locate the `forward` method.
+    *   Currently, it reshapes 4D tensors `(B, C, H, W)` to 2D `(B, D)`.
+    *   You need to change this logic. Before the SAE is applied, reshape the encoder output `z` from `(B, C, H, W)` to `(B * H * W, C)`.
+    *   After the SAE, you may need to reshape it back to `(B, C, H, W)` or `(B, D)` depending on what the downstream gene expression heads expect.
 
-## Explainability
-- [ ] Config-gated XAI runner (IG/Grad-CAM/Zennit/CRP)
-- [ ] Use gene→output_idx for targets
-- [ ] Save overlays + attribution stats; optional concept clustering
+2.  **Update SAE Configuration**:
+    *   The `d_in` for the `SparseAutoencoder` in `script/model/lit_ae.py` will now be the number of channels (`C`) from the encoder output, not the flattened dimension. Ensure your configuration reflects this.
 
-## HEST integration
-- [ ] Check data size of SKCM, IDC, LUAD
-- [ ] Adapter to HEST-Library (query → AnnData + patches)
-- [ ] Standardize normalization & gene panel selection
-- [ ] Verify/record alignment; log provenance
-- [ ] Implement dataset filter by cancer type (SKCM, IDC, LUAD)
-- [ ] Run baseline model on SKCM subset → log metrics + histograms
-- [ ] Repeat for IDC subset → compare to SKCM
-- [ ] Repeat for LUAD subset → compare to SKCM + IDC
-- [ ] Check overlap in gene panel across subsets; flag missing genes
-- [ ] Save per-subset manifests (patients, samples, gene coverage)
-- [ ] W&B sweep: compare training curves across SKCM/IDC/LUAD
-- [ ] Export per-subset results CSV (val loss, mean Pearson, per-gene Pearson)
+3.  **Create a Dedicated Training Script**:
+    *   Copy `script/train/lit_train_sae.py` to a new file, e.g., `script/train/lit_train_sae_spatial.py`.
+    *   In this new script, adjust the `SAETrainerPipeline` to implement the new reshaping logic. The `setup` and `run` methods will need to be adapted to handle the `(B*H*W, C)` input to the SAE.
 
-## Repro & hygiene
-- [x] Memory cleanup (gc/empty_cache)
-- [x] Global seeding + determinism settings
-- [x] Log package versions
-- [x] Validate config/shape consistency
+4.  **Configure and Run**:
+    *   Create a new configuration file for this experiment.
+    *   Run your new training script `lit_train_sae_spatial.py`.
 
-## UX & failure modes
-- [x] Clear errors: missing gene, output<genes, no GPU
-- [x] `--dry-run` to sanity-check data + single forward
+## Task 3: Verify Gene Distribution in Test Set
+
+The script `script/evaluation/generate_data_hists.py` already provides a good foundation for this. You can adapt it to compare train and test splits.
+
+1.  **Adapt the Histogram Script**:
+    *   Create a new script, e.g., `script/evaluation/compare_split_dists.py`, by modifying `generate_data_hists.py`.
+    *   In the new script, load both the training and test sets. Your `lit_STDataModule.py` should have methods to provide these splits.
+    *   For each gene, generate overlaid histograms to visually compare the distribution of values between the training and test sets.
+
+2.  **Calculate Summary Statistics**:
+    *   In the same script, for each gene, calculate and print a comparison table with key statistics (mean, median, standard deviation, min, max) for both the train and test splits.
+
+3.  **Perform Statistical Test (Optional)**:
+    *   For a more rigorous comparison, you can use `scipy.stats.ks_2samp` (Kolmogorov-Smirnov test) to get a p-value indicating if the two distributions are significantly different.
+
+4.  **Document Findings**:
+    *   Save the generated plots and the summary statistics table to a markdown file or a notebook in the `docs/` directory to document your findings.
