@@ -1,4 +1,3 @@
-
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -6,111 +5,63 @@ from scipy.stats import ks_2samp
 import numpy as np
 from pathlib import Path
 
-from script.data_processing.data_loader import get_dataset_single_file
 
-def compare_split_dists(config):
-    """
-    Generates and saves plots and statistics comparing the gene expression
-    distributions between training and test sets.
+def read_meta_data(patients, dataset_name, data_dir, meta_data_dir, csv_name, gene):
+    df = None
+    for patient in patients:
+        file_name = data_dir + "/" + dataset_name + "/" + patient + "/" + meta_data_dir + "/" + csv_name
+        if not os.path.exists(file_name):
+            continue
 
-    Args:
-        config (dict): A configuration dictionary containing all necessary parameters.
-    """
-    # 1. Load data using the data loader
-    data_dir = config["data_dir"]
-    csv_path = config["single_csv_path"]
-    if not os.path.isabs(csv_path):
-        csv_path = os.path.join(data_dir, csv_path)
+        patient_df = pd.read_csv(file_name, usecols=[gene])
+        patient_df["patient"] = patient
+        if df is None:
+            df = patient_df
+        else:
+            df = pd.concat([df, patient_df])
+    return df
 
-    train_df = get_dataset_single_file(
-        csv_path=csv_path,
-        data_dir=data_dir,
-        genes=config["genes"],
-        split="train",
-        split_col_name=config["split_col_name"],
-        tile_subdir=config.get("tile_subdir"),
-    ).df
+def evaluate_split_dists(data_dir, dataset_name, train_patients, val_patients, test_patients, genes, save_dir, meta_data_dir, csv_name):
 
-    test_df = get_dataset_single_file(
-        csv_path=csv_path,
-        data_dir=data_dir,
-        genes=config["genes"],
-        split="test",
-        split_col_name=config["split_col_name"],
-        tile_subdir=config.get("tile_subdir"),
-    ).df
-
-    genes = config["genes"]
-    if not genes:
-        # If no genes are specified, use all columns except the tile and split columns
-        genes = [col for col in train_df.columns if col not in ["tile", config["split_col_name"]]]
-
-
-    # 2. Prepare output directory
-    save_dir = Path(config.get("save_dir", "docs/gene_dist_comparison"))
-    save_dir.mkdir(parents=True, exist_ok=True)
-
-    stats_records = []
-
-    # 3. Generate plots and stats for each gene
     for gene in genes:
-        train_values = train_df[gene].dropna()
-        test_values = test_df[gene].dropna()
+        train_df = read_meta_data(train_patients, dataset_name, data_dir, meta_data_dir, csv_name, gene)
+        val_df = read_meta_data(val_patients, dataset_name, data_dir, meta_data_dir, csv_name, gene)
+        test_df = read_meta_data(test_patients, dataset_name, data_dir, meta_data_dir, csv_name, gene)
 
-        # a. Overlaid Histograms
-        plt.figure(figsize=(10, 6))
-        plt.hist(train_values, bins=50, alpha=0.5, label="Train", density=True)
-        plt.hist(test_values, bins=50, alpha=0.5, label="Test", density=True)
-        plt.title(f"Distribution of {gene} in Train vs. Test Sets")
-        plt.xlabel("Gene Expression Value")
-        plt.ylabel("Density")
-        plt.legend()
-        plot_path = save_dir / f"{gene}_dist_comparison.png"
-        plt.savefig(plot_path)
-        plt.close()
+        # TODO: generate stats to compare such as mean std ... that are helpful to check if the test split is decent and representative
+        stats = {}
+        for split_name, df in zip(["train", "val", "test"], [train_df, val_df, test_df]):
+            if df is not None and not df.empty:
+                stats[f'{split_name}_mean'] = df[gene].mean()
+                stats[f'{split_name}_std'] = df[gene].std()
+                stats[f'{split_name}_count'] = len(df)
 
-        # b. Summary Statistics
-        train_stats = train_values.describe()
-        test_stats = test_values.describe()
-        
-        # c. KS Test
-        ks_stat, p_value = ks_2samp(train_values, test_values)
+        if train_df is not None and not train_df.empty and test_df is not None and not test_df.empty:
+            ks_stat, p_value = ks_2samp(train_df[gene], test_df[gene])
+            stats['ks_stat_train_test'] = ks_stat
+            stats['p_value_train_test'] = p_value
 
-        stats_records.append({
-            "gene": gene,
-            "train_mean": train_stats["mean"],
-            "test_mean": test_stats["mean"],
-            "train_std": train_stats["std"],
-            "test_std": test_stats["std"],
-            "train_min": train_stats["min"],
-            "test_min": test_stats["min"],
-            "train_max": train_stats["max"],
-            "test_max": test_stats["max"],
-            "ks_stat": ks_stat,
-            "p_value": p_value,
-        })
+        if train_df is not None and not train_df.empty and val_df is not None and not val_df.empty:
+            ks_stat, p_value = ks_2samp(train_df[gene], val_df[gene])
+            stats['ks_stat_train_val'] = ks_stat
+            stats['p_value_train_val'] = p_value
 
-    # 4. Save summary statistics to a Markdown file
-    stats_df = pd.DataFrame(stats_records)
-    stats_table_path = save_dir / "summary_statistics.md"
-    stats_df.to_markdown(stats_table_path, index=False)
+        print(stats)
 
-    print(f"Comparison plots and statistics saved to {save_dir}")
+        # TODO: save file to save_dir + dataset_name + ".csv"
+
 
 if __name__ == "__main__":
-    # Example configuration, similar to sweeps/configs/coad_single_csv
-    # IMPORTANT: Update paths and genes to match your local setup.
-    config = {
-        "data_dir": "/Users/jona/Documents/code/xai_cc/data/COAD",
-        "single_csv_path": "hvg_cmmn_std.csv",
-        "split_col_name": "split",
-        "genes": ["ENSG00000139618", "ENSG00000148584", "ENSG00000182959"],  # Example genes
-        "save_dir": "/Users/jona/Documents/code/xai_cc/docs/gene_dist_comparison",
-    }
-    
-    # Check if the data path exists
-    if not os.path.exists(os.path.join(config['data_dir'], config['single_csv_path'])):
-        print(f"Data file not found at {os.path.join(config['data_dir'], config['single_csv_path'])}")
-        print("Please update the config in script/evaluation/compare_split_dists.py to point to your data.")
-    else:
-        compare_split_dists(config)
+
+
+    data_dir = "/Users/thielmann/Documents/xai_cc/data/"
+    dataset_name = "crc_base"
+    train_patients = ["Training_Data/p007", "Training_Data/p013", "Training_Data/p014"]
+    val_patients = ["Training_Data/p009"]
+    test_patients = ["Training_Data/p020"]
+    genes = ["RUBCNL"]
+    save_dir = "/Users/thielmann/Documents/code/xai_cc/docs/gene_dist_comparison/"
+    meta_data_dir_name = "meta_data"
+    csv_name = "gene_data.csv"
+
+    evaluate_split_dists(data_dir, dataset_name, train_patients, val_patients, test_patients, genes, save_dir, meta_data_dir_name, csv_name)
