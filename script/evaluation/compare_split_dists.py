@@ -23,13 +23,14 @@ def read_meta_data(patients, dataset_name, data_dir, meta_data_dir, csv_name, ge
 
 def evaluate_split_dists(data_dir, dataset_name, train_patients, val_patients, test_patients, genes, save_dir, meta_data_dir, csv_name):
 
+    all_stats = []
     for gene in genes:
         train_df = read_meta_data(train_patients, dataset_name, data_dir, meta_data_dir, csv_name, gene)
         val_df = read_meta_data(val_patients, dataset_name, data_dir, meta_data_dir, csv_name, gene)
         test_df = read_meta_data(test_patients, dataset_name, data_dir, meta_data_dir, csv_name, gene)
 
         # TODO: generate stats to compare such as mean std ... that are helpful to check if the test split is decent and representative
-        stats = {}
+        stats = {"gene": gene}
         for split_name, df in zip(["train", "val", "test"], [train_df, val_df, test_df]):
             if df is not None and not df.empty:
                 stats[f'{split_name}_mean'] = df[gene].mean()
@@ -47,8 +48,15 @@ def evaluate_split_dists(data_dir, dataset_name, train_patients, val_patients, t
             stats['p_value_train_val'] = p_value
 
         print(stats)
+        all_stats.append(stats)
 
-        # TODO: save file to save_dir + dataset_name + ".csv"
+    # TODO: save file to save_dir + dataset_name + ".csv"
+    if all_stats:
+        stats_df = pd.DataFrame(all_stats)
+        Path(save_dir).mkdir(parents=True, exist_ok=True)
+        file_path = os.path.join(save_dir, f"{dataset_name}.csv")
+        stats_df.to_csv(file_path, index=False)
+        print(f"Saved stats to {file_path}")
 
 
 if __name__ == "__main__":
