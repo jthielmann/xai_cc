@@ -4,6 +4,7 @@ import random
 import torch.nn.functional
 from torchvision import transforms
 from script.data_processing.image_transforms import get_eval_transforms, get_transforms
+from script.configs.dataset_config import get_dataset_cfg
 from typing import Union, Mapping
 DEFAULT_RANDOM_SEED = 42
 
@@ -413,6 +414,73 @@ def get_dataset(
         return_floats=return_floats
     )
     return ds
+
+
+def get_dataset_from_config(
+    dataset_name: str,
+    genes: list[str] | None = None,
+    *,
+    split: Literal["train", "val", "test"] = "train",
+    debug: bool = False,
+    transforms=None,
+    samples: list[str] | None = None,
+    max_len: int | None = None,
+    bins: int = 1,
+    only_inputs: bool = False,
+    gene_data_filename: str = "gene_data.csv",
+    meta_data_dir: str = "/meta_data/",
+    lds_smoothing_csv: str | Path | None = None,
+    weight_transform: str = "inverse",
+    weight_clamp: int = 10,
+    return_floats: bool = False,
+) -> STDataset:
+
+    cfg: dict[str, Any] = {"dataset": dataset_name}
+    if debug:
+        cfg["debug"] = True
+
+    dataset_cfg = get_dataset_cfg(cfg)
+    data_dir = dataset_cfg["data_dir"]
+
+    resolved_samples = samples
+    if resolved_samples is None:
+        split_key_map = {
+            "train": "train_samples",
+            "val": "val_samples",
+            "test": "test_samples",
+        }
+        key = split_key_map.get(split)
+        if key is None:
+            raise ValueError(f"Unsupported split '{split}'. Expected one of: {tuple(split_key_map)}")
+
+        resolved_samples = dataset_cfg.get(key)
+        if resolved_samples is None and split == "test":
+            resolved_samples = dataset_cfg.get("test_samples_all")
+
+        if resolved_samples is None:
+            raise KeyError(
+                f"Dataset '{dataset_name}' does not provide samples for split '{split}'. "
+                "Pass 'samples' explicitly to override."
+            )
+
+    resolved_gene_data_filename = dataset_cfg.get("gene_data_filename", gene_data_filename)
+    resolved_meta_data_dir = dataset_cfg.get("meta_data_dir", meta_data_dir)
+
+    return get_dataset(
+        data_dir=data_dir,
+        genes=genes,
+        transforms=transforms,
+        samples=resolved_samples,
+        max_len=max_len,
+        bins=bins,
+        only_inputs=only_inputs,
+        gene_data_filename=resolved_gene_data_filename,
+        meta_data_dir=resolved_meta_data_dir,
+        lds_smoothing_csv=lds_smoothing_csv,
+        weight_transform=weight_transform,
+        weight_clamp=weight_clamp,
+        return_floats=return_floats,
+    )
 
 
 # returns imgs and tile paths

@@ -70,20 +70,6 @@ def measure_peak_train_step(model, batch, criterion, optimizer, amp=True, device
 
     return torch.cuda.max_memory_allocated(device)  # bytes
 
-def load_model(path: str, config: Dict[str, Any]) -> L.LightningModule:
-    device = "cpu"
-    model = GeneExpressionRegressor(config)
-            state = torch.load(path, map_location=device, weights_only=True)    model.load_state_dict(state, strict=False)
-    model.to(device).eval()
-    return model
-
-def load_model2(config: Dict[str, Any], model_name = "/best_model.pth") -> L.LightningModule:
-    device = "cpu"
-    model = GeneExpressionRegressor(config)
-            state = torch.load(config["out_path"] + model_name, map_location=device, weights_only=True)    model.load_state_dict(state, strict=False)
-    model.to(device).eval()
-    return model
-
 def get_model(config):
     return GeneExpressionRegressor(config)
 
@@ -98,6 +84,7 @@ class GeneExpressionRegressor(L.LightningModule):
         self.freeze_encoder = self.config['freeze_encoder']
         if self.freeze_encoder:
             for p in self.encoder.parameters(): p.requires_grad = False
+            self.encoder.eval()
         out_dim_encoder = infer_encoder_out_dim(self.encoder)
         for gene in self.config['genes']:
             relu_type = nn.LeakyReLU if self.config.get('use_leaky_relu') else nn.ReLU
@@ -212,12 +199,13 @@ class GeneExpressionRegressor(L.LightningModule):
         self.y_hats, self.ys = [], []
 
     def forward(self, x):
-        z = self.encoder(x)
-        # Normalize encoder outputs to (B, D) for the heads:
-        # - If encoder returns a tuple/list, use first tensor
-        # - If HF-style output with last_hidden_state, use it
-        # - If 4D (B, C, H, W), flatten spatial dims
-        # - If 3D (B, T, D), mean-pool tokens → (B, D)
+        cm = (
+            torch.inference_mode
+            if (self.freeze_encoder and hasattr(torch, "inference_mode"))
+            else (torch.no_grad if self.freeze_encoder else nullcontext)
+        )
+        with cm():
+            z = self.encoder(x)
         if isinstance(z, (list, tuple)):
             z = z[0]
         if hasattr(z, "last_hidden_state"):
