@@ -5,11 +5,14 @@ from scipy.stats import ks_2samp
 import numpy as np
 from pathlib import Path
 
-
 def read_meta_data(patients, dataset_name, data_dir, meta_data_dir, csv_name, gene):
+    once = True
     df = None
     for patient in patients:
         file_name = data_dir + "/" + dataset_name + "/" + patient + "/" + meta_data_dir + "/" + csv_name
+        if not once:
+            print(file_name)
+            once = True
         if not os.path.exists(file_name):
             continue
 
@@ -54,14 +57,25 @@ def evaluate_split_dists(data_dir, dataset_name, train_patients, val_patients, t
 if __name__ == "__main__":
 
 
-    data_dir = "/Users/thielmann/Documents/xai_cc/data/"
-    dataset_name = "crc_base"
-    train_patients = ["Training_Data/p007", "Training_Data/p013", "Training_Data/p014"]
-    val_patients = ["Training_Data/p009"]
-    test_patients = ["Training_Data/p020"]
+    data_dir = "/data/cephfs-2/unmirrored/groups/krieger/xai/HEST/"
+    dataset_name = "hest_coad_visium"
+    #train_patients = ["TENX92","TENX91","TENX90","TENX89","TENX70","TENX49",
+    #    "ZEN49","ZEN48","ZEN47","ZEN46","ZEN45","ZEN44"]
+    #val_patients = ["TENX29","ZEN43","ZEN42","ZEN40","ZEN39","ZEN38","ZEN36"]
+    #test_patients = []
+
+    train_patients = [
+         'MISC62', 'ZEN45', 'TENX152', 'MISC73', 'MISC71', 'MISC70', 'MISC68', 'MISC67', 'MISC66', 'MISC65', 'MISC64',
+         'MISC63', 'MISC58', 'MISC57', 'MISC51', 'MISC50', 'MISC49', 'MISC48', 'MISC47', 'MISC46', 'MISC44', 'MISC43',
+         'MISC41', 'MISC40', 'MISC39', 'MISC38', 'MISC36', 'TENX92', 'TENX91', 'TENX49', 'ZEN47', 'ZEN46', 'ZEN43',
+         'ZEN39', 'MISC42']
+    val_patients = ['MISC69', 'MISC56', 'MISC37', 'MISC35', 'MISC34', 'TENX90', 'TENX29', 'ZEN42', 'ZEN38']
+    test_patients = ['MISC72', 'MISC45', 'MISC33', 'TENX89', 'TENX28', 'ZEN44']
+
+
     genes = ["RUBCNL"]
-    save_dir = "/Users/thielmann/Documents/code/xai_cc/docs/gene_dist_comparison/"
-    meta_data_dir_name = "meta_data"
-    csv_name = "gene_data.csv"
+    save_dir = "../docs/gene_dist_comparison/"
+    meta_data_dir_name = "metadata"
+    csv_name = "gene_log1p.csv"
 
     evaluate_split_dists(data_dir, dataset_name, train_patients, val_patients, test_patients, genes, save_dir, meta_data_dir_name, csv_name)
