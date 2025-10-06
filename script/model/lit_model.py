@@ -247,6 +247,9 @@ class GeneExpressionRegressor(L.LightningModule):
         return loss
 
     def _log_wandb_artifacts(self):
+        # Never log artifacts in debug mode
+        if bool(self.config.get("debug")):
+            return
         if not (self.is_online and wandb.run):
             return
         run = wandb.run
@@ -468,10 +471,11 @@ class GeneExpressionRegressor(L.LightningModule):
             torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
 
     def on_train_end(self):
-        # --- W&B scatter table (unchanged) ---
-        if self.is_online and hasattr(self, "table"):
-            wandb.log({"scatter_table": self.table})
+        # Determine debug mode once up front
         is_debug = bool(self.config.get("debug"))
+        # In debug mode, avoid logging any W&B artifacts/tables
+        if self.is_online and hasattr(self, "table") and not is_debug:
+            wandb.log({"scatter_table": self.table})
 
         # Results CSV destinations (sibling to the models directory)
         # - Global:  <..>/results/all.csv
@@ -617,7 +621,7 @@ class GeneExpressionRegressor(L.LightningModule):
             except Exception as e:
                 logging.exception("failed to log results into %s: %s", path, e)
 
-        # --- (unchanged) log artifacts for non-debug runs ---
+        # Log W&B artifacts only for non-debug runs
         if not is_debug:
             self._log_wandb_artifacts()
 
