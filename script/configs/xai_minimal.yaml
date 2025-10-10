@@ -1,0 +1,22 @@
+project: xai_minimal
+debug: true
+
+xai_pipeline: true
+
+encoder_type: resnet50random
+
+dataset: crc_base
+data_dir: ../data/crc_base/Training_Data/
+train_samples: [p007]
+val_samples: [p009]
+
+genes: [RUBCNL]
+out_path: ../crp_out/xai_minimal
+
+lrp: true
+crp: true
+pcx: false
+diff: false
+
+patient: p007
+gene: RUBCNL
