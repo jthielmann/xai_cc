@@ -26,6 +26,14 @@ parameters:
     value: resnet50random
   model_state_path:
     value: null
+  # To load components individually, set these instead of model_state_path, e.g.
+  # value: ../models/my_run/checkpoints/encoder.pt
+  encoder_state_path:
+    value: null
+  gene_head_state_path:
+    value: null
+  sae_state_path:
+    value: null
 
   lrp:
     value: true
