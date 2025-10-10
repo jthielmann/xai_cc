@@ -47,7 +47,7 @@ from script.configs.config_factory import get_dataset_cfg
 import timm
 from typing import Tuple
 
-from typing import Iterable, Sequence, Callable, Optional
+from typing import Iterable, Sequence, Callable, Optional, Union
 
 # resolver.py (or inline in your loader code)
 from pathlib import Path
@@ -56,7 +56,7 @@ from typing import Iterable
 
 def resolve_unique_model_file(
         encoder_type: str,
-        encoders_dir: str | Path = "../encoders",
+        encoders_dir: Union[str, Path] = "../encoders",
 ) -> Path:
     # Map: hub callable name -> checkpoint filename
     DINOv3_FILEMAP = {
@@ -102,7 +102,7 @@ def get_encoder(encoder_type: str) -> nn.Module:
 def infer_encoder_out_dim(
         encoder: nn.Module,
         input_size: Tuple[int, int, int] = (3, 224, 224),
-        device: torch.device | None = None,
+        device: Optional[torch.device] = None,
 ) -> int:
     """
     Infer the feature dimension produced by the encoder for a single image.
