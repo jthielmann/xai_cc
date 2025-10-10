@@ -6,7 +6,7 @@ parameters:
   debug:
     value: true
   log_to_wandb:
-    value: false
+    value: true
 
   dataset:
     value: crc_base
@@ -30,9 +30,9 @@ parameters:
   crp:
     value: true
   pcx:
-    value: false
+    value: true
   diff:
-    value: false
+    value: true
 
   patient:
     value: p007

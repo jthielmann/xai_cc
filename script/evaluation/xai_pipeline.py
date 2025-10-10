@@ -5,17 +5,15 @@ from script.evaluation.lrp_plotting import plot_lrp
 from script.evaluation.pcx_plotting import plot_pcx
 from script.evaluation.tri_plotting import plot_triptych_from_merge
 from script.model.model_factory import get_encoder
+from script.model.lit_model import load_model
 
 
 class XaiPipeline:
     def __init__(self, config, run):
         self.config = config
         self.wandb_run = run
-        self.model = self._load_model()
+        self.model = load_model(self.config)
 
-    def _load_model(self):
-        encoder_type = self.config["encoder_type"]
-        return get_encoder(encoder_type)
 
     def run(self):
         if self.config.get("lrp", False):

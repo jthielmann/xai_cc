@@ -2,7 +2,6 @@
 import zennit
 from zennit.attribution import Gradient
 
-from IPython.core.display_functions import display
 
 import torch
 import pandas as pd
