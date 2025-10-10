@@ -6,7 +6,7 @@ parameters:
   debug:
     value: true
   log_to_wandb:
-    value: true
+    value: false
 
   dataset:
     value: crc_base
@@ -24,15 +24,17 @@ parameters:
 
   encoder_type:
     value: resnet50random
+  model_state_path:
+    value: null
 
   lrp:
     value: true
   crp:
     value: true
   pcx:
-    value: true
+    value: false
   diff:
-    value: true
+    value: false
 
   patient:
     value: p007

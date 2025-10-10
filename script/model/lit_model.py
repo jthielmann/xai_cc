@@ -35,20 +35,27 @@ log = logging.getLogger(__name__)
 
 sys.path.insert(0, '..')
 
-def load_model(config, state_dicts: dict):
+def load_model(config, state_dicts: Dict[str, Any]):
     model = get_model(config)
 
-    model.load_state_dict(state_dicts["encoder"])
-    if state_dicts.get("sae", None):
-        model.sae.load_state_dict(state_dicts.get("sae"))
-    model.load_state_dict(state_dicts["encoder"])
+    encoder_state = state_dicts.get("encoder")
+    if encoder_state is None:
+        raise ValueError("Missing 'encoder' state dict for load_model")
+    if encoder_state and encoder_state.keys() and not next(iter(encoder_state)).startswith("encoder."):
+        encoder_state = {f"encoder.{k}": v for k, v in encoder_state.items()}
+    model.load_state_dict(encoder_state, strict=False)
 
-    # TODO: apply gene head state dict
-    head_state = state_dicts.get("gene_heads", None)
+    sae_state = state_dicts.get("sae")
+    if sae_state and getattr(model, "sae", None):
+        model.sae.load_state_dict(sae_state)
+
+    head_state = state_dicts.get("gene_heads")
     if head_state:
-        for gene_name, gene_state in head_state.items():
+        for gene_name, gene_dict in head_state.items():
             head_module = getattr(model, gene_name, None)
-            head_module.load_state_dict(gene_state)
+            if head_module is None:
+                continue
+            head_module.load_state_dict(gene_dict)
 
     return model
 
