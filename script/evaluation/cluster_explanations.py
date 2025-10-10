@@ -8,7 +8,8 @@ import os
 
 import torch
 
-from script.data_processing.data_loader import get_dataset_for_plotting
+from script.data_processing.data_loader import get_dataset
+from script.data_processing.image_transforms import get_eval_transforms
 from torchvision.utils import make_grid
 import zennit.image as zimage
 import pandas as pd
@@ -77,10 +78,21 @@ for idx, row in frame.iterrows():
     os.makedirs(out_path, exist_ok=True)
     open(token_name, "a").close()
     print("loading dataset")
+    transforms = get_eval_transforms(image_size=224)
     try:
-        dataset = get_dataset_for_plotting(data_dir, genes=genes, device=device)
-    except KeyError:
-        dataset = get_dataset_for_plotting(data_dir2, genes=genes, device=device)
+        dataset = get_dataset(
+            data_dir,
+            genes=genes,
+            transforms=transforms,
+            return_floats=True,
+        )
+    except (KeyError, FileNotFoundError):
+        dataset = get_dataset(
+            data_dir2,
+            genes=genes,
+            transforms=transforms,
+            return_floats=True,
+        )
 
     print("dataset loaded")
     #dataset.dataframe = dataset.dataframe.drop(list(range(10, len(dataset))))

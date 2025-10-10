@@ -20,7 +20,6 @@ from sklearn.mixture import GaussianMixture
 from script.pcx_utils.render import vis_opaque_img_border
 from crp.visualization import FeatureVisualization
 import os
-from script.data_processing.data_loader import get_dataset_for_plotting
 from torchvision.utils import make_grid
 import zennit.image as zimage
 
