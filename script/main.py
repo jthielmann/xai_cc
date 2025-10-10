@@ -10,15 +10,14 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 # os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 import numpy as np
 import torch
-from umap import UMAP
 
 import csv, sys, os, random, numpy, torch, yaml, pandas as pd, wandb
 sys.path.insert(0, '..')
-from script.train.lit_train_sae import SAETrainerPipeline
 
 from typing import Dict, Any, List, Union, Optional
 from script.configs.dataset_config import get_dataset_cfg
 from script.train.lit_train import TrainerPipeline
+from script.evaluation.xai_pipeline import XaiPipeline
 from main_utils import (
     ensure_free_disk_space,
     parse_args,
@@ -197,6 +196,7 @@ def _train(cfg: Dict[str, Any]) -> None:
 
     # SAE path: only train sparse autoencoder, no gene heads/lr find.
     if bool(cfg.get("train_sae", False)):
+        from script.train.lit_train_sae import SAETrainerPipeline
         # No gene list inference needed — training uses encoder features only
         print("SAETrainerPipeline debug")
         SAETrainerPipeline(cfg, run=run).run()
@@ -450,13 +450,25 @@ def main():
         for k, p in params.items():
             if isinstance(p, dict) and "value" in p: cfg[k] = p["value"]
 
-        project = cfg["project"] if not read_config_parameter(raw_cfg, "debug") else "debug_" + random.randbytes(
-            4).hex()
+        # If this is an XAI pipeline config, handle it directly here,
+        # preserving any provided out_path and preparing the dump env.
+        if bool(cfg.get("xai_pipeline", False)):
+            wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
+            run = wandb.init(project=cfg.get("project", "xai"), config=wb_cfg) if cfg.get("log_to_wandb", False) else None
+            cfg = dict(run.config) if run else cfg
+            cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
+            cfg = _prepare_cfg(cfg)  # ensures dataset cfg and creates out_path/sweep_dir/model_dir
+            XaiPipeline(cfg, run=run).run()
+            if run:
+                run.finish()
+            return
+
+        # Otherwise: standard training single-run flow
+        project = cfg["project"] if not read_config_parameter(raw_cfg, "debug") else "debug_" + random.randbytes(4).hex()
         out_dir = cfg["model_dir"] + project
-        os.makedirs(out_dir, exist_ok=True);
+        os.makedirs(out_dir, exist_ok=True)
         ensure_free_disk_space(out_dir)
         cfg["out_path"] = out_dir
-
         _train(cfg)
 
 if __name__ == "__main__":

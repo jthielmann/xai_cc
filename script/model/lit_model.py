@@ -1,74 +1,56 @@
 import json
 import logging
+import os
+import sys
+from contextlib import nullcontext
+from io import BytesIO
+from typing import Dict, Any, Mapping
 
-import numpy as np
 import lightning as L
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
 import torch.nn as nn
 import wandb
-from script.model.model_factory import get_encoder, infer_encoder_out_dim
-import os
-import matplotlib.pyplot as plt
-import sys
-from io import BytesIO
 from PIL import Image
 from torch.optim.lr_scheduler import OneCycleLR
-sys.path.insert(0, '..')
-from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss
+
 from script.model.lit_ae import SparseAutoencoder
-from typing import Dict, Any
-from torchmetrics.functional import pearson_corrcoef
-import pandas as pd
+from script.model.lit_model_helpers import (
+    append_row_with_schema,
+    build_results_row,
+    build_scatter_appendix,
+    bytes2gb,
+    compute_per_gene_pearson,
+    estimate_per_sample_activations,
+    make_scatter_figure,
+    measure_peak_train_step,
+    select_per_gene_values,
+)
+from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss
+from script.model.model_factory import get_encoder, infer_encoder_out_dim
 
-import torch
-from contextlib import nullcontext
+import logging
+log = logging.getLogger(__name__)
 
-def bytes2gb(x): return x / (1024**3)
+sys.path.insert(0, '..')
 
-@torch.no_grad()
-def estimate_per_sample_activations(model, sample):
-    """CPU/any-device estimate of forward outputs that require grad (≈ activations kept for backward)."""
-    sizes = []
-    handles = []
+def load_model(config, state_dicts: dict):
+    model = get_model(config)
 
-    def hook(_m, _inp, out):
-        def num_bytes(t):
-            if not torch.is_tensor(t): return 0
-            # assume AMP/bfloat16 for training activations → 2 bytes/elem; change to 4 for fp32
-            return t.numel() * 2 if t.requires_grad else 0
-        if isinstance(out, (list, tuple)):
-            sizes.append(sum(num_bytes(t) for t in out))
-        else:
-            sizes.append(num_bytes(out))
+    model.load_state_dict(state_dicts["encoder"])
+    if state_dicts.get("sae", None):
+        model.sae.load_state_dict(state_dicts.get("sae"))
+    model.load_state_dict(state_dicts["encoder"])
 
-    for m in model.modules():
-        if len(list(m.children())) == 0:
-            handles.append(m.register_forward_hook(hook))
+    # TODO: apply gene head state dict
+    head_state = state_dicts.get("gene_heads", None)
+    if head_state:
+        for gene_name, gene_state in head_state.items():
+            head_module = getattr(model, gene_name, None)
+            head_module.load_state_dict(gene_state)
 
-    model.eval()
-    _ = model(sample)  # forward only; we just need shapes
-    for h in handles: h.remove()
-    # sum once, then divide by batch to get per-sample
-    total_bytes = sum(sizes)
-    return total_bytes / sample.shape[0]
-
-def measure_peak_train_step(model, batch, criterion, optimizer, amp=True, device="cuda"):
-    torch.cuda.reset_peak_memory_stats(device)
-    model.to(device).train()
-    x, y = batch
-    x, y = x.to(device), y.to(device)
-
-    ctx = torch.cuda.amp.autocast if amp else nullcontext
-    scaler = torch.cuda.amp.GradScaler(enabled=amp)
-
-    optimizer.zero_grad(set_to_none=True)
-    with ctx():
-        out = model(x)
-        loss = criterion(out, y)
-    scaler.scale(loss).backward()
-    scaler.step(optimizer)
-    scaler.update()
-
-    return torch.cuda.max_memory_allocated(device)  # bytes
+    return model
 
 def get_model(config):
     return GeneExpressionRegressor(config)
@@ -314,19 +296,6 @@ class GeneExpressionRegressor(L.LightningModule):
             loss = self.loss_fn(y_hat, y)
         return loss, y_hat, y
 
-    def _compute_per_gene_pearson(self, y_hat: torch.Tensor, y_true: torch.Tensor) -> list[float]:
-        y_hat = y_hat.float()
-        y_true = y_true.float()
-        r = []
-        with torch.no_grad():
-            for i in range(y_hat.shape[1]):
-                yi, ti = y_hat[:, i], y_true[:, i]
-                if yi.std(unbiased=False) == 0 or ti.std(unbiased=False) == 0:
-                    r.append(float("nan"))
-                else:
-                    r.append(float(pearson_corrcoef(yi, ti)))
-        return r
-
     def _update_best(self, loss_sum: float, epoch: int, out_path: str, r_mean: float, per_gene_r: list[float]) -> None:
         if loss_sum < getattr(self, "best_loss", float("inf")):
             self.best_loss = float(loss_sum)
@@ -338,18 +307,6 @@ class GeneExpressionRegressor(L.LightningModule):
             if self.is_online and wandb.run:
                 wandb.run.summary.update({"best_val_loss": self.best_loss, "best_val_epoch": self.best_epoch})
                 wandb.log({"epoch": self.best_epoch})
-
-    def _scatter_fig(self, yh: np.ndarray, yt: np.ndarray, loss: float, r: float, title: str):
-        lo, hi = float(min(yh.min(), yt.min())), float(max(yh.max(), yt.max()))
-        if lo == hi: lo, hi = lo - 1.0, hi + 1.0
-        fig, ax = plt.subplots()
-        ax.scatter(yh, yt, s=8)
-        ax.plot([lo, hi], [lo, hi], linewidth=1)
-        ax.text(0.02, 0.98, f"loss: {loss:.3f}\nr: {r:.3f}", transform=ax.transAxes,
-                va="top", ha="left", fontsize="small")
-        ax.set(title=title, xlabel="output", ylabel="target")
-        ax.set_aspect("equal", adjustable="box")
-        return fig
 
     def _log_scatter_to_wandb(self, fig, gene: str, epoch: int) -> None:
         if not (self.is_online and getattr(self, "table", None) is not None):
@@ -381,77 +338,65 @@ class GeneExpressionRegressor(L.LightningModule):
         if not self.y_hats or not self.ys:
             raise RuntimeError("no ys")
 
-        with torch.no_grad():
-            # Concatenate all batches to compute dataset-level metrics
-            y_hat = torch.cat(self.y_hats, dim=0).float()
-            y_true = torch.cat(self.ys, dim=0).float()
+        # Concatenate all batches to compute dataset-level metrics
+        y_hat = torch.cat(self.y_hats, dim=0).float()
+        y_true = torch.cat(self.ys, dim=0).float()
 
-            per_gene_r = self._compute_per_gene_pearson(y_hat, y_true)
-            self.last_r = list(per_gene_r)
-            if self.is_online:
-                self.log_dict({f"pearson_{g}": r for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
+        per_gene_r = compute_per_gene_pearson(y_hat, y_true)
+        self.last_r = list(per_gene_r)
+        if self.is_online:
+            self.log_dict({f"pearson_{g}": r for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
 
-            # Use the aggregated validation loss computed during validation_step
-            loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
-            if loss_switch in {"mse", "wmse", "weighted mse"}:
-                val_loss_mean = float(self.val_loss_total / max(self.val_loss_count, 1))
-            else:
-                # For Pearson, keep average over batches semantics
-                val_loss_mean = float(self.val_loss_total / max(self.val_loss_count, 1))
+        loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
+        denominator = max(self.val_loss_count, 1)
+        val_loss_mean = float(self.val_loss_total / denominator)
+        r_mean = float(np.nanmean(per_gene_r)) if per_gene_r else float("nan")
+        criterion = -r_mean if "pearson" in loss_switch else val_loss_mean
 
-            r_mean = float(np.nanmean(per_gene_r)) if per_gene_r else float("nan")
-            loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
-            criterion = -r_mean if "pearson" in loss_switch else val_loss_mean
+        # Update "best" (expects lower-is-better)
+        self._update_best(criterion, int(self.current_epoch), out_path, r_mean, per_gene_r)
 
-            # Update "best" (expects lower-is-better)
-            self._update_best(criterion, int(self.current_epoch), out_path, r_mean, per_gene_r)
+        # Track best Pearson mean across epochs independently of loss type
+        if np.isfinite(r_mean):
+            if not hasattr(self, "best_pearson_mean"):
+                self.best_pearson_mean = float("-inf")
+                self.best_pearson_epoch = None
+                self.best_pearson_per_gene = [float("nan")] * len(self.genes)
+            if r_mean > (self.best_pearson_mean if np.isfinite(getattr(self, "best_pearson_mean", float("nan"))) else float("-inf")):
+                self.best_pearson_mean = float(r_mean)
+                self.best_pearson_epoch = int(self.current_epoch)
+                self.best_pearson_per_gene = [float(x) for x in per_gene_r]
+                if self.is_online and wandb.run:
+                    wandb.run.summary.update({
+                        "best_pearson_mean": self.best_pearson_mean,
+                        "best_pearson_epoch": self.best_pearson_epoch,
+                    })
+                    for g, r in zip(self.genes, self.best_pearson_per_gene):
+                        wandb.run.summary[f"best_pearson_{g}"] = float(r)
 
-            # Track best Pearson mean across epochs independently of loss type
-            if np.isfinite(r_mean):
-                if not hasattr(self, "best_pearson_mean"):
-                    self.best_pearson_mean = float("-inf")
-                    self.best_pearson_epoch = None
-                    self.best_pearson_per_gene = [float("nan")] * len(self.genes)
-                if r_mean > (self.best_pearson_mean if np.isfinite(getattr(self, "best_pearson_mean", float("nan"))) else float("-inf")):
-                    self.best_pearson_mean = float(r_mean)
-                    self.best_pearson_epoch = int(self.current_epoch)
-                    self.best_pearson_per_gene = [float(x) for x in per_gene_r]
-                    if self.is_online and wandb.run:
-                        wandb.run.summary.update({
-                            "best_pearson_mean": self.best_pearson_mean,
-                            "best_pearson_epoch": self.best_pearson_epoch,
-                        })
-                        # Also expose per-gene bests as flat summary metrics
-                        for g, r in zip(self.genes, self.best_pearson_per_gene):
-                            wandb.run.summary[f"best_pearson_{g}"] = float(r)
+        # Log current epoch Pearson mean for visibility
+        self.log("val_pearson_mean", r_mean, on_epoch=True)
 
+        # Optional scatter plots
+        if self.config.get("generate_scatters", False):
+            sweep_cfg = getattr(getattr(self, "wandb_run", None), "config", {})
+            appendix = build_scatter_appendix(self.config, sweep_cfg.get("sweep_parameter_names", []))
 
-            # Log current epoch Pearson mean for visibility
-            self.log("val_pearson_mean", r_mean, on_epoch=True)
-
-            # Optional scatter plots
-            if self.config.get("generate_scatters", False):
-                ABBR = {
-                    "learning_rate": "lr", "batch_size": "bs", "dropout_rate": "dr",
-                    "loss_fn_switch": "loss", "loss_fn_switch": "loss",  # catch both spellings
-                    "encoder_type": "encdr", "middle_layer_features": "mfeatures",
-                    "gene_data_filename": "file", "freeze_encoder": "f_encdr",
-                    "one_linear_out_layer": "1linLr", "use_leaky_relu": "lkReLu",
-                    "use_early_stopping": "eStop",
-                }
-                sweep = getattr(getattr(self, "wandb_run", None), "config", {}).get("sweep_parameter_names", [])
-                appendix = " | ".join(f"{ABBR.get(k, k)}={self.config.get(k)}" for k in sweep) if sweep else ""
-
-                for gi, gene in enumerate(self.genes):
-                    yi, ti = y_hat[:, gi], y_true[:, gi]
-                    r_val = float(per_gene_r[gi])
-                    # Use per-gene MSE for the plot to be robust across loss types
-                    loss_g = float(torch.mean((yi - ti) ** 2))
-                    fig = self._scatter_fig(
-                        yi.cpu().numpy(), ti.cpu().numpy(), loss_g, r_val,
-                        " — ".join([f"ep {self.current_epoch}", gene] + ([appendix] if appendix else []))
-                    )
-                    self._log_scatter_to_wandb(fig, gene, int(self.current_epoch))
+            for gi, gene in enumerate(self.genes):
+                yi, ti = y_hat[:, gi], y_true[:, gi]
+                r_val = float(per_gene_r[gi])
+                loss_g = float(torch.mean((yi - ti) ** 2))
+                title_parts = [f"ep {self.current_epoch}", gene]
+                if appendix:
+                    title_parts.append(appendix)
+                fig = make_scatter_figure(
+                    yi.cpu().numpy(),
+                    ti.cpu().numpy(),
+                    loss_g,
+                    r_val,
+                    " — ".join(title_parts),
+                )
+                self._log_scatter_to_wandb(fig, gene, int(self.current_epoch))
 
         # Reset accumulators
         self.y_hats.clear()
@@ -471,157 +416,52 @@ class GeneExpressionRegressor(L.LightningModule):
             torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
 
     def on_train_end(self):
-        # Determine debug mode once up front
         is_debug = bool(self.config.get("debug"))
-        # In debug mode, avoid logging any W&B artifacts/tables
         if self.is_online and hasattr(self, "table") and not is_debug:
             wandb.log({"scatter_table": self.table})
+        results_root = "../results"
+        if is_debug:
+            csv_paths = [os.path.join(results_root, "debug.csv")]
+        else:
+            project = self.config.get("project", "project")
+            csv_paths = [
+                os.path.join(results_root, "all.csv"),
+                os.path.join(results_root, project, "results.csv"),
+            ]
 
-        # Results CSV destinations (sibling to the models directory)
-        # - Global:  <..>/results/all.csv
-        # - Project: <..>/results/<project>/all.csv
-        # Compute results root as sibling of model_dir
-        try:
-            models_root = os.path.abspath(self.config["model_dir"])  # e.g., ../models/
-            parent_dir  = os.path.dirname(models_root.rstrip(os.sep)) # e.g., ..
-            results_root = os.path.join(parent_dir, "results")       # e.g., ../results
-        except Exception:
-            # Fallback: current working directory / results
-            results_root = os.path.join(os.getcwd(), "results")
-
-        csv_path_global = os.path.join(results_root, "all.csv")
-        proj = self.config.get("project", "project")
-        csv_path_project = os.path.join(results_root, proj, "all.csv")
-        csv_paths = [os.path.join(results_root, "debug.csv")] if is_debug else [csv_path_global, csv_path_project]
-
-        # Prefer best Pearson across epochs if available; fallback to best-at-loss epoch
         best_pearson_mean = (
             float(self.best_pearson_mean)
             if hasattr(self, "best_pearson_mean") and np.isfinite(getattr(self, "best_pearson_mean", float("nan")))
             else float(self.best_r_mean)
         )
 
-        row = {
-            "best_epoch": int(self.best_epoch) if getattr(self, "best_epoch", None) is not None else int(
-                self.current_epoch),
-            "val_score": float(self.best_loss),
+        metrics = {
+            "best_epoch": int(self.best_epoch) if getattr(self, "best_epoch", None) is not None else int(self.current_epoch),
+            "best_loss": float(self.best_loss),
             "pearson_mean": best_pearson_mean,
-            "out_path": self.config["out_path"],
-            "model_path": self.best_model_path or os.path.join(self.config["out_path"], "best_model.pth"),
-            "wandb_url": (wandb.run.url if self.is_online and wandb.run else ""),
+            "best_model_path": self.best_model_path or os.path.join(self.config["out_path"], "best_model.pth"),
+            "wandb_url": wandb.run.url if self.is_online and wandb.run else "",
+            "best_pearson_epoch": int(self.best_pearson_epoch) if getattr(self, "best_pearson_epoch", None) is not None else None,
         }
 
-        # If tracked, include the epoch where Pearson mean peaked
-        if hasattr(self, "best_pearson_epoch") and self.best_pearson_epoch is not None:
-            row["best_pearson_epoch"] = int(self.best_pearson_epoch)
-
-        # Build per-gene columns robustly
-        # Per-gene Pearson values: prefer best across epochs, then best-at-loss, then last
-        per_gene_for_row = (
-            getattr(self, "best_pearson_per_gene", None)
-            or getattr(self, "best_r", None)
-            or getattr(self, "last_r", None)
-            or []
+        per_gene_values = select_per_gene_values(
+            getattr(self, "best_pearson_per_gene", None),
+            getattr(self, "best_r", None),
+            getattr(self, "last_r", None),
+            len(self.genes),
         )
-        if len(per_gene_for_row) != len(self.genes):
-            raise RuntimeError(
-                f"genes ({len(self.genes)}) vs r ({len(per_gene_for_row)}) length mismatch"
-            )
 
-        # Handle duplicate gene names deterministically: pearson_<gene>, pearson_<gene>__1, __2, ...
-        seen = {}
-        for g, r in zip(self.genes, per_gene_for_row):
-            base_key = f"pearson_{g}"
-            if g in seen:
-                seen[g] += 1
-                key = f"{base_key}__{seen[g]}"
-            else:
-                seen[g] = 0
-                key = base_key
-            row[key] = float(r)
+        tuned_lrs = self.lrs if isinstance(getattr(self, "lrs", None), dict) else None
+        row = build_results_row(self.config, self.genes, metrics, per_gene_values, tuned_lrs)
 
-        # Keep selected hyperparams/metadata (existing columns retained for continuity)
-        keep = [
-            "dataset",
-            "gene_data_filename",
-            "encoder_type",
-            "freeze_encoder",
-            "learning_rate",
-            "batch_size",
-            "bins",
-            "loss_fn_switch",
-            "genes",
-        ]
-        for k in keep:
-            if k in self.config:
-                row[k] = self.config[k]
-
-        # Add one column per config entry: cfg_<key> = value
-        def _sane_json_val(v):
-            try:
-                if isinstance(v, (str, int, float, bool)) or v is None:
-                    return v
-                # numpy types
-                try:
-                    import numpy as _np
-                    if isinstance(v, _np.generic):
-                        return v.item()
-                    if isinstance(v, _np.ndarray):
-                        return v.tolist()
-                except Exception:
-                    pass
-                # torch tensors
-                try:
-                    import torch as _torch
-                    if isinstance(v, _torch.Tensor):
-                        return v.detach().cpu().tolist()
-                except Exception:
-                    pass
-                # dict/list/tuple/set → JSON string
-                try:
-                    return json.dumps(v, ensure_ascii=False)
-                except Exception:
-                    return str(v)
-            except Exception:
-                return str(v)
-
-        # Flatten top-level config keys into cfg_* columns
-        cfg_cols = {f"cfg_{k}": _sane_json_val(v) for k, v in self.config.items()}
-        # Include tuned LRs if available
-        if hasattr(self, "lrs") and isinstance(self.lrs, dict):
-            cfg_cols["cfg_tuned_lr"] = _sane_json_val(self.lrs)
-        row.update(cfg_cols)
-
-        # Also store the full config as JSON (sanitized) for backward compatibility
-        try:
-            row["hp_json"] = json.dumps({k: _sane_json_val(v) for k, v in self.config.items()}, ensure_ascii=False)
-        except Exception:
-            row["hp_json"] = json.dumps({k: str(v) for k, v in self.config.items()}, ensure_ascii=False)
-
-        # --- Append row with schema union (handles changing pearson_* columns) ---
-        def _append_row_any_schema(csv_path: str, row_dict: dict):
-            df_new = pd.DataFrame([row_dict])
-            if os.path.exists(csv_path):
-                df_old = pd.read_csv(csv_path)
-                # Union of columns, preserving existing order; new columns appended at the end
-                all_cols = list(dict.fromkeys(list(df_old.columns) + list(df_new.columns)))
-                df_old = df_old.reindex(columns=all_cols)
-                df_new = df_new.reindex(columns=all_cols)
-                df = pd.concat([df_old, df_new], ignore_index=True)
-            else:
-                df = df_new
-            df.to_csv(csv_path, index=False)
-
-        # Write to CSV(s)
         for path in csv_paths:
             try:
                 os.makedirs(os.path.dirname(path), exist_ok=True)
-                _append_row_any_schema(path, row)
+                append_row_with_schema(path, row)
                 logging.info("logged results into %s", path)
             except Exception as e:
                 logging.exception("failed to log results into %s: %s", path, e)
 
-        # Log W&B artifacts only for non-debug runs
         if not is_debug:
             self._log_wandb_artifacts()
 
