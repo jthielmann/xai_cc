@@ -1,0 +1,65 @@
+project: coad icms3down uni
+name: coad icms3down uni
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  # Run behavior
+  log_to_wandb:
+    value: true
+  debug:
+    value: false
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: true
+
+  # Data / loader
+  dataset:
+    value: coad
+  gene_data_filename:
+    value: gene_log1p.csv
+  image_size:
+    value: 224
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+  meta_data_dir:
+    value: metadata
+  genes:
+    value: [CEBPA, PKIG, TFCP2L1, HNF4A, VAV3, MAPK13, ID1, CDX2]
+  split_genes_by:
+    value: 50
+
+  # Encoder
+  encoder_type:
+    values: [uni]
+  freeze_encoder:
+    value: true
+
+  # Head
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 256
+
+  # Training schedule
+  epochs:
+    value: 20
+  optimizer:
+    value: adamw
+  global_fix_learning_rate:
+    value: 0.01
+
+  # Logging / metrics
+  loss_fn_switch:
+    value: pearson
+
+  # Runtime (optional but handy)
+  precision_auto:
+    value: true
+  strategy:
+    value: "auto"

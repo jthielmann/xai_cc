@@ -473,17 +473,8 @@ class GeneExpressionRegressor(L.LightningModule):
             wandb.log({"scatter_table": self.table})
         is_debug = bool(self.config.get("debug"))
 
-        # Results CSV destinations (sibling to the models directory)
-        # - Global:  <..>/results/all.csv
-        # - Project: <..>/results/<project>/all.csv
-        # Compute results root as sibling of model_dir
-        try:
-            models_root = os.path.abspath(self.config["model_dir"])  # e.g., ../models/
-            parent_dir  = os.path.dirname(models_root.rstrip(os.sep)) # e.g., ..
-            results_root = os.path.join(parent_dir, "results")       # e.g., ../results
-        except Exception:
-            # Fallback: current working directory / results
-            results_root = os.path.join(os.getcwd(), "results")
+
+        results_root = "../results"
 
         csv_path_global = os.path.join(results_root, "all.csv")
         proj = self.config.get("project", "project")

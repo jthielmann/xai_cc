@@ -1,4 +1,4 @@
-project: coad common hvg
+project: coad common hvg redo
 name: coad common hvg
 method: grid
 metric:
@@ -36,7 +36,7 @@ parameters:
 
   # Encoder
   encoder_type:
-    values: [dinov3_vits16, uni, dinov3_vitl16, dinov3_vitb16]
+    values: [dinov3_vits16, uni, dinov3_vitl16, dinov3_vitb16, dino, resnet50imagenet, resnet50random]
   freeze_encoder:
     value: true
 
