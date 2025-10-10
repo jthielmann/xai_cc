@@ -17,7 +17,6 @@ sys.path.insert(0, '..')
 from typing import Dict, Any, List, Union, Optional
 from script.configs.dataset_config import get_dataset_cfg
 from script.train.lit_train import TrainerPipeline
-from script.evaluation.xai_pipeline import XaiPipeline
 from main_utils import (
     ensure_free_disk_space,
     parse_args,
@@ -450,17 +449,12 @@ def main():
         for k, p in params.items():
             if isinstance(p, dict) and "value" in p: cfg[k] = p["value"]
 
-        # If this is an XAI pipeline config, handle it directly here,
-        # preserving any provided out_path and preparing the dump env.
+        # If this is an XAI pipeline config, do not run it from here.
+        # We keep XAI in a separate entrypoint so it can be executed
+        # in a dedicated conda environment without bringing in training deps.
         if bool(cfg.get("xai_pipeline", False)):
-            wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
-            run = wandb.init(project=cfg.get("project", "xai"), config=wb_cfg) if cfg.get("log_to_wandb", False) else None
-            cfg = dict(run.config) if run else cfg
-            cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
-            cfg = _prepare_cfg(cfg)  # ensures dataset cfg and creates out_path/sweep_dir/model_dir
-            XaiPipeline(cfg, run=run).run()
-            if run:
-                run.finish()
+            print("[info] Detected xai_pipeline config. Please run:\n"
+                  "  python script/xai_main.py --config", args.config)
             return
 
         # Otherwise: standard training single-run flow
