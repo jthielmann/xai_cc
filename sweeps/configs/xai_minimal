@@ -8,32 +8,21 @@ parameters:
   log_to_wandb:
     value: false
 
-  dataset:
-    value: crc_base
-  data_dir:
-    value: ../data/crc_base/Training_Data/
-  train_samples:
-    value: [p007]
-  val_samples:
-    value: [p009]
-
-  genes:
-    value: [RUBCNL]
-  out_path:
-    value: ../crp_out/xai_minimal
-
-  encoder_type:
-    value: resnet50random
+  # Model configuration to inherit architecture/dataset details from
+  model_config_path:
+    value: sweeps/configs/test_single_run
+  # Set one of the following to point at trained weights
   model_state_path:
     value: null
-  # To load components individually, set these instead of model_state_path, e.g.
-  # value: ../models/my_run/checkpoints/encoder.pt
   encoder_state_path:
     value: null
   gene_head_state_path:
     value: null
   sae_state_path:
     value: null
+
+  out_path:
+    value: ../crp_out/xai_minimal
 
   lrp:
     value: true
@@ -44,6 +33,7 @@ parameters:
   diff:
     value: false
 
+  # Optional overrides for specific visualizations
   patient:
     value: p007
   gene:

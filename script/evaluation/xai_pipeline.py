@@ -1,3 +1,4 @@
+import os
 import torch
 from typing import Any, Dict, Optional
 
@@ -25,10 +26,28 @@ class XaiPipeline:
             return torch.device("mps")
         return torch.device("cpu")
 
+    def _resolve_path(self, path: str) -> str:
+        if os.path.isabs(path):
+            return path
+        bases = []
+        cfg_src = self.config.get("_config_path")
+        if cfg_src:
+            bases.append(os.path.dirname(cfg_src))
+        model_src = self.config.get("_model_config_path")
+        if model_src:
+            bases.append(os.path.dirname(model_src))
+        bases.append(os.getcwd())
+        for base in bases:
+            candidate = os.path.normpath(os.path.join(base, path))
+            if os.path.exists(candidate):
+                return candidate
+        return os.path.normpath(os.path.join(bases[0], path)) if bases else path
+
     def _load_state_dict_from_path(self, path: str) -> Dict[str, Any]:
-        state = torch.load(path, map_location="cpu")
+        resolved = self._resolve_path(path)
+        state = torch.load(resolved, map_location="cpu")
         if not isinstance(state, dict):
-            raise ValueError(f"State dict file {path!r} did not contain a dictionary")
+            raise ValueError(f"State dict file {resolved!r} did not contain a dictionary")
         return state
 
     def _normalize_state_dicts(self, raw: Dict[str, Any]) -> Dict[str, Any]:
