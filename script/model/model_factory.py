@@ -3,7 +3,44 @@ import os
 import torch
 import torch.nn as nn
 import torchvision.models as models
-from torchvision.transforms import v2
+try:
+    from torchvision.transforms import v2  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - fallback path for older torchvision
+    from torchvision import transforms as _transforms
+    from torchvision.transforms import functional as _F
+
+    class _ToImage:
+        def __call__(self, img):
+            if isinstance(img, torch.Tensor):
+                return img
+            return _F.to_tensor(img)
+
+    class _ToDtype:
+        def __init__(self, dtype, scale: bool = False):
+            self.dtype = dtype
+            self.scale = scale
+
+        def __call__(self, img):
+            tensor = img.to(self.dtype)
+            if self.scale and torch.is_floating_point(tensor) and tensor.max() > 1:
+                tensor = tensor / 255
+            return tensor
+
+    class _Resize:
+        def __init__(self, size, antialias: bool = True):
+            self._resize = _transforms.Resize(size)
+
+        def __call__(self, img):
+            return self._resize(img)
+
+    class _V2Compat:
+        Compose = _transforms.Compose
+        Normalize = _transforms.Normalize
+        Resize = _Resize
+        ToImage = _ToImage
+        ToDtype = _ToDtype
+
+    v2 = _V2Compat()
 from script.configs.normalization import IMAGENET_MEAN, IMAGENET_STD
 
 from script.configs.config_factory import get_dataset_cfg
