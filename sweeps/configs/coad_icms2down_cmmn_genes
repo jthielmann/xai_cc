@@ -39,6 +39,8 @@ parameters:
     values: [uni]
   freeze_encoder:
     value: true
+  encoder_finetune_layers:
+    value: 5
 
   # Head
   one_linear_out_layer:
