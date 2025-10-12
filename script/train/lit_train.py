@@ -71,14 +71,28 @@ def _validate_config_and_shapes(cfg, model, loader):
     if overlap:
         raise ValueError(f"Patient overlap across splits: {overlap}")
 
-def _verify_log_frozen(model, freeze_encoder, wandb_run=None):
+def _verify_log_frozen(
+    model,
+    freeze_encoder,
+    wandb_run=None,
+    encoder_finetune_layers: int = 0,
+    encoder_finetune_layer_names=None,
+):
     # strict encoder check + counts
     enc_trainable_names, enc_frozen_names = [], []
     if hasattr(model, "encoder"):
         enc_trainable_names = [n for n, p in model.encoder.named_parameters() if p.requires_grad]
         enc_frozen_names    = [n for n, p in model.encoder.named_parameters() if not p.requires_grad]
-        if freeze_encoder and enc_trainable_names:
+        requested_partial = bool(encoder_finetune_layers) or bool(encoder_finetune_layer_names)
+        if freeze_encoder and enc_trainable_names and not requested_partial:
             raise RuntimeError(f"freeze_encoder=True but trainable: {enc_trainable_names[:5]}...")
+        if freeze_encoder and requested_partial and not enc_trainable_names:
+            log.warning(
+                "freeze_encoder=True with finetune request but encoder has no trainable params.\n"
+                "Requested layers: %s | trainable groups on model: %s",
+                encoder_finetune_layer_names,
+                getattr(model, "encoder_unfrozen_groups", [])
+            )
         if not freeze_encoder and not enc_trainable_names:
             raise RuntimeError("freeze_encoder=False but encoder has no trainable params!")
 
@@ -110,6 +124,12 @@ def _verify_log_frozen(model, freeze_encoder, wandb_run=None):
             "params/frozen": frozen_params,
             "config/freeze_encoder": freeze_encoder,
         }
+        if isinstance(encoder_finetune_layer_names, str):
+            encoder_finetune_layer_names = [encoder_finetune_layer_names]
+        if encoder_finetune_layers:
+            log_dict["config/encoder_finetune_layers"] = int(encoder_finetune_layers)
+        if encoder_finetune_layer_names:
+            log_dict["config/encoder_finetune_layer_names"] = list(encoder_finetune_layer_names)
         if hasattr(model, "encoder"):
             enc_trainable = sum(p.numel() for _, p in model.encoder.named_parameters() if p.requires_grad)
             enc_frozen    = sum(p.numel() for _, p in model.encoder.named_parameters() if not p.requires_grad)
@@ -117,6 +137,8 @@ def _verify_log_frozen(model, freeze_encoder, wandb_run=None):
                 "encoder/params_trainable": enc_trainable,
                 "encoder/params_frozen": enc_frozen,
             })
+            if getattr(model, "encoder_unfrozen_groups", None):
+                log_dict["encoder/unfrozen_groups"] = ",".join(model.encoder_unfrozen_groups)
         wandb_run.log(log_dict)
         for m, (t, tr) in mods.items():
             wandb_run.log({
@@ -722,9 +744,13 @@ class TrainerPipeline:
             model = get_model(self.config)
 
             # better save than sorry, also count and log trainable param
-            _verify_log_frozen(model, self.config.get("freeze_encoder", False),
-                                   self.wandb_run if self.is_online and
-                                   self.config.get("verify_log_frozen", False) else None)
+            _verify_log_frozen(
+                model,
+                self.config.get("freeze_encoder", False),
+                wandb_run=self.wandb_run if self.is_online and self.config.get("verify_log_frozen", False) else None,
+                encoder_finetune_layers=int(self.config.get("encoder_finetune_layers", 0) or 0),
+                encoder_finetune_layer_names=self.config.get("encoder_finetune_layer_names"),
+            )
             with torch.inference_mode():
                 _validate_config_and_shapes(self.config, model, train_loader)
             # learning rate tuning

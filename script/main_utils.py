@@ -104,6 +104,8 @@ _KEY_ALIASES: Dict[str, str] = {
     "dataset": "ds",
     "encoder_type": "enc",
     "encoder_out_dim": "eod",
+    "encoder_finetune_layers": "efl",
+    "encoder_finetune_layer_names": "efln",
     "middle_layer_features": "ml",
     "image_size": "sz",
     "num_workers": "nw",

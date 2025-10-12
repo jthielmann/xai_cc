@@ -4,7 +4,7 @@ import os
 import sys
 from contextlib import nullcontext
 from io import BytesIO
-from typing import Dict, Any, Mapping
+from typing import Dict, Any, Mapping, Iterable, Optional
 
 import lightning as L
 import matplotlib.pyplot as plt
@@ -70,10 +70,15 @@ class GeneExpressionRegressor(L.LightningModule):
         default_lr = self.config.get("head_lr", 1e-3)
         self.lrs = None
         self.encoder = get_encoder(self.config["encoder_type"])
-        self.freeze_encoder = self.config['freeze_encoder']
-        if self.freeze_encoder:
-            for p in self.encoder.parameters(): p.requires_grad = False
-            self.encoder.eval()
+        self.freeze_encoder = bool(self.config.get('freeze_encoder', False))
+        raw_layer_names = self.config.get("encoder_finetune_layer_names", [])
+        if isinstance(raw_layer_names, str):
+            raw_layer_names = [raw_layer_names]
+        self.encoder_finetune_layer_names = [str(n) for n in raw_layer_names]
+        self.encoder_finetune_layers = int(self.config.get("encoder_finetune_layers", 0) or 0)
+        self.encoder_unfrozen_groups: list[str] = []
+        self.encoder_is_fully_frozen: bool = False
+        self._apply_encoder_freeze_policy()
         out_dim_encoder = infer_encoder_out_dim(self.encoder)
         for gene in self.config['genes']:
             relu_type = nn.LeakyReLU if self.config.get('use_leaky_relu') else nn.ReLU
@@ -136,6 +141,110 @@ class GeneExpressionRegressor(L.LightningModule):
         self.best_r: list[float] = [float("nan")] * len(self.genes)
         self.last_r: list[float] = [float("nan")] * len(self.genes)
 
+def _apply_encoder_freeze_policy(self) -> None:
+    # Build/refresh param groups and their order
+    self._encoder_param_groups, self._encoder_param_group_order = self._build_encoder_param_groups()
+
+    # Set all params frozen or unfrozen in one pass
+    all_trainable = not self.freeze_encoder
+    for p in self.encoder.parameters():
+        p.requires_grad = all_trainable
+
+    groups = []
+
+    if self.freeze_encoder:
+        # Start fully frozen, then selectively unfreeze
+        if self.encoder_finetune_layer_names:
+            groups += self._unfreeze_groups(self.encoder_finetune_layer_names)
+
+        if self.encoder_finetune_layers > 0:
+            groups += self._unfreeze_last_n_groups(
+                self.encoder_finetune_layers,
+                exclude=set(groups)  # avoid re-unfreezing duplicates
+            )
+
+        # Remove duplicates while preserving order
+        groups = list(dict.fromkeys(groups))
+
+        if groups:
+            log.info("Partially finetuning encoder groups: %s", ", ".join(groups))
+        else:
+            log.info("Encoder fully frozen (no finetuning groups specified)")
+    else:
+        # Fully trainable encoder
+        groups = list(self._encoder_param_group_order)
+
+    self.encoder_unfrozen_groups = groups
+
+    # Compute freeze status and switch mode accordingly
+    self.encoder_is_fully_frozen = not any(p.requires_grad for p in self.encoder.parameters())
+    self.encoder.train(not self.encoder_is_fully_frozen)
+
+
+    def _build_encoder_param_groups(self) -> tuple[dict[str, list[nn.Parameter]], list[str]]:
+        groups: dict[str, list[nn.Parameter]] = {}
+        order: list[str] = []
+        for name, param in self.encoder.named_parameters():
+            group = self._parameter_group_from_name(name)
+            if group not in groups:
+                groups[group] = []
+                order.append(group)
+            groups[group].append(param)
+        return groups, order
+
+    @staticmethod
+    def _parameter_group_from_name(name: str) -> str:
+        parts = name.split('.')
+        if len(parts) > 2 and parts[1] == "layer" and parts[2].isdigit():
+            return ".".join(parts[:3])
+        if len(parts) > 1 and parts[1].isdigit():
+            first = parts[0]
+            if first in {"blocks", "layers", "stages", "encoder_layers"} or first.endswith("blocks") or first.endswith("layers"):
+                return ".".join(parts[:2])
+        return parts[0]
+
+    def _unfreeze_groups(self, target_groups: Iterable[str]) -> list[str]:
+        matched: list[str] = []
+        available = self._encoder_param_group_order
+        for raw_target in target_groups:
+            target = str(raw_target)
+            if not target:
+                continue
+            hits = [g for g in available if g == target]
+            if not hits:
+                hits = [g for g in available if g.endswith(target)]
+            if not hits:
+                log.warning(
+                    "Requested encoder group '%s' not found; available groups include: %s",
+                    target,
+                    ", ".join(available[-5:])
+                )
+                continue
+            for group in hits:
+                if group in matched:
+                    continue
+                for param in self._encoder_param_groups.get(group, []):
+                    param.requires_grad = True
+                matched.append(group)
+        return matched
+
+    def _unfreeze_last_n_groups(self, count: int, exclude: Optional[Iterable[str]] = None) -> list[str]:
+        if count <= 0:
+            return []
+        exclude_set = set(exclude or [])
+        selected: list[str] = []
+        for group in reversed(self._encoder_param_group_order):
+            if group in exclude_set:
+                continue
+            selected.append(group)
+            if len(selected) >= count:
+                break
+        selected.reverse()
+        for group in selected:
+            for param in self._encoder_param_groups.get(group, []):
+                param.requires_grad = True
+        return selected
+
     def train(self, mode: bool = True):
         """Ensure frozen encoders do not update BatchNorm running stats.
 
@@ -143,7 +252,7 @@ class GeneExpressionRegressor(L.LightningModule):
         while the overall module is in train mode.
         """
         super().train(mode)
-        if getattr(self, "freeze_encoder", False):
+        if getattr(self, "encoder_is_fully_frozen", False):
             # keep encoder/BNS in eval to prevent running-stat drift
             try:
                 self.encoder.eval()
@@ -158,9 +267,10 @@ class GeneExpressionRegressor(L.LightningModule):
 
     def configure_optimizers(self):
         groups = []
-        if not self.freeze_encoder:
+        encoder_params = [p for p in self.encoder.parameters() if p.requires_grad]
+        if encoder_params:
             groups.append({
-                "params": self.encoder.parameters(),
+                "params": encoder_params,
                 "lr": self.encoder_lr
             })
         for g in self.genes:
@@ -188,10 +298,11 @@ class GeneExpressionRegressor(L.LightningModule):
         self.y_hats, self.ys = [], []
 
     def forward(self, x):
+        freeze_context = getattr(self, "encoder_is_fully_frozen", False)
         cm = (
             torch.inference_mode
-            if (self.freeze_encoder and hasattr(torch, "inference_mode"))
-            else (torch.no_grad if self.freeze_encoder else nullcontext)
+            if (freeze_context and hasattr(torch, "inference_mode"))
+            else (torch.no_grad if freeze_context else nullcontext)
         )
         with cm():
             z = self.encoder(x)
