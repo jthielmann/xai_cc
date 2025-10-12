@@ -141,44 +141,44 @@ class GeneExpressionRegressor(L.LightningModule):
         self.best_r: list[float] = [float("nan")] * len(self.genes)
         self.last_r: list[float] = [float("nan")] * len(self.genes)
 
-def _apply_encoder_freeze_policy(self) -> None:
-    # Build/refresh param groups and their order
-    self._encoder_param_groups, self._encoder_param_group_order = self._build_encoder_param_groups()
+    def _apply_encoder_freeze_policy(self) -> None:
+        # Build/refresh param groups and their order
+        self._encoder_param_groups, self._encoder_param_group_order = self._build_encoder_param_groups()
 
-    # Set all params frozen or unfrozen in one pass
-    all_trainable = not self.freeze_encoder
-    for p in self.encoder.parameters():
-        p.requires_grad = all_trainable
+        # Set all params frozen or unfrozen in one pass
+        all_trainable = not self.freeze_encoder
+        for p in self.encoder.parameters():
+            p.requires_grad = all_trainable
 
-    groups = []
+        groups = []
 
-    if self.freeze_encoder:
-        # Start fully frozen, then selectively unfreeze
-        if self.encoder_finetune_layer_names:
-            groups += self._unfreeze_groups(self.encoder_finetune_layer_names)
+        if self.freeze_encoder:
+            # Start fully frozen, then selectively unfreeze
+            if self.encoder_finetune_layer_names:
+                groups += self._unfreeze_groups(self.encoder_finetune_layer_names)
 
-        if self.encoder_finetune_layers > 0:
-            groups += self._unfreeze_last_n_groups(
-                self.encoder_finetune_layers,
-                exclude=set(groups)  # avoid re-unfreezing duplicates
-            )
+            if self.encoder_finetune_layers > 0:
+                groups += self._unfreeze_last_n_groups(
+                    self.encoder_finetune_layers,
+                    exclude=set(groups)  # avoid re-unfreezing duplicates
+                )
 
-        # Remove duplicates while preserving order
-        groups = list(dict.fromkeys(groups))
+            # Remove duplicates while preserving order
+            groups = list(dict.fromkeys(groups))
 
-        if groups:
-            log.info("Partially finetuning encoder groups: %s", ", ".join(groups))
+            if groups:
+                log.info("Partially finetuning encoder groups: %s", ", ".join(groups))
+            else:
+                log.info("Encoder fully frozen (no finetuning groups specified)")
         else:
-            log.info("Encoder fully frozen (no finetuning groups specified)")
-    else:
-        # Fully trainable encoder
-        groups = list(self._encoder_param_group_order)
+            # Fully trainable encoder
+            groups = list(self._encoder_param_group_order)
 
-    self.encoder_unfrozen_groups = groups
+        self.encoder_unfrozen_groups = groups
 
-    # Compute freeze status and switch mode accordingly
-    self.encoder_is_fully_frozen = not any(p.requires_grad for p in self.encoder.parameters())
-    self.encoder.train(not self.encoder_is_fully_frozen)
+        # Compute freeze status and switch mode accordingly
+        self.encoder_is_fully_frozen = not any(p.requires_grad for p in self.encoder.parameters())
+        self.encoder.train(not self.encoder_is_fully_frozen)
 
 
     def _build_encoder_param_groups(self) -> tuple[dict[str, list[nn.Parameter]], list[str]]:
