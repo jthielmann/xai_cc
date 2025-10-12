@@ -5,19 +5,17 @@ import torch.nn.functional
 from torchvision import transforms
 from script.data_processing.image_transforms import get_eval_transforms, get_transforms
 from script.configs.dataset_config import get_dataset_cfg
-from typing import Union, Mapping
+from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple, Union
 DEFAULT_RANDOM_SEED = 42
 
-from typing import Sequence
 import matplotlib.pyplot as plt
 from torchvision import transforms as T
 import os
 
 from pathlib import Path
 import json
-import pandas as pd
 import numpy as np
-from typing import Any, Literal
+import pandas as pd
 
 
 def seed_basic(seed=DEFAULT_RANDOM_SEED):
@@ -52,8 +50,6 @@ def log_training(date, training_log):
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
-from typing import List, Optional
-
 class STDataset(Dataset):
     def __init__(
         self,
@@ -226,7 +222,6 @@ def get_patient_loader(data_dir, patient, genes=None):
     return loaded_train_dataset
 
 import torch, math
-from typing import Dict
 
 def make_weights(
     raw: Dict[str, torch.Tensor],
@@ -256,6 +251,54 @@ def make_weights(
     return scaled
 
 
+def _compute_bin_edges(
+    values: np.ndarray,
+    num_bins: int,
+    *,
+    strategy: str = "quantile",
+    clip: float = 0.0,
+) -> np.ndarray:
+    if num_bins <= 0:
+        raise ValueError("num_bins must be positive.")
+    if values.size == 0:
+        raise ValueError("Cannot compute bin edges for empty value array.")
+
+    strategy = str(strategy).lower()
+    clip = float(clip)
+    if clip < 0.0 or clip >= 0.5:
+        raise ValueError("clip must be in the interval [0, 0.5).")
+
+    v_min = float(np.min(values))
+    v_max = float(np.max(values))
+    if not np.isfinite(v_min) or not np.isfinite(v_max):
+        raise ValueError("Values contain non-finite entries.")
+    if v_min == v_max:
+        return np.linspace(v_min, v_min + 1e-6, num_bins + 1, dtype=np.float32)
+
+    if strategy == "quantile":
+        qs = np.linspace(0.0, 1.0, num_bins + 1)
+        if clip > 0.0:
+            qs = np.clip(qs, clip, 1.0 - clip)
+            qs[0] = 0.0
+            qs[-1] = 1.0
+        edges = np.quantile(values, qs)
+    elif strategy == "linspace":
+        edges = np.linspace(v_min, v_max, num_bins + 1)
+    else:
+        raise ValueError(f"Unknown bin edge strategy '{strategy}'. Expected 'quantile' or 'linspace'.")
+
+    edges = np.asarray(edges, dtype=np.float32)
+    edges[0] = v_min
+    edges[-1] = v_max
+
+    diffs = np.diff(edges)
+    if np.any(diffs <= 0):
+        # Fallback to evenly spaced bins if quantiles collapse due to repeated values
+        edges = np.linspace(v_min, v_max, num_bins + 1, dtype=np.float32)
+
+    return edges
+
+
 
 def get_all_genes():
     pass
@@ -272,8 +315,12 @@ def get_base_dataset(
     meta_data_dir: str = "/meta_data/",
     lds_smoothing_csv: str | Path | None = None,      # <─ NOW one file, not a dir
     weight_transform: str = "inverse",
-    weight_clamp: int = 10
-):
+    weight_clamp: int = 10,
+    lds_bin_edge_strategy: str = "quantile",
+    lds_bin_edge_clip: float = 0.0,
+    precomputed_edges: Dict[str, np.ndarray] | None = None,
+    return_edges: bool = False,
+) -> Union[pd.DataFrame, Tuple[pd.DataFrame, Dict[str, np.ndarray]]]:
     if lds_smoothing_csv is not None and genes is None:
         raise RuntimeError(f"lds_smoothing_csv is not None ({lds_smoothing_csv}) and genes is None")
     # normalize meta data directory token (support 'meta_data', '/meta_data', 'meta_data/')
@@ -290,24 +337,37 @@ def get_base_dataset(
 
     base_df = pd.concat(dfs, ignore_index=True)
 
-
+    edges_lookup = precomputed_edges or {}
+    edges_result: Dict[str, np.ndarray] = dict(edges_lookup) if return_edges else edges_lookup
 
     if lds_smoothing_csv is not None:
-        gene2weights = load_gene_weights(lds_smoothing_csv, genes=genes,weight_transform=weight_transform)
+        gene2weights = load_gene_weights(lds_smoothing_csv, genes=genes, weight_transform=weight_transform)
         gene2weights = make_weights(gene2weights, clip_max=weight_clamp, r1=20, r2=100)
 
         for g in genes:
-            if g not in gene2weights: raise ValueError(f"No weights for {g}")
-            w_vec  = gene2weights[g]                      # (K,)
-            K      = len(w_vec)
+            if g not in gene2weights:
+                raise ValueError(f"No weights for {g}")
+            w_vec = gene2weights[g]  # (K,)
+            K = len(w_vec)
 
-            vals   = base_df[g].to_numpy()
-            # edges exactly like np.histogram (equal width)
-            edges  = np.linspace(vals.min(), vals.max(), K + 1, dtype=np.float32)
-            idx    = np.clip(np.searchsorted(edges, vals, side="right") - 1, 0, K - 1)
+            vals = base_df[g].to_numpy()
+            if g in edges_lookup:
+                edges = np.asarray(edges_lookup[g], dtype=np.float32)
+            else:
+                edges = _compute_bin_edges(
+                    vals,
+                    K,
+                    strategy=lds_bin_edge_strategy,
+                    clip=lds_bin_edge_clip,
+                )
+                if return_edges:
+                    edges_result[g] = edges
+            if edges.shape[0] != K + 1:
+                raise ValueError(f"Edges for gene '{g}' must have length {K + 1}, got {edges.shape[0]}.")
+            idx = np.clip(np.searchsorted(edges, vals, side="right") - 1, 0, K - 1)
             base_df[f"{g}_lds_w"] = w_vec[idx]
 
-    if bins > 1:
+    if bins > 1 and genes:
         gene_values = base_df[genes[0]]
         gene_bins   = pd.cut(gene_values, bins)
         groups      = base_df.groupby(gene_bins)
@@ -316,6 +376,8 @@ def get_base_dataset(
                        .apply(lambda x: x.sample(sample_size, replace=True) if len(x) else x)
                        .reset_index(drop=True))
 
+    if return_edges:
+        return base_df, edges_result
     return base_df
 
 
@@ -386,12 +448,16 @@ def get_dataset(
     lds_smoothing_csv: str | Path | None = None,
     weight_transform: str = "inverse",
     weight_clamp: int = 10,
-    return_floats: bool = False
+    return_floats: bool = False,
+    lds_bin_edge_strategy: str = "quantile",
+    lds_bin_edge_clip: float = 0.0,
+    precomputed_bin_edges: Dict[str, np.ndarray] | None = None,
+    return_edges: bool = False,
 ):
     if samples is None:
         samples = [f.name for f in os.scandir(data_dir) if f.is_dir()]
 
-    df = get_base_dataset(
+    base_result = get_base_dataset(
         data_dir=data_dir,
         samples=samples,
         genes=genes,
@@ -401,8 +467,17 @@ def get_dataset(
         meta_data_dir=meta_data_dir,
         lds_smoothing_csv=lds_smoothing_csv,
         weight_transform=weight_transform,
-        weight_clamp=weight_clamp
+        weight_clamp=weight_clamp,
+        lds_bin_edge_strategy=lds_bin_edge_strategy,
+        lds_bin_edge_clip=lds_bin_edge_clip,
+        precomputed_edges=precomputed_bin_edges,
+        return_edges=return_edges,
     )
+    if return_edges:
+        df, edges = base_result
+    else:
+        df = base_result
+        edges = precomputed_bin_edges or {}
 
     # create the PyTorch-compatible dataset
     ds = STDataset(
@@ -413,6 +488,8 @@ def get_dataset(
         use_weights=lds_smoothing_csv is not None,
         return_floats=return_floats
     )
+    if return_edges:
+        return ds, edges
     return ds
 
 
@@ -433,6 +510,10 @@ def get_dataset_from_config(
     weight_transform: str = "inverse",
     weight_clamp: int = 10,
     return_floats: bool = False,
+    lds_bin_edge_strategy: str = "quantile",
+    lds_bin_edge_clip: float = 0.0,
+    precomputed_bin_edges: Dict[str, np.ndarray] | None = None,
+    return_edges: bool = False,
 ) -> STDataset:
 
     cfg: dict[str, Any] = {"dataset": dataset_name}
@@ -480,6 +561,10 @@ def get_dataset_from_config(
         weight_transform=weight_transform,
         weight_clamp=weight_clamp,
         return_floats=return_floats,
+        lds_bin_edge_strategy=lds_bin_edge_strategy,
+        lds_bin_edge_clip=lds_bin_edge_clip,
+        precomputed_bin_edges=precomputed_bin_edges,
+        return_edges=return_edges,
     )
 
 
@@ -487,7 +572,14 @@ def get_dataset_from_config(
 def get_dataset_for_umap(data_dir, genes, transforms=None, samples=None, meta_data_dir="/meta_data/", max_len=None, bins=1, only_inputs=False):
     if samples is None:
         samples = [os.path.basename(f) for f in os.scandir(data_dir) if f.is_dir()]
-    gene_data_df = get_base_dataset(data_dir, genes, samples, meta_data_dir=meta_data_dir, max_len=max_len, bins=bins)
+    gene_data_df = get_base_dataset(
+        data_dir=data_dir,
+        samples=samples,
+        genes=genes,
+        meta_data_dir=meta_data_dir,
+        max_len=max_len,
+        bins=bins,
+    )
     st_dataset = STDatasetUMAP(gene_data_df, image_transforms=transforms, inputs_only=only_inputs)
     return st_dataset
 
@@ -505,7 +597,11 @@ def get_base_dataset_single_file(
     tile_subdir: str | None = None,
     split: str | list[str] | None = None,
     split_col_name: str = "split",
-) -> pd.DataFrame:
+    lds_bin_edge_strategy: str = "quantile",
+    lds_bin_edge_clip: float = 0.0,
+    precomputed_edges: Dict[str, np.ndarray] | None = None,
+    return_edges: bool = False,
+) -> Union[pd.DataFrame, Tuple[pd.DataFrame, Dict[str, np.ndarray]]]:
     """Build a base DataFrame from a single top-level CSV.
 
     The CSV should contain at least a `tile` column and gene columns. If `data_dir`
@@ -538,6 +634,9 @@ def get_base_dataset_single_file(
     if "patient" not in df.columns:
         df["patient"] = "all"
 
+    edges_lookup = precomputed_edges or {}
+    edges_result: Dict[str, np.ndarray] = dict(edges_lookup) if return_edges else edges_lookup
+
     # Optionally attach LDS weights
     if lds_smoothing_csv is not None:
         # Determine gene list if not provided
@@ -562,7 +661,21 @@ def get_base_dataset_single_file(
                 w_vec = gene2weights[g]
                 K = len(w_vec)
                 vals = df[g].to_numpy()
-                edges = np.linspace(vals.min(), vals.max(), K + 1, dtype=np.float32)
+                if g in edges_lookup:
+                    edges = np.asarray(edges_lookup[g], dtype=np.float32)
+                else:
+                    edges = _compute_bin_edges(
+                        vals,
+                        K,
+                        strategy=lds_bin_edge_strategy,
+                        clip=lds_bin_edge_clip,
+                    )
+                    if return_edges:
+                        edges_result[g] = edges
+                if edges.shape[0] != K + 1:
+                    raise ValueError(
+                        f"Edges for gene '{g}' must have length {K + 1}, got {edges.shape[0]}."
+                    )
                 idx = np.clip(np.searchsorted(edges, vals, side="right") - 1, 0, K - 1)
                 df[f"{g}_lds_w"] = w_vec[idx]
 
@@ -577,6 +690,8 @@ def get_base_dataset_single_file(
             .reset_index(drop=True)
         )
 
+    if return_edges:
+        return df, edges_result
     return df
 
 
@@ -596,12 +711,16 @@ def get_dataset_single_file(
     tile_subdir: str | None = None,
     split: str | list[str] | None = None,
     split_col_name: str = "split",
+    lds_bin_edge_strategy: str = "quantile",
+    lds_bin_edge_clip: float = 0.0,
+    precomputed_bin_edges: Dict[str, np.ndarray] | None = None,
+    return_edges: bool = False,
 ):
     """Return an `STDataset` built from a single top-level CSV.
 
     Mirrors `get_dataset`, but does not expect per-patient subdirectories.
     """
-    df = get_base_dataset_single_file(
+    base_result = get_base_dataset_single_file(
         csv_path=csv_path,
         data_dir=data_dir,
         genes=genes,
@@ -613,7 +732,16 @@ def get_dataset_single_file(
         tile_subdir=tile_subdir,
         split=split,
         split_col_name=split_col_name,
+        lds_bin_edge_strategy=lds_bin_edge_strategy,
+        lds_bin_edge_clip=lds_bin_edge_clip,
+        precomputed_edges=precomputed_bin_edges,
+        return_edges=return_edges,
     )
+    if return_edges:
+        df, edges = base_result
+    else:
+        df = base_result
+        edges = precomputed_bin_edges or {}
 
     ds = STDataset(
         df,
@@ -623,6 +751,8 @@ def get_dataset_single_file(
         use_weights=lds_smoothing_csv is not None,
         return_floats=return_floats,
     )
+    if return_edges:
+        return ds, edges
     return ds
 
 def get_dino_dataset(csv_path, dino_transforms=None, max_len=None, bins=1, device_handling=False):
@@ -702,7 +832,7 @@ class label_dataset(torch.utils.data.Dataset):
 def load_best_smoothing(csv_path: str | Path, gene: str) -> Dict[str, Any]:
     """Load best smoothing params for a gene using JS divergence (smaller is better).
 
-    Expects a CSV produced by `script/data_processing/lds.py:grid_search_lds`, which
+    Expects a CSV produced by `script/data_processing/lds_coad.py:grid_search_lds`, which
     contains at least the columns: gene, bins, kernel_size, sigma, weights_json, js.
     """
     csv_path = Path(csv_path)

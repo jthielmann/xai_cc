@@ -6,7 +6,7 @@ def load_user_config(path: str) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
-# takes the output of lds and returns the weights
+# takes the output of lds_coad and returns the weights
 def get_weights_from_smoothed(smoothed_labels: List[float]) -> List[float]:
     eps, alpha = 1e-4, 0.5
     # for each smoothed count, add eps then raise to alpha and invert

@@ -24,6 +24,7 @@ class STDataModule(L.LightningDataModule):
         self.train_dataset = None
         self.val_dataset = None
         self.test_dataset = None
+        self._lds_bin_edges = None
 
     def setup(self, stage: str = None):
         # Determine max_len for debug mode
@@ -31,10 +32,21 @@ class STDataModule(L.LightningDataModule):
 
         # Determine if WMSE is selected; only then attach LDS weights
         loss_switch = str(self.cfg.get('loss_fn_switch', '')).lower()
-        wmse_selected = loss_switch in {"wmse", "weighted mse"}
+        wmse_selected = loss_switch in {"wmse", "weighted mse", "weighted huber", "wmse huber", "weighted smoothl1"}
         if wmse_selected and not self.cfg.get('lds_weight_csv'):
             raise ValueError("WMSE selected but 'lds_weight_csv' is not set in config.")
         lds_csv = self.cfg.get('lds_weight_csv', None) if wmse_selected else None
+        lds_edge_strategy = str(self.cfg.get('lds_bin_edge_strategy', 'quantile')).lower()
+        lds_edge_clip = float(self.cfg.get('lds_bin_edge_clip', 0.0))
+        share_edges = bool(self.cfg.get('lds_share_bin_edges', True))
+
+        def _resolve_dataset(result, need_edges: bool):
+            if need_edges:
+                dataset, edges = result
+                if share_edges:
+                    self._lds_bin_edges = edges
+                return dataset
+            return result
 
         if stage in (None, 'fit'):
             # Validate mutually exclusive CSV config
@@ -51,7 +63,8 @@ class STDataModule(L.LightningDataModule):
                     csv_path = cand if os.path.isfile(cand) else scp
                 else:
                     csv_path = scp
-                self.train_dataset = get_dataset_single_file(
+                need_edges_train = bool(lds_csv and share_edges)
+                train_result = get_dataset_single_file(
                     csv_path=csv_path,
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg.get('genes',None),
@@ -62,10 +75,16 @@ class STDataModule(L.LightningDataModule):
                     tile_subdir=self.cfg.get('tile_subdir'),
                     split='train',
                     split_col_name=self.cfg.get('split_col_name', 'split'),
-                    only_inputs=self.cfg.get("train_sae", False)
+                    only_inputs=self.cfg.get("train_sae", False),
+                    lds_bin_edge_strategy=lds_edge_strategy,
+                    lds_bin_edge_clip=lds_edge_clip,
+                    precomputed_bin_edges=self._lds_bin_edges if share_edges else None,
+                    return_edges=need_edges_train,
                 )
+                self.train_dataset = _resolve_dataset(train_result, need_edges_train)
             elif self.cfg.get('train_csv_path'):
-                self.train_dataset = get_dataset_single_file(
+                need_edges_train = bool(lds_csv and share_edges)
+                train_result = get_dataset_single_file(
                     csv_path=self.cfg['train_csv_path'],
                     data_dir=self.cfg.get('data_dir'),
                     genes=self.cfg.get('genes',None),
@@ -74,10 +93,16 @@ class STDataModule(L.LightningDataModule):
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir'),
-                    only_inputs=self.cfg.get("train_sae", False)
+                    only_inputs=self.cfg.get("train_sae", False),
+                    lds_bin_edge_strategy=lds_edge_strategy,
+                    lds_bin_edge_clip=lds_edge_clip,
+                    precomputed_bin_edges=self._lds_bin_edges if share_edges else None,
+                    return_edges=need_edges_train,
                 )
+                self.train_dataset = _resolve_dataset(train_result, need_edges_train)
             else:
-                self.train_dataset = get_dataset(
+                need_edges_train = bool(lds_csv and share_edges)
+                train_result = get_dataset(
                     self.cfg['data_dir'],
                     genes=self.cfg.get('genes',None),
                     samples=self.cfg['train_samples'],
@@ -87,8 +112,13 @@ class STDataModule(L.LightningDataModule):
                     meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
-                    only_inputs=self.cfg.get("train_sae", False)
+                    only_inputs=self.cfg.get("train_sae", False),
+                    lds_bin_edge_strategy=lds_edge_strategy,
+                    lds_bin_edge_clip=lds_edge_clip,
+                    precomputed_bin_edges=self._lds_bin_edges if share_edges else None,
+                    return_edges=need_edges_train,
                 )
+                self.train_dataset = _resolve_dataset(train_result, need_edges_train)
 
             if self.cfg.get('single_csv_path'):
                 scp = self.cfg['single_csv_path']
@@ -108,7 +138,11 @@ class STDataModule(L.LightningDataModule):
                     tile_subdir=self.cfg.get('tile_subdir'),
                     split='val',
                     split_col_name=self.cfg.get('split_col_name', 'split'),
-                    only_inputs=self.cfg.get("train_sae", False)
+                    only_inputs=self.cfg.get("train_sae", False),
+                    lds_bin_edge_strategy=lds_edge_strategy,
+                    lds_bin_edge_clip=lds_edge_clip,
+                    precomputed_bin_edges=self._lds_bin_edges if share_edges else None,
+                    return_edges=False,
                 )
             elif self.cfg.get('val_csv_path'):
                 self.val_dataset = get_dataset_single_file(
@@ -120,7 +154,11 @@ class STDataModule(L.LightningDataModule):
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir'),
-                    only_inputs=self.cfg.get("train_sae", False)
+                    only_inputs=self.cfg.get("train_sae", False),
+                    lds_bin_edge_strategy=lds_edge_strategy,
+                    lds_bin_edge_clip=lds_edge_clip,
+                    precomputed_bin_edges=self._lds_bin_edges if share_edges else None,
+                    return_edges=False,
                 )
             else:
                 self.val_dataset = get_dataset(
@@ -133,7 +171,11 @@ class STDataModule(L.LightningDataModule):
                     meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
-                    only_inputs=self.cfg.get("train_sae", False)
+                    only_inputs=self.cfg.get("train_sae", False),
+                    lds_bin_edge_strategy=lds_edge_strategy,
+                    lds_bin_edge_clip=lds_edge_clip,
+                    precomputed_bin_edges=self._lds_bin_edges if share_edges else None,
+                    return_edges=False,
                 )
         if stage in (None, 'test'):
             if self.cfg.get('single_csv_path'):
@@ -154,7 +196,11 @@ class STDataModule(L.LightningDataModule):
                     tile_subdir=self.cfg.get('tile_subdir'),
                     split='test',
                     split_col_name=self.cfg.get('split_col_name', 'split'),
-                    only_inputs=self.cfg.get("train_sae", False)
+                    only_inputs=self.cfg.get("train_sae", False),
+                    lds_bin_edge_strategy=lds_edge_strategy,
+                    lds_bin_edge_clip=lds_edge_clip,
+                    precomputed_bin_edges=self._lds_bin_edges if share_edges else None,
+                    return_edges=False,
                 )
             elif self.cfg.get('test_csv_path'):
                 self.test_dataset = get_dataset_single_file(
@@ -166,7 +212,11 @@ class STDataModule(L.LightningDataModule):
                     max_len=max_len,
                     lds_smoothing_csv=lds_csv,
                     tile_subdir=self.cfg.get('tile_subdir'),
-                    only_inputs=self.cfg.get("train_sae", False)
+                    only_inputs=self.cfg.get("train_sae", False),
+                    lds_bin_edge_strategy=lds_edge_strategy,
+                    lds_bin_edge_clip=lds_edge_clip,
+                    precomputed_bin_edges=self._lds_bin_edges if share_edges else None,
+                    return_edges=False,
                 )
             else:
                 if self.cfg.get('test_samples'):
@@ -180,7 +230,11 @@ class STDataModule(L.LightningDataModule):
                         meta_data_dir=self.cfg.get('meta_data_dir', '/meta_data/'),
                         max_len=max_len,
                         lds_smoothing_csv=lds_csv,
-                    only_inputs=self.cfg.get("train_sae", False)
+                        only_inputs=self.cfg.get("train_sae", False),
+                        lds_bin_edge_strategy=lds_edge_strategy,
+                        lds_bin_edge_clip=lds_edge_clip,
+                        precomputed_bin_edges=self._lds_bin_edges if share_edges else None,
+                        return_edges=False,
                     )
 
     def train_dataloader(self):

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import sys
+import warnings
 from contextlib import nullcontext
 from io import BytesIO
 from typing import Dict, Any, Mapping, Iterable, Optional
@@ -27,7 +28,7 @@ from script.model.lit_model_helpers import (
     measure_peak_train_step,
     select_per_gene_values,
 )
-from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss
+from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss, WeightedHuberLoss
 from script.model.model_factory import get_encoder, infer_encoder_out_dim
 
 import logging
@@ -115,7 +116,24 @@ class GeneExpressionRegressor(L.LightningModule):
             self.loss_fn = nn.MSELoss()
         elif loss_switch in {"wmse", "weighted mse"}:
             # Strict WMSE: expects per-sample weights from the dataset
-            self.loss_fn = MultiGeneWeightedMSE()
+            wmse_kwargs = {
+                "eps": float(self.config.get("wmse_eps", 1e-8)),
+                "reduction": str(self.config.get("wmse_reduction", "mean")).lower(),
+                "normalize": str(self.config.get("wmse_normalize", "global")).lower(),
+                "clip_weights": self.config.get("wmse_clip_weights"),
+                "check_finite": bool(self.config.get("wmse_check_finite", True)),
+            }
+            self.loss_fn = MultiGeneWeightedMSE(**wmse_kwargs)
+        elif loss_switch in {"weighted huber", "wmse huber", "weighted smoothl1"}:
+            huber_kwargs = {
+                "delta": float(self.config.get("weighted_huber_delta", 1.0)),
+                "eps": float(self.config.get("wmse_eps", 1e-8)),
+                "reduction": str(self.config.get("wmse_reduction", "mean")).lower(),
+                "normalize": str(self.config.get("wmse_normalize", "global")).lower(),
+                "clip_weights": self.config.get("wmse_clip_weights"),
+                "check_finite": bool(self.config.get("wmse_check_finite", True)),
+            }
+            self.loss_fn = WeightedHuberLoss(**huber_kwargs)
         elif loss_switch == "pearson":
             self.loss_fn = PearsonCorrLoss()
         else:
@@ -295,6 +313,7 @@ class GeneExpressionRegressor(L.LightningModule):
     def on_validation_epoch_start(self):
         self.val_loss_total = 0.0
         self.val_loss_count = 0
+        self.val_loss_weight_sum = 0.0
         self.y_hats, self.ys = [], []
 
     def forward(self, x):
@@ -325,22 +344,38 @@ class GeneExpressionRegressor(L.LightningModule):
         return out
 
     def training_step(self, batch, batch_idx):
-        loss, _, _ = self._step(batch)
+        loss, _, _, stats = self._step(batch)
         self.log('train_' + self.config['loss_fn_switch'], loss, on_step=True, on_epoch=True, prog_bar=True)
+        if stats:
+            self._log_weight_stats(stats, prefix="train_wmse", on_step=True, on_epoch=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss, y_hat, y = self._step(batch)
+        loss, y_hat, y, stats = self._step(batch)
         self.log('val_' + self.config['loss_fn_switch'], loss, on_epoch=True)
 
         bs = y.size(0)
-        if self.config["loss_fn_switch"].lower() in {"mse", "wmse", "weighted mse"}:
+        loss_switch = self.config["loss_fn_switch"].lower()
+        if loss_switch in {"wmse", "weighted mse", "weighted huber", "wmse huber", "weighted smoothl1"} and stats:
+            if "numerator" in stats and "denominator" in stats:
+                self.val_loss_total += float(stats["numerator"])
+                self.val_loss_weight_sum += float(stats["denominator"])
+            elif "numerator_vector" in stats and "denominator_vector" in stats:
+                self.val_loss_total += float(stats["numerator_vector"].sum())
+                self.val_loss_weight_sum += float(stats["denominator_vector"].sum())
+            else:
+                self.val_loss_total += float(loss.detach()) * bs
+                self.val_loss_count += bs
+        elif loss_switch in {"mse"}:
             self.val_loss_total += float(loss.detach()) * bs
             self.val_loss_count += bs
         else:
             # average over batches
             self.val_loss_total += float(loss.detach())
             self.val_loss_count += 1
+
+        if stats:
+            self._log_weight_stats(stats, prefix="val_wmse", on_step=False, on_epoch=True)
 
         self.y_hats.append(y_hat.detach().float().cpu())
         self.ys.append(y.detach().float().cpu())
@@ -378,6 +413,15 @@ class GeneExpressionRegressor(L.LightningModule):
 
         run.log_artifact(art, aliases=["best", "latest"])
 
+    def _log_weight_stats(self, stats: Optional[dict], *, prefix: str, on_step: bool, on_epoch: bool) -> None:
+        if not stats:
+            return
+        for key in ("weight_mean", "weight_max", "weight_min", "weight_nonzero_frac"):
+            value = stats.get(key)
+            if value is None:
+                continue
+            self.log(prefix + "_" + key, float(value), on_step=on_step, on_epoch=on_epoch, prog_bar=False)
+
     def _step(self, batch):
         loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
         if loss_switch in {"wmse", "weighted mse"}:
@@ -386,15 +430,38 @@ class GeneExpressionRegressor(L.LightningModule):
                     "Expected (x, y, w) batch for WMSE. Ensure 'lds_weight_csv' is set and DataModule passes weights."
                 )
             x, y, w = batch
-        else:
-            # Plain MSE or other losses expect (x, y) only
-            if not (isinstance(batch, (list, tuple)) and len(batch) == 2):
+        elif loss_switch in {"weighted huber", "wmse huber", "weighted smoothl1"}:
+            if not (isinstance(batch, (list, tuple)) and len(batch) in {2, 3}):
                 raise ValueError(
-                    f"Expected (x, y) batch for loss '{self.config.get('loss_fn_switch')}'. "
-                    "Remove LDS weights or use WMSE."
+                    "Expected (x, y, w) or (x, y) batch for weighted Huber. Provide weights or switch to unweighted loss."
                 )
-            x, y = batch
-            w = None
+            if len(batch) == 3:
+                x, y, w = batch
+            else:
+                x, y = batch
+                w = None
+        else:
+            # Plain MSE or other losses generally expect (x, y) only, but we tolerate (x, y, w) by ignoring w.
+            if isinstance(batch, (list, tuple)):
+                if len(batch) == 2:
+                    x, y = batch
+                    w = None
+                elif len(batch) == 3:
+                    x, y, maybe_w = batch
+                    if isinstance(maybe_w, torch.Tensor):
+                        warnings.warn(
+                            f"Received sample weights for loss '{self.config.get('loss_fn_switch')}', ignoring them.",
+                            RuntimeWarning,
+                        )
+                    w = None
+                else:
+                    raise ValueError(
+                        f"Unsupported batch structure of length {len(batch)} for loss '{self.config.get('loss_fn_switch')}'."
+                    )
+            else:
+                raise ValueError(
+                    f"Expected batch to be tuple/list, got type {type(batch).__name__} for loss '{self.config.get('loss_fn_switch')}'."
+                )
 
         y_hat = self(x)
 
@@ -404,15 +471,24 @@ class GeneExpressionRegressor(L.LightningModule):
         if y_hat.shape != y.shape:
             raise ValueError(f"Shape mismatch: {y_hat.shape} vs {y.shape}")
 
+        stats = None
         if loss_switch in {"wmse", "weighted mse"}:
             if w is None:
                 raise ValueError("Missing sample weights for WMSE.")
-            if w.shape != y.shape:
-                raise ValueError(f"Weight shape {tuple(w.shape)} must match targets {tuple(y.shape)}")
-            loss = self.loss_fn(y_hat, y, w)
+            result = self.loss_fn(y_hat, y, w, return_stats=True)
+            if isinstance(result, tuple):
+                loss, stats = result
+            else:
+                loss, stats = result, None
+        elif loss_switch in {"weighted huber", "wmse huber", "weighted smoothl1"}:
+            result = self.loss_fn(y_hat, y, w, return_stats=True)
+            if isinstance(result, tuple):
+                loss, stats = result
+            else:
+                loss, stats = result, None
         else:
             loss = self.loss_fn(y_hat, y)
-        return loss, y_hat, y
+        return loss, y_hat, y, stats
 
     def _update_best(self, loss_sum: float, epoch: int, out_path: str, r_mean: float, per_gene_r: list[float]) -> None:
         if loss_sum < getattr(self, "best_loss", float("inf")):
@@ -466,8 +542,16 @@ class GeneExpressionRegressor(L.LightningModule):
             self.log_dict({f"pearson_{g}": r for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
 
         loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
-        denominator = max(self.val_loss_count, 1)
-        val_loss_mean = float(self.val_loss_total / denominator)
+        if loss_switch in {"wmse", "weighted mse", "weighted huber", "wmse huber", "weighted smoothl1"}:
+            denom_base = getattr(self.loss_fn, "eps", 1e-8)
+            denominator = max(self.val_loss_weight_sum, denom_base)
+            val_loss_mean = float(self.val_loss_total / denominator) if denominator > 0 else float("nan")
+        elif loss_switch == "mse":
+            denominator = max(self.val_loss_count, 1)
+            val_loss_mean = float(self.val_loss_total / denominator)
+        else:
+            denominator = max(self.val_loss_count, 1)
+            val_loss_mean = float(self.val_loss_total / denominator)
         r_mean = float(np.nanmean(per_gene_r)) if per_gene_r else float("nan")
         criterion = -r_mean if "pearson" in loss_switch else val_loss_mean
 

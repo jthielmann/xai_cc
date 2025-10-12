@@ -1,0 +1,18 @@
+  project: coad_lds
+  parameters:
+    dataset:
+      value: coad
+    gene_data_filename:
+      value: gene_log1p.csv        # adjust if your CSV has another name
+    meta_data_dir:
+      value: metadata              # adjust if different
+    bin_space:
+      values: [40, 60, 80, 100]    # bins you want to scan
+    ks_space:
+      values: [7, 9, 11]           # kernel sizes (script enforces odd)
+    sigma_space:
+      values: [0.8, 1.0, 1.2, 1.6] # Gaussian σ in bin units
+    lds_out_csv:
+      value: /path/to/output/coad_lds_weights.csv
+    lds_out_plots_dir:
+      value: /path/to/output/lds_plots   # optional diagnostics
