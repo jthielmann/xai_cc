@@ -135,6 +135,8 @@ def _run_pipeline(cfg: Dict[str, Any]) -> None:
         cfg = dict(run.config)
 
     cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
+    model_cfg = parse_yaml_config(cfg.model_config_path)
+    cfg = _build_cfg(model_cfg, source_path=args.config)
     cfg = _prepare_cfg(cfg)
 
     XaiPipeline(cfg, run=run).run()

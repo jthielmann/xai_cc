@@ -58,7 +58,7 @@ parameters:
 
   # Logging / metrics
   loss_fn_switch:
-    value: pearson
+    value: MSE
 
   # Runtime (optional but handy)
   precision_auto:

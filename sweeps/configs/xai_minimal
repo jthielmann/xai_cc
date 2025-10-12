@@ -10,10 +10,10 @@ parameters:
 
   # Model configuration to inherit architecture/dataset details from
   model_config_path:
-    value: sweeps/configs/test_single_run
+    value: coad
   # Set one of the following to point at trained weights
   model_state_path:
-    value: null
+    value: models/coad res50 imgnet local/loss-pearson/best_model.pth
   encoder_state_path:
     value: null
   gene_head_state_path:
@@ -25,11 +25,11 @@ parameters:
     value: ../crp_out/xai_minimal
 
   lrp:
-    value: true
-  crp:
-    value: true
-  pcx:
     value: false
+  crp:
+    value: false
+  pcx:
+    value: true
   diff:
     value: false
 

@@ -14,6 +14,7 @@ class XaiPipeline:
     def __init__(self, config, run):
         self.config = config
         self.wandb_run = run
+        self.model_src = self.config.get("_model_config_path")
         self.model, self.model_device, self._uses_full_model = self._load_model()
 
     def _resolve_device(self) -> torch.device:
@@ -30,12 +31,11 @@ class XaiPipeline:
         if os.path.isabs(path):
             return path
         bases = []
-        cfg_src = self.config.get("_config_path")
+        cfg_src = os.getcwd()
         if cfg_src:
             bases.append(os.path.dirname(cfg_src))
-        model_src = self.config.get("_model_config_path")
-        if model_src:
-            bases.append(os.path.dirname(model_src))
+        if self.model_src:
+            bases.append(os.path.dirname(self.model_src))
         bases.append(os.getcwd())
         for base in bases:
             candidate = os.path.normpath(os.path.join(base, path))
@@ -80,7 +80,7 @@ class XaiPipeline:
         state_dicts = self._collect_state_dicts()
 
         if state_dicts:
-            model = load_model(self.config, state_dicts)
+            model = load_model(self.model_src, state_dicts)
             model.to(device)
             model.eval()
             return model, device, True
