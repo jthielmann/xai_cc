@@ -1,18 +1,18 @@
+import sys
+sys.path.insert(0, '..')
 import os
+
+from script.gene_list_helpers import prepare_gene_list, had_split_genes
+from script.train.lit_train_sae import SAETrainerPipeline
+
 # Make numba avoid OpenMP/TBB to prevent clashes with PyTorch/MKL on HPC
 os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
-# Keep thread pools small to reduce runtime conflicts
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("MKL_NUM_THREADS", "1")
-# Headless-safe Matplotlib backend (prevents some backend segfaults)
-os.environ.setdefault("MPLBACKEND", "Agg")
-# Optional last-resort for duplicate OpenMP (use only if still crashing)
-# os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 import numpy as np
 import torch
 
-import csv, sys, os, random, numpy, torch, yaml, pandas as pd, wandb
-sys.path.insert(0, '..')
+import csv, os, random, numpy, torch, yaml, pandas as pd, wandb
+
 
 from typing import Dict, Any, List, Union, Optional
 from script.configs.dataset_config import get_dataset_cfg
@@ -25,55 +25,9 @@ from main_utils import (
     get_sweep_parameter_names,
     make_run_name_from_config,
     make_sweep_name_from_space,
+    setup_dump_env
 )
 
-from pathlib import Path
-
-def setup_dump_env(dump_dir: Optional[str] = None) -> str:
-    """Configure env vars so incidental outputs go under a single dump dir.
-
-    Returns the resolved dump_dir path.
-    """
-    try:
-        repo_root = Path(__file__).resolve().parents[1]
-    except Exception:
-        repo_root = Path.cwd()
-    dd = Path(
-        dump_dir
-        or os.environ.get("XAI_DUMP_DIR")
-        or (repo_root / "dump")
-    ).resolve()
-    os.makedirs(dd, exist_ok=True)
-
-    # W&B local dirs (run files and cache)
-    os.environ.setdefault("WANDB_DIR", str(dd / "wandb"))
-    os.environ.setdefault("WANDB_CACHE_DIR", str(dd / "wandb_cache"))
-    os.environ.setdefault("WANDB_CONFIG_DIR", str(dd / "wandb_config"))
-    # Torch / torchvision cache (pretrained weights, etc.)
-    os.environ.setdefault("TORCH_HOME", str(dd / "torch_cache"))
-    # Matplotlib cache
-    os.environ.setdefault("MPLCONFIGDIR", str(dd / "mpl-cache"))
-    # Common ML caches (harmless if unused)
-    os.environ.setdefault("HF_HOME", str(dd / "hf_cache"))
-    os.environ.setdefault("TRANSFORMERS_CACHE", str(dd / "hf_cache"))
-    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(dd / "hf_cache"))
-
-    # Ensure directories exist
-    for k in [
-        "WANDB_DIR",
-        "WANDB_CACHE_DIR",
-        "WANDB_CONFIG_DIR",
-        "TORCH_HOME",
-        "MPLCONFIGDIR",
-        "HF_HOME",
-        "TRANSFORMERS_CACHE",
-        "HUGGINGFACE_HUB_CACHE",
-    ]:
-        try:
-            Path(os.environ[k]).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-    return str(dd)
 
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     cfg = dict(cfg); cfg.update(get_dataset_cfg(cfg))
@@ -85,104 +39,6 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
 import os, glob
 import pandas as pd
 from typing import Dict, Any, List, Union
-
-def _prepare_gene_list(cfg: Dict[str, Any]) -> Any:
-    if cfg.get("genes") is not None:
-        return None
-
-    # Validate mutually exclusive CSV configuration early
-    if cfg.get("single_csv_path") and (
-        cfg.get("train_csv_path") or cfg.get("val_csv_path") or cfg.get("test_csv_path")
-    ):
-        raise ValueError(
-            "Provide either 'single_csv_path' or split-specific CSVs ('train_csv_path'/'val_csv_path'/'test_csv_path'), not both."
-        )
-
-    data_dir = cfg.get("data_dir")
-    meta_dir = str(cfg.get("meta_data_dir", "meta_data")).strip("/")
-    fname = cfg.get("gene_data_filename")
-
-    files = []
-    # Prefer single CSV(s) if provided
-    scp = cfg.get("single_csv_path")
-    if scp:
-        # Resolve relative to data_dir if needed
-        path = None
-        if not os.path.isabs(scp) and cfg.get("data_dir"):
-            cand = os.path.join(cfg["data_dir"], scp)
-            if os.path.isfile(cand):
-                path = cand
-        if path is None and os.path.isfile(scp):
-            path = scp
-        if path is None:
-            raise FileNotFoundError(f"single_csv_path not found: '{scp}'. Tried: '{scp}' and data_dir-joined '{os.path.join(cfg.get('data_dir',''), scp)}'")
-        files = [path]
-    elif cfg.get("train_csv_path") and os.path.isfile(cfg["train_csv_path"]):
-        files = [cfg["train_csv_path"]]
-    else:
-        sample_ids = cfg.get("sample_ids")
-        if sample_ids:
-            for sid in sample_ids:
-                path = os.path.join(data_dir, sid, meta_dir, fname)
-                if os.path.isfile(path):
-                    files.append(path)
-        else:
-            files = glob.glob(os.path.join(data_dir, "*", meta_dir, fname))
-            files.sort()
-
-    if not files:
-        raise FileNotFoundError(f"No gene data files found under {data_dir}/*/{meta_dir}/{fname}")
-
-    max_files = int(cfg.get("gene_detect_max_files", 50))
-    files = files[:max_files]
-
-    order = None
-    inter = None
-    for i, path in enumerate(files):
-        df = pd.read_csv(path, nrows=1)
-        cols = [c for c in df.columns if c != "tile" and not str(c).endswith("_lds_w") and pd.api.types.is_numeric_dtype(df[c])]
-        s = set(cols)
-        if i == 0:
-            order = cols[:]
-            inter = s
-        else:
-            inter &= s
-        if not inter:
-            break
-
-    genes = [c for c in order if c in inter] if order else []
-    if not genes:
-        raise ValueError("Could not infer any gene columns. Check your CSV headers and dtypes.")
-
-    if cfg.get("split_genes_by"):
-        k = int(cfg["split_genes_by"])
-        if k <= 0:
-            raise ValueError("split_genes_by must be a positive integer.")
-        chunks = [genes[i:i+k] for i in range(0, len(genes), k)]
-        cfg["genes"] = chunks
-        cfg["gene_chunks"] = chunks
-    else:
-        cfg["genes"] = genes
-        cfg["gene_chunks"] = [genes]
-
-    cfg["n_gene_chunks"] = len(cfg["gene_chunks"])
-    return cfg["genes"]
-
-def _get_active_chunk_idx(cfg: Dict[str, Any], chunk: Optional[List[str]] = None) -> int:
-    chunks = cfg.get("gene_chunks") or []
-    if not chunks:
-        return 0
-    if chunk is None:
-        if cfg.get("genes") and isinstance(cfg["genes"][0], list):
-            idx = int(cfg.get("gene_list_index", 1)) - 1
-            return max(0, min(idx, len(chunks) - 1))
-        # if cfg["genes"] is already a single chunk
-        chunk = cfg.get("genes")
-    try:
-        return next(i for i, ch in enumerate(chunks) if ch == chunk)
-    except StopIteration:
-        raise RuntimeError(f"chunk not found {chunk} in {chunks}")
-
 
 def _train(cfg: Dict[str, Any]) -> None:
     # Sanitize config for W&B: avoid nested sweep keys showing as empty columns
@@ -201,9 +57,36 @@ def _train(cfg: Dict[str, Any]) -> None:
         SAETrainerPipeline(cfg, run=run).run()
     else:
         if cfg.get("genes") is None:
-            cfg["genes"] = _prepare_gene_list(cfg)
+            cfg["genes"] = prepare_gene_list(cfg)
         TrainerPipeline(cfg, run=run).run()
     if run: run.finish()
+
+# Locate the config by name or path
+def _resolve_config_path(name: str) -> str:
+    if os.path.isabs(name) and os.path.isfile(name):
+        return name
+    if os.path.isfile(name):
+        return name
+    # search common config roots
+    search_roots = [
+        ".",
+        "../sweeps/configs",
+        "../sweeps/configs/sweep",
+        "../sweeps/configs/single",
+    ]
+    for root in search_roots:
+        cand = os.path.join(root, name)
+        if os.path.isfile(cand):
+            return cand
+    # fallback: recursive search under sweeps/configs
+    for root, _dirs, files in os.walk("sweeps/configs"):
+        if os.path.basename(name) in files:
+            return os.path.join(root, os.path.basename(name))
+    raise FileNotFoundError(f"Could not resolve config_name '{name}' to a file path")
+
+# Only log genes_id if the original config requested splitting by chunks
+
+
 
 def _sweep_run():
     # Ensure dump env in agent subprocess before init
@@ -216,29 +99,6 @@ def _sweep_run():
     config_name = rcfg.get("config_name")
     if not config_name:
         raise RuntimeError("Sweep run missing 'config_name' in parameters")
-
-    # Locate the config by name or path
-    def _resolve_config_path(name: str) -> str:
-        if os.path.isabs(name) and os.path.isfile(name):
-            return name
-        if os.path.isfile(name):
-            return name
-        # search common config roots
-        search_roots = [
-            ".",
-            "../sweeps/configs",
-            "../sweeps/configs/sweep",
-            "../sweeps/configs/single",
-        ]
-        for root in search_roots:
-            cand = os.path.join(root, name)
-            if os.path.isfile(cand):
-                return cand
-        # fallback: recursive search under sweeps/configs
-        for root, _dirs, files in os.walk("sweeps/configs"):
-            if os.path.basename(name) in files:
-                return os.path.join(root, os.path.basename(name))
-        raise FileNotFoundError(f"Could not resolve config_name '{name}' to a file path")
 
     base_cfg_path = _resolve_config_path(config_name)
     raw_cfg = parse_yaml_config(base_cfg_path)
@@ -282,28 +142,11 @@ def _sweep_run():
         tmp_cfg.pop("genes", None)
     tmp_cfg.update(get_dataset_cfg(tmp_cfg))
     try:
-        gene_chunks = _prepare_gene_list(tmp_cfg)
+        gene_chunks = prepare_gene_list(tmp_cfg)
     except Exception:
         gene_chunks = None
 
-    # Only log genes_id if the original config requested splitting by chunks
-    def _had_split_genes(cfg_dict: Dict[str, Any]) -> bool:
-        # check top-level
-        if "split_genes_by" in cfg_dict and cfg_dict["split_genes_by"] is not None:
-            try:
-                return int(cfg_dict["split_genes_by"]) > 0
-            except Exception:
-                return False
-        # check parameters.value
-        p = cfg_dict.get("parameters", {}).get("split_genes_by")
-        if isinstance(p, dict) and "value" in p and p["value"] is not None:
-            try:
-                return int(p["value"]) > 0
-            except Exception:
-                return False
-        return False
-
-    if gene_chunks and chosen_genes is not None and _had_split_genes(raw_cfg):
+    if gene_chunks and chosen_genes is not None and had_split_genes(raw_cfg):
         # normalize chunks to list-of-lists
         if isinstance(gene_chunks, list) and gene_chunks and isinstance(gene_chunks[0], str):
             gene_chunks = [gene_chunks]
@@ -348,10 +191,6 @@ def _sweep_run():
     else:
         TrainerPipeline(cfg, run=run).run()
     run.finish()
-
-def log_runtime_banner():
-    dev = "cuda" if torch.cuda.is_available() else ("mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else "cpu")
-    print(f"[runtime] torch={torch.__version__} cuda={torch.version.cuda} device={dev} bf16_supported={torch.cuda.is_bf16_supported() if dev=='cuda' else False}")
 
 def main():
     print("main debug")
@@ -418,7 +257,7 @@ def main():
                 if isinstance(v, dict) and "value" in v:
                     tmp_cfg[k] = v["value"]
             tmp_cfg.update(get_dataset_cfg(tmp_cfg))
-            gene_chunks = _prepare_gene_list(tmp_cfg)  # flat list or list-of-lists
+            gene_chunks = prepare_gene_list(tmp_cfg)  # flat list or list-of-lists
             if gene_chunks: # is None if specific gene list was provided in config, e.g. not chunking all genes
                 # normalize to list-of-lists so the sweep can iterate values
                 if isinstance(gene_chunks[0], str):

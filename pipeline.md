@@ -103,6 +103,12 @@
   - For regression: apply to **high‑prediction** subsets per gene (e.g., top 20%) to get representative prototypes
 - **Coefficient‑based narratives:** for Ridge/EN, report top positive/negative concepts/PCs per gene
 
+- **Regression‑aware CRP/PCX (target index + filter removal):**
+  - Select the correct regression target (gene) when attributing: resolve `target_idx = model.gene_to_idx[gene]` (or `0` for single‑gene models) and set `condition = [{"y": [target_idx]}]` for CRP.
+  - Remove classification filtering by `outputs.argmax(1) == 0`; for regression, either keep all samples or, optionally, filter by top‑k/top‑percent predicted values of the target gene (e.g., `pcx_topk` or `pcx_top_percent` in config) before PCX clustering.
+  - Implementation touch points:
+    - `script/evaluation/cluster_functions.py`: pass `target_idx` into `calculate_attributions(...)` and use it when building the CRP `condition`; delete the classification `argmax` filter; optionally gate by top‑k/percentile on `outputs[:, target_idx]`.
+
 ---
 
 ## 9) Decisions (fast path vs. bigger path)
@@ -153,3 +159,21 @@
 - [ ] XAI: per‑gene tile heatmaps (linear maps), **CRP** concept + pixel attributions  
 - [ ] PCX: build prototypes from concept explanations (per‑gene high‑prediction subset)  
 - [ ] Package artifacts (PCA/SAE/heads) + reproducibility notes
+
+---
+
+## 13) Best‑epoch metrics & evaluation
+
+- **Per‑gene Pearson + MSE tracking:**
+  - During validation, compute both per‑gene Pearson `r_g` and per‑gene MSE `mse_g`.
+  - Track two “bests”:
+    - Best by training criterion (e.g. MSE/WMSE/Huber) with its epoch.
+    - Best by mean Pearson (independent of loss) with its epoch.
+- **CSV outputs at `on_train_end`:**
+  - Append to `../results/all.csv` and per‑project results, including per‑gene `pearson_<gene>` and `mse_<gene>` columns and the best epochs.
+  - Emit compact splits CSVs (recommended):
+    - `best_epoch_metrics_val.csv` and `best_epoch_metrics_test.csv` in `out_path/` with columns: `gene,pearson,mse,epoch,split`.
+- **Lean evaluator (best weights):**
+  - Provide a small CLI that loads `out_path/best_model.pth`, re‑runs val/test, and writes the above CSVs without re‑training.
+  - Inputs: `--model_config_path` (or `--model_state_path`), `--val/--test` toggles, `--out_path`.
+  - Placement: `script/evaluation/eval_best.py` (planned). Use the existing datamodule to ensure identical preprocessing and splits.

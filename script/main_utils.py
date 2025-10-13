@@ -7,6 +7,25 @@ from typing import Dict, Any, Iterable
 import os
 
 
+def setup_dump_env() -> str:
+    """Configure env vars so incidental outputs go under a single dump dir."""
+    dd = Path("../dump")
+    os.makedirs(dd, exist_ok=True)
+
+    # W&B local dirs (run files and cache)
+    os.environ.setdefault("WANDB_DIR", str(dd / "../dump"))
+    os.environ.setdefault("WANDB_CACHE_DIR", str(dd / "../dump"))
+    os.environ.setdefault("WANDB_CONFIG_DIR", str(dd / "../dump"))
+    # Torch / torchvision cache (pretrained weights, etc.)
+    os.environ.setdefault("TORCH_HOME", str(dd / "../dump"))
+    # Matplotlib cache
+    os.environ.setdefault("MPLCONFIGDIR", str(dd / "../dump"))
+    # Common ML caches (harmless if unused)
+    os.environ.setdefault("HF_HOME", str(dd / "../dump"))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(dd / "../dump"))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(dd / "../dump"))
+    return str(dd)
+
 def ensure_free_disk_space(path: str, min_gb: int = 20) -> None:
     """Best-effort check that there is enough space and inodes, and that the
     current user can actually create a file at the target path.

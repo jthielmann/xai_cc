@@ -2,13 +2,7 @@ import os
 
 # Make numba avoid OpenMP/TBB to prevent clashes with PyTorch/MKL on HPC
 os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
-# Keep thread pools small to reduce runtime conflicts
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("MKL_NUM_THREADS", "1")
-# Headless-safe Matplotlib backend
-os.environ.setdefault("MPLBACKEND", "Agg")
 
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
@@ -16,47 +10,7 @@ import wandb
 
 from script.configs.dataset_config import get_dataset_cfg
 from script.evaluation.xai_pipeline import XaiPipeline
-from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config
-
-
-def setup_dump_env(dump_dir: Optional[str] = None) -> str:
-    """Configure env vars so incidental outputs go under a single dump dir."""
-    try:
-        repo_root = Path(__file__).resolve().parents[1]
-    except Exception:
-        repo_root = Path.cwd()
-    dd = Path(dump_dir or os.environ.get("XAI_DUMP_DIR") or (repo_root / "dump")).resolve()
-    os.makedirs(dd, exist_ok=True)
-
-    # W&B local dirs (run files and cache)
-    os.environ.setdefault("WANDB_DIR", str(dd / "wandb"))
-    os.environ.setdefault("WANDB_CACHE_DIR", str(dd / "wandb_cache"))
-    os.environ.setdefault("WANDB_CONFIG_DIR", str(dd / "wandb_config"))
-    # Torch / torchvision cache (pretrained weights, etc.)
-    os.environ.setdefault("TORCH_HOME", str(dd / "torch_cache"))
-    # Matplotlib cache
-    os.environ.setdefault("MPLCONFIGDIR", str(dd / "mpl-cache"))
-    # Common ML caches (harmless if unused)
-    os.environ.setdefault("HF_HOME", str(dd / "hf_cache"))
-    os.environ.setdefault("TRANSFORMERS_CACHE", str(dd / "hf_cache"))
-    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(dd / "hf_cache"))
-
-    # Ensure directories exist
-    for env_key in (
-        "WANDB_DIR",
-        "WANDB_CACHE_DIR",
-        "WANDB_CONFIG_DIR",
-        "TORCH_HOME",
-        "MPLCONFIGDIR",
-        "HF_HOME",
-        "TRANSFORMERS_CACHE",
-        "HUGGINGFACE_HUB_CACHE",
-    ):
-        try:
-            Path(os.environ[env_key]).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-    return str(dd)
+from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env
 
 
 def _flatten_config(raw_cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -65,13 +19,6 @@ def _flatten_config(raw_cfg: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(param, dict) and "value" in param:
             cfg[key] = param["value"]
     return cfg
-
-
-def _resolve_relative(path: str, base: Optional[str]) -> str:
-    if not path or os.path.isabs(path) or not base:
-        return path
-    base_dir = os.path.dirname(os.path.abspath(base))
-    return os.path.normpath(os.path.join(base_dir, path))
 
 
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -127,7 +74,10 @@ def _build_cfg(raw_cfg: Dict[str, Any], *, source_path: Optional[str] = None) ->
 
 
 def _run_pipeline(cfg: Dict[str, Any]) -> None:
-    """Initialize optional logging, finalize config, and execute the XAI pipeline."""
+    """Initialize optional logging, finalize config, and execute the XAI pipeline.
+
+    Expects a fully built/flattened config. Does not re-parse external files.
+    """
     run = None
     if bool(cfg.get("log_to_wandb", False)):
         wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
@@ -135,8 +85,6 @@ def _run_pipeline(cfg: Dict[str, Any]) -> None:
         cfg = dict(run.config)
 
     cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
-    model_cfg = parse_yaml_config(cfg.model_config_path)
-    cfg = _build_cfg(model_cfg, source_path=args.config)
     cfg = _prepare_cfg(cfg)
 
     XaiPipeline(cfg, run=run).run()
