@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: dino
+  group:
+    value: dino
+  job_type:
+    value: train
+  tags:
+    value: [dino]
   # Run behavior
   log_to_wandb:
     value: true

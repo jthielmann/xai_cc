@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: unimodel
+  group:
+    value: unimodel
+  job_type:
+    value: train
+  tags:
+    value: [unimodel]
   # Run behavior
   log_to_wandb:
     value: true

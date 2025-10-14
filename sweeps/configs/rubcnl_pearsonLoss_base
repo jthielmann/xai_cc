@@ -27,6 +27,14 @@ freeze_encoder: true
 
 # hyperparameters
 parameters:
+  run_name:
+    value: rubcnl_pearsonLoss_base
+  group:
+    value: rubcnl_pearsonLoss_base
+  job_type:
+    value: train
+  tags:
+    value: [rubcnl_pearsonLoss_base]
   learning_rate:
     values: [0.1, 0.01, 0.001]
   bins:

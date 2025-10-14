@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: sae_grid_search
+  group:
+    value: sae_grid_search
+  job_type:
+    value: train
+  tags:
+    value: [sae_grid_search]
   # Run behavior
   train_sae:
     value: true

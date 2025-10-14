@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: immune_unimodel_freeze
+  group:
+    value: immune_unimodel_freeze
+  job_type:
+    value: train
+  tags:
+    value: [immune_unimodel_freeze]
   debug:
     value: false
   log_to_wandb:

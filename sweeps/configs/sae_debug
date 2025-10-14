@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: sae_debug
+  group:
+    value: sae_debug
+  job_type:
+    value: train
+  tags:
+    value: [sae_debug]
   # Run behavior
   train_sae:
     value: true

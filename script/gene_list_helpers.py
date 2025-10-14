@@ -3,10 +3,8 @@ import os
 from typing import Dict, Any, Optional, List
 import pandas as pd
 
-def prepare_gene_list(cfg: Dict[str, Any]) -> Any:
-    if cfg.get("genes") is not None:
-        return None
 
+def get_full_gene_list(cfg: Dict[str, Any]) -> List[str]:
     # Validate mutually exclusive CSV configuration early
     if cfg.get("single_csv_path") and (
         cfg.get("train_csv_path") or cfg.get("val_csv_path") or cfg.get("test_csv_path")
@@ -14,13 +12,11 @@ def prepare_gene_list(cfg: Dict[str, Any]) -> Any:
         raise ValueError(
             "Provide either 'single_csv_path' or split-specific CSVs ('train_csv_path'/'val_csv_path'/'test_csv_path'), not both."
         )
-
     data_dir = cfg.get("data_dir")
     meta_dir = str(cfg.get("meta_data_dir", "meta_data")).strip("/")
     fname = cfg.get("gene_data_filename")
 
     files = []
-    # Prefer single CSV(s) if provided
     scp = cfg.get("single_csv_path")
     if scp:
         # Resolve relative to data_dir if needed
@@ -50,9 +46,6 @@ def prepare_gene_list(cfg: Dict[str, Any]) -> Any:
     if not files:
         raise FileNotFoundError(f"No gene data files found under {data_dir}/*/{meta_dir}/{fname}")
 
-    max_files = int(cfg.get("gene_detect_max_files", 50))
-    files = files[:max_files]
-
     order = None
     inter = None
     for i, path in enumerate(files):
@@ -70,7 +63,10 @@ def prepare_gene_list(cfg: Dict[str, Any]) -> Any:
     genes = [c for c in order if c in inter] if order else []
     if not genes:
         raise ValueError("Could not infer any gene columns. Check your CSV headers and dtypes.")
+    return genes
 
+def prepare_gene_list(cfg: Dict[str, Any]) -> List[List[str]]:
+    genes = get_full_gene_list(cfg)
     if cfg.get("split_genes_by"):
         k = int(cfg["split_genes_by"])
         if k <= 0:

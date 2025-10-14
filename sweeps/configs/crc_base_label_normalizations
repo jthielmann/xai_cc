@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: crc_base_label_normalizations
+  group:
+    value: crc_base_label_normalizations
+  job_type:
+    value: train
+  tags:
+    value: [crc_base_label_normalizations]
   debug:
     value: false
   log_to_wandb:

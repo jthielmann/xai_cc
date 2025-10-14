@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: sae_example
+  group:
+    value: sae_example
+  job_type:
+    value: train
+  tags:
+    value: [sae_example]
   # Run behavior
   train_sae:
     value: true
@@ -49,4 +57,3 @@ parameters:
     value: 128
   allow_negative_topk:
     value: false
-

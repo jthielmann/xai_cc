@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: coad_single_csv
+  group:
+    value: coad_single_csv
+  job_type:
+    value: train
+  tags:
+    value: [coad_single_csv]
   # I/O
   dataset:
     value: coad                  # provides mean/std; data_dir can be overridden below

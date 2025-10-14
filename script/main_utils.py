@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Any, Iterable
 import os
+import yaml
 
 
 def setup_dump_env() -> str:
@@ -68,7 +69,6 @@ def ensure_free_disk_space(path: str, min_gb: int = 20) -> None:
 
 
 def parse_yaml_config(path: str) -> Dict:
-    import yaml
     with open(path, 'r') as f:
         return yaml.safe_load(f)
 

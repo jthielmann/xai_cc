@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: rubcnl_sanity_N19
+  group:
+    value: rubcnl_sanity_N19
+  job_type:
+    value: train
+  tags:
+    value: [rubcnl_sanity_N19]
   debug:
     value: false
   log_to_wandb:

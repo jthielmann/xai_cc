@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: all_resrand_n19
+  group:
+    value: all_resrand_n19
+  job_type:
+    value: train
+  tags:
+    value: [all_resrand_n19]
   debug:
     value: false
   log_to_wandb:

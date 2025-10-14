@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: debug_single_csv
+  group:
+    value: debug_single_csv
+  job_type:
+    value: train
+  tags:
+    value: [debug_single_csv]
   # Run behavior
   debug:
     value: true
@@ -56,4 +64,3 @@ parameters:
     value: null               # set to a weights CSV if you have one
   weight_transform:
     value: inverse
-

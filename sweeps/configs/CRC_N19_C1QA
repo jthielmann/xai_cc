@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: CRC_N19_C1QA
+  group:
+    value: CRC_N19_C1QA
+  job_type:
+    value: train
+  tags:
+    value: [CRC_N19_C1QA]
   debug:
     value: false
   log_to_wandb:

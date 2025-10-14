@@ -1,5 +1,13 @@
   project: coad_lds
   parameters:
+    run_name:
+      value: lds_coad
+    group:
+      value: lds_coad
+    job_type:
+      value: train
+    tags:
+      value: [lds_coad]
     dataset:
       value: coad
     gene_data_filename:

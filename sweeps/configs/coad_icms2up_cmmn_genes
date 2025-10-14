@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: coad_icms2up_cmmn_genes
+  group:
+    value: coad_icms2up_cmmn_genes
+  job_type:
+    value: train
+  tags:
+    value: [coad_icms2up_cmmn_genes]
   # Run behavior
   log_to_wandb:
     value: true

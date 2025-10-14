@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: mem_test_train
+  group:
+    value: mem_test_train
+  job_type:
+    value: train
+  tags:
+    value: [mem_test_train]
   debug:
     value: true
   log_to_wandb:

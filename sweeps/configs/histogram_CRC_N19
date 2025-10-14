@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: histogram_CRC_N19
+  group:
+    value: histogram_CRC_N19
+  job_type:
+    value: train
+  tags:
+    value: [histogram_CRC_N19]
   debug:
     value: false
   log_to_wandb:

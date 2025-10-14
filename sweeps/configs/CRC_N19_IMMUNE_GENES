@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: CRC_N19_IMMUNE_GENES
+  group:
+    value: CRC_N19_IMMUNE_GENES
+  job_type:
+    value: train
+  tags:
+    value: [CRC_N19_IMMUNE_GENES]
   debug:
     value: false
   log_to_wandb:

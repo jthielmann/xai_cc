@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: all_sanity_base
+  group:
+    value: all_sanity_base
+  job_type:
+    value: train
+  tags:
+    value: [all_sanity_base]
   debug:
     value: false
   log_to_wandb:

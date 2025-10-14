@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: architecture_experiments
+  group:
+    value: architecture_experiments
+  job_type:
+    value: train
+  tags:
+    value: [architecture_experiments]
   debug:
     value: false
   log_to_wandb:
@@ -52,5 +60,3 @@ parameters:
     values: [1.0, 2.0, 5.0, 10.0, 100.0]
   lds_weight_csv:
     value: best_smoothing.csv
-
-

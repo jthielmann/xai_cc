@@ -6,6 +6,14 @@ metric:
   goal: minimize
 
 parameters:
+  run_name:
+    value: debug_local
+  group:
+    value: debug_local
+  job_type:
+    value: train
+  tags:
+    value: [debug_local]
   # Run behavior
   log_to_wandb:
     value: true

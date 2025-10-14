@@ -15,6 +15,7 @@ import torch.nn as nn
 import wandb
 from PIL import Image
 from torch.optim.lr_scheduler import OneCycleLR
+import pandas as pd
 
 from script.model.lit_ae import SparseAutoencoder
 from script.model.lit_model_helpers import (
@@ -24,10 +25,10 @@ from script.model.lit_model_helpers import (
     bytes2gb,
     compute_per_gene_pearson,
     estimate_per_sample_activations,
-    make_scatter_figure,
     measure_peak_train_step,
     select_per_gene_values,
 )
+from script.evaluation.scatter_plotting import make_scatter_figure
 from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss, WeightedHuberLoss
 from script.model.model_factory import get_encoder, infer_encoder_out_dim
 
@@ -490,7 +491,8 @@ class GeneExpressionRegressor(L.LightningModule):
             loss = self.loss_fn(y_hat, y)
         return loss, y_hat, y, stats
 
-    def _update_best(self, loss_sum: float, epoch: int, out_path: str, r_mean: float, per_gene_r: list[float]) -> None:
+    def _update_best(self, loss_sum: float, epoch: int, out_path: str, r_mean: float, per_gene_r: list[float]) -> bool:
+        """Update best checkpoint if improved. Returns True if a new best was set."""
         if loss_sum < getattr(self, "best_loss", float("inf")):
             self.best_loss = float(loss_sum)
             self.best_epoch = int(epoch)
@@ -501,6 +503,37 @@ class GeneExpressionRegressor(L.LightningModule):
             if self.is_online and wandb.run:
                 wandb.run.summary.update({"best_val_loss": self.best_loss, "best_val_epoch": self.best_epoch})
                 wandb.log({"epoch": self.best_epoch})
+            return True
+        return False
+
+    def _save_outputs_csv(self, y_pred: torch.Tensor, y_true: torch.Tensor, split: str) -> None:
+        """Persist predictions and targets to CSV next to best_model.pth.
+
+        - Overwrites the file on each call (used for val on new best).
+        - Columns: pred_{gene}, target_{gene} for each gene in order.
+        """
+        # Resolve base directory next to best_model.pth
+        best_path = self.best_model_path or os.path.join(self.config.get("out_path", "."), "best_model.pth")
+        base_dir = os.path.dirname(best_path) if best_path else self.config.get("out_path", ".")
+        os.makedirs(base_dir, exist_ok=True)
+
+        # Ensure tensors on CPU and as numpy
+        yp = torch.as_tensor(y_pred).detach().cpu().float().numpy()
+        yt = torch.as_tensor(y_true).detach().cpu().float().numpy()
+
+        # Build a wide dataframe with named columns
+        pred_cols = [f"pred_{g}" for g in self.genes]
+        targ_cols = [f"target_{g}" for g in self.genes]
+        data = {name: yp[:, i] for i, name in enumerate(pred_cols)}
+        data.update({name: yt[:, i] for i, name in enumerate(targ_cols)})
+        df = pd.DataFrame(data)
+
+        out_csv = os.path.join(base_dir, f"best_{split}_outputs.csv")
+        try:
+            df.to_csv(out_csv, index=False)
+            log.info("Saved %s outputs next to best model: %s", split, out_csv)
+        except Exception as e:
+            log.exception("Failed to save %s outputs CSV to %s: %s", split, out_csv, e)
 
     def _log_scatter_to_wandb(self, fig, gene: str, epoch: int) -> None:
         if not (self.is_online and getattr(self, "table", None) is not None):
@@ -555,8 +588,10 @@ class GeneExpressionRegressor(L.LightningModule):
         r_mean = float(np.nanmean(per_gene_r)) if per_gene_r else float("nan")
         criterion = -r_mean if "pearson" in loss_switch else val_loss_mean
 
-        # Update "best" (expects lower-is-better)
-        self._update_best(criterion, int(self.current_epoch), out_path, r_mean, per_gene_r)
+        # Update "best" (expects lower-is-better) and save CSV for this best epoch
+        is_new_best = self._update_best(criterion, int(self.current_epoch), out_path, r_mean, per_gene_r)
+        if is_new_best:
+            self._save_outputs_csv(y_hat, y_true, split="val")
 
         # Track best Pearson mean across epochs independently of loss type
         if np.isfinite(r_mean):
@@ -603,6 +638,28 @@ class GeneExpressionRegressor(L.LightningModule):
         # Reset accumulators
         self.y_hats.clear()
         self.ys.clear()
+
+    # ---------------------- Test hooks (optional) ----------------------
+    def on_test_epoch_start(self):
+        self.test_y_hats, self.test_ys = [], []
+
+    def test_step(self, batch, batch_idx):
+        # Reuse the common _step path for consistency and log test loss per-batch
+        loss, y_hat, y, stats = self._step(batch)
+        self.log('test_' + self.config['loss_fn_switch'], loss, on_epoch=True)
+        self.test_y_hats.append(y_hat.detach().float().cpu())
+        self.test_ys.append(y.detach().float().cpu())
+        return loss
+
+    def on_test_epoch_end(self):
+        if not self.test_y_hats or not self.test_ys:
+            return
+        y_hat = torch.cat(self.test_y_hats, dim=0).float()
+        y_true = torch.cat(self.test_ys, dim=0).float()
+        # Always write test outputs if test is run; does not imply best update here
+        self._save_outputs_csv(y_hat, y_true, split="test")
+        self.test_y_hats.clear()
+        self.test_ys.clear()
 
     def on_train_epoch_end(self):
         lrs = [g["lr"] for g in self.trainer.optimizers[0].param_groups]

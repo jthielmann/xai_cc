@@ -3,6 +3,14 @@ name: xai minimal example
 xai_pipeline: true
 
 parameters:
+  run_name:
+    value: xai_minimal
+  group:
+    value: xai_minimal
+  job_type:
+    value: xai
+  tags:
+    value: [xai_minimal]
   debug:
     value: true
   log_to_wandb:
