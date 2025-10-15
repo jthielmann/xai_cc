@@ -7,9 +7,20 @@ from script.train.lit_train_sae import SAETrainerPipeline
 
 # Make numba avoid OpenMP/TBB to prevent clashes with PyTorch/MKL on HPC
 os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
+# Be conservative with thread pools by default (can be overridden by user env)
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
 
 import numpy as np
 import torch
+# Use a safer multiprocessing start method to avoid fork-related segfaults in DataLoader workers
+try:
+    import torch.multiprocessing as mp
+    if mp.get_start_method(allow_none=True) != "spawn":
+        mp.set_start_method("spawn", force=True)
+except Exception:
+    # Best-effort: if already set or unsupported, ignore
+    pass
 
 import csv, os, random, numpy, torch, yaml, pandas as pd, wandb
 
