@@ -1,4 +1,8 @@
 import os
+import sys
+from random import random
+
+sys.path.insert(0, '..')
 
 # Make numba avoid OpenMP/TBB to prevent clashes with PyTorch/MKL on HPC
 os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
@@ -10,7 +14,8 @@ import wandb
 
 from script.configs.dataset_config import get_dataset_cfg
 from script.evaluation.eval_pipeline import EvalPipeline
-from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env
+from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, \
+    read_config_parameter
 
 
 def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
@@ -46,15 +51,15 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _sanity_check_config(config: Dict[str, Any]):
-    if config.get("model_state_path", None) and not config.get("encoder_state_path", None) and not config.get("gene_head_state_path", None):
+    if config.get("model_state_path") and not config.get("encoder_state_path") and not config.get("gene_head_state_path"):
         return
-    if not config.get("model_state_path", None) and config.get("encoder_state_path", None) and config.get("gene_head_state_path", None):
+    if not config.get("model_state_path") and config.get("encoder_state_path") and config.get("gene_head_state_path"):
         return
     raise RuntimeError(
         f"corrupted config:\n"
-        f"encoder_state_path \n{config.get('encoder_state_path', 'None')}"
-        f"gene_head_state_path \n{config.get('gene_head_state_path', 'None')}"
-        f"model_state_path \n{config.get('model_state_path', 'None')}"
+        f"encoder_state_path {config.get('encoder_state_path', 'empty')}\n"
+        f"gene_head_state_path {config.get('gene_head_state_path', 'empty')}\n"
+        f"model_state_path {config.get('model_state_path', 'empty')}\n"
     )
 
 
@@ -80,9 +85,9 @@ def _build_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
             config["model_config_path"] = config_path
 
     # Verify and resolve weight paths
-    encoder_state_path = config.get("encoder_state_path", "")
-    gene_head_state_path = config.get("gene_head_state_path", "")
-    model_state_path = config.get("model_state_path", "")
+    encoder_state_path = config.get("encoder_state_path")
+    gene_head_state_path = config.get("gene_head_state_path")
+    model_state_path = config.get("model_state_path")
 
     if encoder_state_path and gene_head_state_path:
         config["encoder_state_path"]   = _verify_path(encoder_state_path,   models_dir)
@@ -95,10 +100,16 @@ def _build_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
 
     raise RuntimeError(
         f"corrupted config:\n"
-        f"encoder_state_path \n{config.get('encoder_state_path', 'empty')}"
-        f"gene_head_state_path \n{config.get('gene_head_state_path', 'empty')}"
-        f"model_state_path \n{config.get('model_state_path', 'empty')}"
+        f"encoder_state_path {config.get('encoder_state_path', 'empty')}\n"
+        f"gene_head_state_path {config.get('gene_head_state_path', 'empty')}\n"
+        f"model_state_path {config.get('model_state_path', 'empty')}\n"
     )
+
+def _setup_model_config(config_name:str):
+    raw_cfg = parse_yaml_config(config_name)
+    config = {k: v for k, v in raw_cfg.items()}
+    return config
+
 
 def main() -> None:
     args = parse_args()
@@ -107,6 +118,7 @@ def main() -> None:
     if not bool(cfg.get("xai_pipeline", False)):
         raise ValueError("Config must set 'xai_pipeline: true' when using script/eval_main.py")
     _sanity_check_config(cfg)
+    cfg["model_config"] = _setup_model_config("../models/" + cfg["model_state_path"] + "/config")
     setup_dump_env()
 
     run = None

@@ -2,55 +2,35 @@ project: xai_minimal
 name: xai minimal example
 xai_pipeline: true
 
-parameters:
-  run_name:
-    value: xai_minimal
-  group:
-    value: xai_minimal
-  job_type:
-    value: xai
-  tags:
-    value: [xai_minimal]
-  debug:
-    value: true
-  log_to_wandb:
-    value: false
 
-  # Model configuration to inherit architecture/dataset details from
-  model_config_path:
-    value: coad
-  # Set one of the following to point at trained weights
-  model_state_path:
-    value: models/coad res50 imgnet local/loss-pearson/best_model.pth
-  encoder_state_path:
-    value: null
-  gene_head_state_path:
-    value: null
-  sae_state_path:
-    value: null
+run_name: xai_minimal
+group: xai_minimal
+job_type: xai
+tags: [xai_minimal]
+debug: true
+log_to_wandb: true
 
-  out_path:
-    value: ../crp_out/xai_minimal
+# Model configuration to inherit architecture/dataset details from
+dataset: coad
+# Set one of the following to point at trained weights
+model_state_path: coad icms2up uni 3/enc-uni
+encoder_state_path: null
+gene_head_state_path: null
+sae_state_path: null
 
-  lrp:
-    value: false
-  crp:
-    value: false
-  pcx:
-    value: true
-  diff:
-    value: false
+out_path: ../crp_out/xai_minimal
 
-  # XAI backends (choose: zennit|custom)
-  lrp_backend:
-    value: zennit
-  crp_backend:
-    value: zennit
-  pcx_backend:
-    value: zennit
+lrp: true
+crp: false
+pcx: false
+diff: false
 
-  # Optional overrides for specific visualizations
-  patient:
-    value: p007
-  gene:
-    value: RUBCNL
+# XAI backends (choose: zennit|custom)
+lrp_backend: zennit
+crp_backend: zennit
+pcx_backend: zennit
+
+# Optional overrides for specific visualizations
+patient: p007
+gene: RUBCNL
+

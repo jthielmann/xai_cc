@@ -46,14 +46,12 @@ class EvalPipeline:
                 "gene_heads": self.config.get("gene_head_state_path"),
                 "sae": self.config.get("sae_state_path"),
             }
-            loaded = {k: self._load_state_dict_from_path(p) for k, p in paths.items() if p}
+            loaded = {k: self._load_state_dict_from_path("../models" + p) for k, p in paths.items() if p}
             if loaded:
                 return loaded
-        elif self.config.get("model_state_path", None) and not self.config.get("encoder_state_path", None):
-            bundled_path = self.config.get("model_state_path") or self.config.get("checkpoint_path")
-            if not bundled_path:
-                return None
-            bundled = self._load_state_dict_from_path(bundled_path)
+        elif self.config.get("model_state_path") and not self.config.get("encoder_state_path", None):
+            path = self.config.get("model_state_path") + "/best_model.pth"
+            bundled = self._load_state_dict_from_path(path)
             return self._normalize_state_dicts(bundled)
         else:
             raise RuntimeError(
@@ -65,22 +63,24 @@ class EvalPipeline:
 
     def _load_model(self):
         state_dicts = self._collect_state_dicts()
-        return load_model(self.config, state_dicts)
+        return load_model(self.config["model_config"], state_dicts)
 
     def run(self):
         if self.config.get("lrp", False):
             # Select backend
             lrp_backend = str(self.config.get("lrp_backend", "zennit")).lower()
             # Load dataset like in training using config's dataset string
-            eval_tf = get_transforms(self.config, split="eval")
+            eval_tf = get_transforms(self.config["model_config"], split="eval")
             ds = get_dataset_from_config(
-                dataset_name=self.config["dataset"],
+                dataset_name=self.config["model_config"]["dataset"],
                 genes=None,
                 split="val",
                 debug=bool(self.config.get("debug", False)),
                 transforms=eval_tf,
                 samples=None,
                 only_inputs=True,
+                meta_data_dir=self.config["model_config"]["meta_data_dir"],
+                gene_data_filename=self.config["model_config"]["gene_data_filename"]
             )
             n = min(10, len(ds))
             loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
@@ -91,7 +91,7 @@ class EvalPipeline:
 
         if self.config.get("crp", False):
             crp_backend = str(self.config.get("crp_backend", "zennit")).lower()
-            eval_tf = get_transforms(self.config, split="eval")
+            eval_tf = get_transforms(self.config["model_config"], split="eval")
             ds = get_dataset_from_config(
                 dataset_name=self.config["dataset"],
                 genes=None,
