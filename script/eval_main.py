@@ -122,7 +122,7 @@ def main() -> None:
     setup_dump_env()
 
     run = None
-    if bool(cfg.get("log_to_wandb", False)):
+    if bool(cfg.get("log_to_wandb")):
         # Enforce required W&B identity parameters
         for key in ("run_name", "group", "job_type", "tags"):
             if key not in cfg:

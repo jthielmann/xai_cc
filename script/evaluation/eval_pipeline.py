@@ -66,7 +66,7 @@ class EvalPipeline:
         return load_model(self.config["model_config"], state_dicts)
 
     def run(self):
-        if self.config.get("lrp", False):
+        if self.config.get("lrp"):
             # Select backend
             lrp_backend = str(self.config.get("lrp_backend", "zennit")).lower()
             # Load dataset like in training using config's dataset string
@@ -84,12 +84,13 @@ class EvalPipeline:
             )
             n = min(10, len(ds))
             loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
+            print (len(loader))
             if lrp_backend == "custom":
                 plot_lrp_custom(self.model, loader, run=self.wandb_run)
             else:
                 plot_lrp(self.model, loader, run=self.wandb_run)
 
-        if self.config.get("crp", False):
+        if self.config.get("crp"):
             crp_backend = str(self.config.get("crp_backend", "zennit")).lower()
             eval_tf = get_transforms(self.config["model_config"], split="eval")
             ds = get_dataset_from_config(
@@ -108,12 +109,12 @@ class EvalPipeline:
             else:
                 plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=n)
 
-        if self.config.get("pcx", False):
+        if self.config.get("pcx"):
             pcx_backend = str(self.config.get("pcx_backend", "zennit")).lower()
             # For now, PCX uses the zennit/CRP-based pipeline in cluster_functions.
             # The backend flag is accepted for parity and future extension.
             plot_pcx(self.model, self.config, run=self.wandb_run)
-        if self.config.get("diff", False):
+        if self.config.get("diff"):
             plot_triptych_from_merge(
                 self.config["data_dir"],
                 self.config["patient"],
@@ -122,7 +123,7 @@ class EvalPipeline:
                 is_online=bool(self.wandb_run),
                 wandb_run=self.wandb_run,
             )
-        if self.config.get("scatter", False):
+        if self.config.get("scatter"):
             plot_scatter(
                 self.config,
                 self.model,

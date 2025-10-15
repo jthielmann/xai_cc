@@ -11,9 +11,10 @@ def _imgify_rel(att):
     return zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
 
 
-def plot_lrp(model, data, run=None):
+def plot_lrp(model, data, run):
     model.eval()
     composite = EpsilonPlusFlat()
+    print(f"len data {len(data)}")
     for idx, sample in enumerate(data):
         with Gradient(model, composite) as attributor:
             _, grad = attributor(sample)
