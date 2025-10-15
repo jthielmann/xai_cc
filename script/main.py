@@ -111,8 +111,15 @@ def _sweep_run():
     run.config.update({"auto_run_name": auto_name}, allow_val_change=True)
 
 
-    # Start from base config (top-level keys except 'parameters')
-    cfg = {k: v for k, v in raw_cfg.items() if k != "parameters"}
+    # Start from base config (top-level keys except 'parameters') and flatten top-level {value}
+    cfg = {}
+    for k, v in raw_cfg.items():
+        if k == "parameters":
+            continue
+        if isinstance(v, dict) and "value" in v and "values" not in v:
+            cfg[k] = v["value"]
+        else:
+            cfg[k] = v
 
     # Overlay fixed parameters from base config
     for k, p in raw_cfg.get("parameters", {}).items():
@@ -205,8 +212,24 @@ def _extract_hyperparams(pdict: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 def _flatten_params(raw: Dict[str, Any]) -> Dict[str, Any]:
-    cfg = {k: (v["value"] if isinstance(v, dict) and "value" in v else v)
-       for k, v in raw.items()}
+    """Flatten a config so top-level keys and parameters.<k>.value become primitives.
+
+    - If a top-level key is a dict with 'value', replace it with the value.
+    - If a key under 'parameters' is a dict with 'value', copy it to top-level.
+    - Keep 'parameters' intact for sweep detection/spec building.
+    """
+    cfg: Dict[str, Any] = {}
+    for k, v in (raw or {}).items():
+        if isinstance(v, dict) and "value" in v and "values" not in v:
+            cfg[k] = v["value"]
+        else:
+            cfg[k] = v
+
+    params = (raw or {}).get("parameters", {})
+    if isinstance(params, dict):
+        for pk, pv in params.items():
+            if isinstance(pv, dict) and "value" in pv and "values" not in pv:
+                cfg[pk] = pv["value"]
     return cfg
 
 def _build_sweep_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -263,7 +286,7 @@ def main():
         print("torch version:", torch.__version__)
         print("cuda available:", torch.cuda.is_available())
 
-    model_dir = "../models" + project
+    model_dir = os.path.join("../models", project)
     os.makedirs(model_dir, exist_ok=True)
     ensure_free_disk_space(model_dir)
 
