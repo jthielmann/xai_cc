@@ -25,7 +25,7 @@ cfg_abs="$(readlink -f "$cfg" 2>/dev/null || python -c 'import os,sys;print(os.p
 mkdir -p logs
 
 tmp="$(mktemp -t "${name}_xai_sbatch_XXXXXX.sh")"
-cat > "$tmp" <<EOF
+cat > "$tmp" <<'EOF'
 #!/bin/bash
 #SBATCH --job-name=${name}
 #SBATCH --output=logs/%x_%j.out
@@ -37,7 +37,7 @@ cat > "$tmp" <<EOF
 #SBATCH --mem=128G
 #SBATCH --time=48:00:00
 
-echo "[$(date)] starting XAI job on $(hostname) — job: \\${SLURM_JOB_NAME} (\\${SLURM_JOB_ID})"
+echo "[$(date)] starting XAI job on $(hostname) — job: ${SLURM_JOB_NAME:-xai} (${SLURM_JOB_ID:-local})"
 mkdir -p logs
 shopt -s expand_aliases
 source ~/.bashrc
@@ -53,4 +53,3 @@ chmod +x "$tmp"
 echo "Submitting XAI job '${name}' with config: ${cfg_abs}"
 sbatch "$tmp"
 rm -f "$tmp"
-
