@@ -66,6 +66,8 @@ DATASETS: Dict[str, Dict[str, Any]] = {
 
 def get_dataset_cfg(cfg: dict) -> Dict[str, Any]:
     name = cfg["dataset"]
+    if type(name) == dict:
+        name = name.get("value")
     debug = cfg.get("debug", False)
 
     if name not in DATASETS:
