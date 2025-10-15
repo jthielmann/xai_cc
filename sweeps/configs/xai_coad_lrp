@@ -43,3 +43,11 @@ parameters:
     value: false
   pcx:
     value: false
+
+  # XAI backends (choose: zennit|custom)
+  lrp_backend:
+    value: zennit
+  crp_backend:
+    value: zennit
+  pcx_backend:
+    value: zennit

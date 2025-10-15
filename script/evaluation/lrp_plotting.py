@@ -20,3 +20,24 @@ def plot_lrp(model, data, run=None):
         img = _imgify_rel(grad)
         if run is not None:
             run.log({f"lrp/attribution[{idx}]": wandb.Image(img)})
+
+
+def plot_lrp_custom(model, data, run=None):
+    """Simple LRP-like visualization using vanilla input gradients.
+
+    Treats the target as the sum over outputs and visualizes d(sum(outputs))/d(input).
+    """
+    model.eval()
+    device = next(model.parameters()).device
+    for idx, sample in enumerate(data):
+        x = sample[0] if isinstance(sample, (tuple, list)) else sample
+        x = x.to(device)
+        if x.dim() == 3:
+            x = x.unsqueeze(0)
+        x = x.detach().requires_grad_(True)
+        y = model(x)
+        y.sum().backward()
+        grad = x.grad
+        img = _imgify_rel(grad)
+        if run is not None:
+            run.log({f"lrp/attribution_custom[{idx}]": wandb.Image(img)})

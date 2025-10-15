@@ -4,6 +4,10 @@ import torch.nn as nn
 import numpy as np
 from PIL import Image
 import matplotlib.cm as cm
+import zennit.image as zimage
+from zennit.composites import EpsilonPlusFlat
+from zennit.torchvision import VGGCanonizer, ResNetCanonizer
+from crp.attribution import CondAttribution
 
 
 def _get_layer_names(model, types):
@@ -23,23 +27,51 @@ def _get_composite_and_layer(encoder):
         layer_name = _get_layer_names(encoder, [nn.Linear])[-3]
     else:
         composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
-        layer_type = type(encoder.layer1[0])
+        layer_type = type(getattr(encoder, "layer1", [nn.Identity()])[0])
         layer_name = _get_layer_names(encoder, [layer_type])[-1]
     return composite, layer_name
 
 
 def plot_crp(model, data, run=None):
+    """Backwards-compatible minimal CRP call over a single sample.
+
+    Kept for compatibility; prefer `plot_crp_zennit` which iterates over a dataset subset.
+    """
+    return plot_crp_zennit(model, data, run=run, max_items=1)
+
+
+from typing import Optional
+
+
+def plot_crp_zennit(model, dataset, run=None, layer_name: Optional[str] = None, max_items: Optional[int] = None):
+    """CRP using zennit-crp CondAttribution on a small dataset subset."""
     model.eval()
-    composite, layer_name = _get_composite_and_layer(model)
+    device = next(model.parameters()).device
+    enc = getattr(model, "encoder", model)
+    composite, default_layer_name = _get_composite_and_layer(enc)
+    target_layer = layer_name or default_layer_name
 
     attribution = CondAttribution(model)
-    attr = attribution(x, [{"y": [0]}], composite, record_layer=[layer_name])
-    rel = attr.relevances[layer_name]
-    rel = rel.sum(1).cpu()
-    rel = rel / (abs(rel).max() + 1e-12)
-    img = zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
-    if run is not None:
-        run.log({"crp/attribution": wandb.Image(img)})
+    count = 0
+    for i in range(len(dataset)):
+        if max_items is not None and count >= max_items:
+            break
+        sample = dataset[i]
+        x = sample[0] if isinstance(sample, (tuple, list)) else sample
+        x = x.to(device)
+        if x.dim() == 3:
+            x = x.unsqueeze(0)
+        x = x.detach().requires_grad_(True)
+
+        attr = attribution(x, [{"y": [0]}], composite, record_layer=[target_layer])
+        rel = attr.relevances[target_layer].sum(1).detach().cpu()
+        # Normalize and render
+        denom = (rel.abs().amax(dim=(1, 2), keepdim=True) + 1e-12)
+        rel = rel / denom
+        img = zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
+        if run is not None:
+            run.log({f"crp/attribution[{i}]": wandb.Image(img)})
+        count += 1
 
 
 def _find_module_by_name(model: nn.Module, name: str) -> nn.Module:

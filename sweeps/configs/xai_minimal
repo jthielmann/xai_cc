@@ -41,6 +41,14 @@ parameters:
   diff:
     value: false
 
+  # XAI backends (choose: zennit|custom)
+  lrp_backend:
+    value: zennit
+  crp_backend:
+    value: zennit
+  pcx_backend:
+    value: zennit
+
   # Optional overrides for specific visualizations
   patient:
     value: p007

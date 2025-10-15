@@ -2,8 +2,8 @@ import os
 import torch
 from typing import Any, Dict, Optional
 
-from script.evaluation.crp_plotting import plot_crp
-from script.evaluation.lrp_plotting import plot_lrp
+from script.evaluation.crp_plotting import plot_crp, plot_crp_zennit, plot_crp2
+from script.evaluation.lrp_plotting import plot_lrp, plot_lrp_custom
 from script.evaluation.pcx_plotting import plot_pcx
 from script.evaluation.tri_plotting import plot_triptych_from_merge
 from script.evaluation.scatter_plotting import plot_scatter
@@ -69,6 +69,8 @@ class EvalPipeline:
 
     def run(self):
         if self.config.get("lrp", False):
+            # Select backend
+            lrp_backend = str(self.config.get("lrp_backend", "zennit")).lower()
             # Load dataset like in training using config's dataset string
             eval_tf = get_transforms(self.config, split="eval")
             ds = get_dataset_from_config(
@@ -80,13 +82,36 @@ class EvalPipeline:
                 samples=None,
                 only_inputs=True,
             )
-            # Take first 10 samples and create a simple loader with batch_size=1
             n = min(10, len(ds))
             loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
-            plot_lrp(self.model, loader, run=self.wandb_run)
+            if lrp_backend == "custom":
+                plot_lrp_custom(self.model, loader, run=self.wandb_run)
+            else:
+                plot_lrp(self.model, loader, run=self.wandb_run)
+
         if self.config.get("crp", False):
-            plot_crp(self.model, run=self.wandb_run)
+            crp_backend = str(self.config.get("crp_backend", "zennit")).lower()
+            eval_tf = get_transforms(self.config, split="eval")
+            ds = get_dataset_from_config(
+                dataset_name=self.config["dataset"],
+                genes=None,
+                split="val",
+                debug=bool(self.config.get("debug", False)),
+                transforms=eval_tf,
+                samples=None,
+                only_inputs=False,
+            )
+            n = min(10, len(ds))
+            ds_subset = Subset(ds, list(range(n)))
+            if crp_backend == "custom":
+                plot_crp2(self.model, ds_subset, run=self.wandb_run)
+            else:
+                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=n)
+
         if self.config.get("pcx", False):
+            pcx_backend = str(self.config.get("pcx_backend", "zennit")).lower()
+            # For now, PCX uses the zennit/CRP-based pipeline in cluster_functions.
+            # The backend flag is accepted for parity and future extension.
             plot_pcx(self.model, self.config, run=self.wandb_run)
         if self.config.get("diff", False):
             plot_triptych_from_merge(
