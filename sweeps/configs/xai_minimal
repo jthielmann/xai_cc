@@ -24,6 +24,7 @@ lrp: true
 crp: false
 pcx: false
 diff: false
+scatter: false
 
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit

@@ -71,20 +71,21 @@ class EvalPipeline:
             lrp_backend = str(self.config.get("lrp_backend", "zennit")).lower()
             # Load dataset like in training using config's dataset string
             eval_tf = get_transforms(self.config["model_config"], split="eval")
+            debug = bool(self.config.get("debug", False))
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
                 genes=None,
                 split="val",
-                debug=bool(self.config.get("debug", False)),
+                debug=debug,
                 transforms=eval_tf,
                 samples=None,
                 only_inputs=True,
                 meta_data_dir=self.config["model_config"]["meta_data_dir"],
-                gene_data_filename=self.config["model_config"]["gene_data_filename"]
+                gene_data_filename=self.config["model_config"]["gene_data_filename"],
+                max_len= 1 if debug else None
             )
             n = min(10, len(ds))
             loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
-            print (len(loader))
             if lrp_backend == "custom":
                 plot_lrp_custom(self.model, loader, run=self.wandb_run)
             else:

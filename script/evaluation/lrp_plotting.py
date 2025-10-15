@@ -3,7 +3,7 @@ from zennit.attribution import Gradient
 from zennit.composites import EpsilonPlusFlat
 import zennit.image as zimage
 import wandb
-
+import numpy as np
 
 def _imgify_rel(att):
     rel = att.sum(1).cpu()
@@ -12,22 +12,21 @@ def _imgify_rel(att):
 
 
 def plot_lrp(model, data, run):
+    if run is None:
+        raise RuntimeError("W&B run is None. Call wandb.init(...) and pass it in.")
+
     model.eval()
     composite = EpsilonPlusFlat()
-    print(f"len data {len(data)}")
+
     for idx, sample in enumerate(data):
         with Gradient(model, composite) as attributor:
             _, grad = attributor(sample)
-        img = _imgify_rel(grad)
-        if run is not None:
-            run.log({f"lrp/attribution[{idx}]": wandb.Image(img)})
+
+        img = _imgify_rel(grad).convert("RGB")
+        run.log({f"lrp/attribution_{idx}": wandb.Image(img)}, commit=True)
 
 
 def plot_lrp_custom(model, data, run=None):
-    """Simple LRP-like visualization using vanilla input gradients.
-
-    Treats the target as the sum over outputs and visualizes d(sum(outputs))/d(input).
-    """
     model.eval()
     device = next(model.parameters()).device
     for idx, sample in enumerate(data):
