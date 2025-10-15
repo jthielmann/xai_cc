@@ -59,7 +59,7 @@ def _train(cfg: Dict[str, Any]) -> None:
         run = None
     # Ensure dump_dir is present in cfg and env
     cfg = dict(run.config) if run else cfg
-    cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
+    cfg.setdefault("dump_dir", setup_dump_env())
     cfg = _prepare_cfg(cfg)
 
     # SAE path: only train sparse autoencoder, no gene heads/lr find.
@@ -209,24 +209,43 @@ def _flatten_params(raw: Dict[str, Any]) -> Dict[str, Any]:
        for k, v in raw.items()}
     return cfg
 
-def _build_sweep_config(config):
-    hyper_params = _extract_hyperparams(config)
-    # Add config name so each run can load the base config for fixed parameters
-    hyper_params["config_name"] = config["config_name"]
+def _build_sweep_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a valid W&B sweep spec from the loaded YAML config (flattened)."""
+    # 1) Collect sweep-able parameters from config['parameters'] only
+    params_dict = config.get("parameters", {}) or {}
+    hyper_params = _extract_hyperparams(params_dict)
 
-    config.update(get_dataset_cfg(config))
+    # 2) Add config_name as a fixed parameter so each agent can reload the base config
+    cfg_name = config.get("config_name")
+    if cfg_name:
+        hyper_params["config_name"] = {"value": cfg_name}
+
+    # 3) Use resolved dataset defaults to compute gene chunks and add as sweep dim
+    cfg_for_genes = dict(config)
+    cfg_for_genes.update(get_dataset_cfg(cfg_for_genes))
+    gene_chunks = prepare_gene_list(cfg_for_genes)  # list or list-of-lists
+
     sweep_config = {
-        "name": make_sweep_name_from_space(config), # Ignores config 'name', it is only used for slurm purposes
+        "name": make_sweep_name_from_space(config),  # ignores config 'name'
         "method": read_config_parameter(config, "method"),
         "metric": read_config_parameter(config, "metric"),
-        "parameters": hyper_params
+        "parameters": hyper_params,
     }
-    gene_chunks = prepare_gene_list(config)  # flat list or list-of-lists
-    if gene_chunks: # is None if specific gene list was provided in config, e.g. not chunking all genes
+
+    if gene_chunks:
         sweep_config["parameters"]["genes"] = {"values": gene_chunks}
     else:
-        sweep_config["parameters"]["genes"] = config["genes"]
+        # If a fixed gene list is configured, pass it as a fixed value
+        if "genes" in config:
+            sweep_config["parameters"]["genes"] = {"value": config["genes"]}
+
     return sweep_config
+
+def _has_sweep_params(config: Dict[str, Any]) -> bool:
+    params = config.get("parameters", {})
+    if not isinstance(params, dict):
+        return False
+    return any(isinstance(v, dict) and ("values" in v or "distribution" in v) for v in params.values())
 
 def main():
     args = parse_args()
@@ -250,8 +269,9 @@ def main():
 
     config = _flatten_params(raw_cfg)
     config["model_dir"] = model_dir
-    is_sweep = any(isinstance(param, dict) and "values" in param for param in config.values())
+    # Decide sweep vs single run from parameters section only
     config["config_name"] = os.path.basename(args.config)
+    is_sweep = _has_sweep_params(config)
     if is_sweep:
         name = make_sweep_name_from_space(raw_cfg)
         sweep_id_dir = os.path.join("..", "wandb_sweep_ids", project, name)
