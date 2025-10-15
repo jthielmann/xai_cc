@@ -1,5 +1,5 @@
-project: coad icms2up uni 2
-name: coad icms2up uni
+project: coad icms2up uni no finetuning
+name: coad icms2up uni no finetuning
 method: grid
 metric:
   name: valid_loss
@@ -47,8 +47,8 @@ parameters:
     values: [uni]
   freeze_encoder:
     value: true
-  encoder_finetune_layers:
-    value: 5
+#  encoder_finetune_layers:
+#    value: 5
 
   # Head
   one_linear_out_layer:
