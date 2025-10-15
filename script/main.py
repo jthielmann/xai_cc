@@ -51,23 +51,61 @@ import os, glob
 import pandas as pd
 from typing import Dict, Any, List, Union
 
+
+# -------------------------
+# Config handling utilities
+# -------------------------
+
+def _resolve_config(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve a YAML config that may contain {value|values} wrappers into
+    a plain dict of primitives suitable for runtime and wandb.init(config=...).
+
+    Rules:
+    - Top-level keys with {value: ...} → plain value.
+    - Keys under top-level 'parameters' with {value: ...} are merged into top-level.
+    - Keys with {values: [...]} are ignored here (sweep-only).
+    - Other nested dicts (e.g., metric: {name, goal}) are preserved.
+    """
+    resolved: Dict[str, Any] = {}
+    for k, v in (raw or {}).items():
+        if k == "parameters" and isinstance(v, dict):
+            for pk, pv in v.items():
+                if isinstance(pv, dict) and "value" in pv and "values" not in pv:
+                    resolved[pk] = pv["value"]
+            continue
+        if isinstance(v, dict) and "value" in v and "values" not in v:
+            resolved[k] = v["value"]
+        else:
+            resolved[k] = v
+    return resolved
+
+
+def _has_sweep(raw: Dict[str, Any]) -> bool:
+    """Return True if any entry under raw['parameters'] has 'values' or a distribution."""
+    params = (raw or {}).get("parameters", {})
+    if isinstance(params, dict):
+        for _, spec in params.items():
+            if isinstance(spec, dict) and ("values" in spec or "distribution" in spec):
+                return True
+    return False
+
 def _train(cfg: Dict[str, Any]) -> None:
-    # Sanitize config for W&B: avoid nested sweep keys showing as empty columns
+    # Sanitize config for W&B: exclude sweep-only meta if present
     wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
     if cfg.get("log_to_wandb", False):
         run = wandb.init(
             project=cfg.get("project", "xai"),
-            name=read_config_parameter(cfg, "run_name"),
-            group=read_config_parameter(cfg, "group"),
-            job_type=read_config_parameter(cfg, "job_type"),
-            tags=read_config_parameter(cfg, "tags"),
+            name=cfg.get("run_name"),
+            group=cfg.get("group"),
+            job_type=cfg.get("job_type"),
+            tags=cfg.get("tags"),
             config=wb_cfg,
         )
     else:
         run = None
     # Ensure dump_dir is present in cfg and env
     cfg = dict(run.config) if run else cfg
-    cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
+    cfg.setdefault("dump_dir", setup_dump_env())
     cfg = _prepare_cfg(cfg)
 
     # SAE path: only train sparse autoencoder, no gene heads/lr find.
@@ -197,7 +235,7 @@ def _sweep_run():
     run.tags = list(cfg["tags"]) if not isinstance(cfg["tags"], list) else cfg["tags"]
 
     # Ensure dump_dir present and env set before training
-    cfg.setdefault("dump_dir", setup_dump_env(cfg.get("dump_dir")))
+    cfg.setdefault("dump_dir", setup_dump_env())
     cfg = _prepare_cfg(cfg)
     if bool(cfg.get("train_sae", False)):
         SAETrainerPipeline(cfg, run=run).run()
@@ -213,36 +251,56 @@ def _extract_hyperparams(pdict: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 def _build_sweep_config(config):
-    hyper_params = _extract_hyperparams(read_config_parameter(config, "parameters"))
+    """Build a W&B sweep spec from a raw config file path or dict.
+
+    - Extracts only sweep-able parameters (those with 'values' or a distribution)
+      from raw['parameters'] and flattens names directly (no nesting used today).
+    - Adds a 'config_name' parameter so agent runs can reload base config.
+    - Computes gene chunks from the resolved base config and injects as a sweep dim.
+    """
+    # Accept either a dict or a file path
+    raw_cfg = config if isinstance(config, dict) else parse_yaml_config(config)
+
+    # Hyperparameters for sweep: only entries with 'values' or distribution
+    base_params = raw_cfg.get("parameters", {}) or {}
+    hyper_params = _extract_hyperparams(base_params)
 
     # Add config name so each run can load the base config for fixed parameters
-    config_name = os.path.basename(config)
+    config_name = os.path.basename(config) if isinstance(config, str) else "config.yml"
     hyper_params["config_name"] = {"value": config_name}
 
-    config.update(get_dataset_cfg(config))
+    # Resolve fixed defaults used to compute genes/chunks
+    resolved = _resolve_config(raw_cfg)
+    resolved.update(get_dataset_cfg(resolved))
 
     sweep_config = {
-        "name": make_sweep_name_from_space(config), # Ignores config 'name', it is only used for slurm purposes
-        "method": read_config_parameter(config, "method"),
-        "metric": read_config_parameter(config, "metric"),
-        "parameters": hyper_params
+        "name": make_sweep_name_from_space(raw_cfg),  # ignores config 'name' (slurm only)
+        "method": read_config_parameter(raw_cfg, "method"),
+        "metric": read_config_parameter(raw_cfg, "metric"),
+        "parameters": hyper_params,
     }
-    gene_chunks = prepare_gene_list(config)  # flat list or list-of-lists
-    if gene_chunks: # is None if specific gene list was provided in config, e.g. not chunking all genes
+
+    # Derive gene chunks; if not chunked, include the full set as a single option
+    gene_chunks = prepare_gene_list(dict(resolved))  # may return list or list-of-lists
+    if gene_chunks:
         sweep_config["parameters"]["genes"] = {"values": gene_chunks}
     else:
-        sweep_config["parameters"]["genes"] = config["genes"]
+        # Should not happen, but keep fallback
+        sweep_config["parameters"]["genes"] = {"values": []}
+
     return sweep_config
 
 def main():
     args = parse_args()
 
     raw_cfg = parse_yaml_config(args.config)
+    # Resolve to a plain runtime config (no {value|values} wrappers)
+    cfg = _resolve_config(raw_cfg)
 
     setup_dump_env()
 
-    debug = read_config_parameter(raw_cfg, "debug")
-    project = read_config_parameter(raw_cfg, "project") if not debug else "_debug_" + random.randbytes(4).hex()
+    debug = bool(cfg.get("debug", False))
+    project = cfg.get("project", "xai") if not debug else "_debug_" + random.randbytes(4).hex()
 
     if debug:
         print("python version:", sys.version)
@@ -250,13 +308,13 @@ def main():
         print("torch version:", torch.__version__)
         print("cuda available:", torch.cuda.is_available())
 
-    model_dir = "../models" + project
+    # Place outputs under ../models/<project>
+    model_dir = os.path.join("../models", project)
     os.makedirs(model_dir, exist_ok=True)
     ensure_free_disk_space(model_dir)
 
-    config = {k: v for k, v in raw_cfg.items()}
-    config["model_dir"]["value"] = model_dir
-    is_sweep = any(isinstance(param, dict) and "values" in param for param in config.values())
+    cfg["model_dir"] = model_dir
+    is_sweep = _has_sweep(raw_cfg)
 
     if is_sweep:
         name = make_sweep_name_from_space(raw_cfg)
@@ -266,18 +324,18 @@ def main():
             with open(sweep_id_file, "r") as f: sweep_id = f.read().strip()
         else:
             os.makedirs(sweep_id_dir, exist_ok=True)
-            sweep_config = _build_sweep_config(config)
+            sweep_config = _build_sweep_config(args.config)
             sweep_id = wandb.sweep(sweep_config, project=project)
             with open(sweep_id_file, "w") as f:
                 f.write(sweep_id)
         wandb.agent(sweep_id, function=_sweep_run, project=project)
     else:
-        if bool(config.get("xai_pipeline", False)):
+        if bool(cfg.get("xai_pipeline", False)):
             print("[info] Detected xai_pipeline config, instead run:\n"
                   "  python script/eval_main.py --config", args.config)
             return
 
-        _train(config)
+        _train(cfg)
 
 if __name__ == "__main__":
     main()
