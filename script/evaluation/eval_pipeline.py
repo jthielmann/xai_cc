@@ -81,8 +81,7 @@ class EvalPipeline:
                 samples=None,
                 only_inputs=True,
                 meta_data_dir=self.config["model_config"]["meta_data_dir"],
-                gene_data_filename=self.config["model_config"]["gene_data_filename"],
-                max_len= 1 if debug else None
+                gene_data_filename=self.config["model_config"]["gene_data_filename"]
             )
             n = min(10, len(ds))
             loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
