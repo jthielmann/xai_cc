@@ -1,0 +1,40 @@
+project: xai_coad_pcx
+name: XAI • COAD • PCX all
+xai_pipeline: true
+
+parameters:
+  run_name:
+    value: xai_coad_pcx
+  group:
+    value: xai_coad_pcx
+  job_type:
+    value: xai
+  tags:
+    value: [xai_coad_pcx]
+  # Logging / runtime
+  log_to_wandb: { value: true }
+  debug:        { value: false }
+
+  # Dataset
+  dataset: { value: coad }
+  # Full dataset: train + (val ∪ test) as evaluation pool
+  train_samples:
+    value: [MISC62, ZEN45, TENX152, MISC73, MISC71, MISC70, MISC68, MISC67, MISC66, MISC65, MISC64, MISC63, MISC58, MISC57, MISC51, MISC50, MISC49, MISC48, MISC47, MISC46, MISC44, MISC43, MISC41, MISC40, MISC39, MISC38, MISC36, TENX92, TENX91, TENX49, ZEN47, ZEN46, ZEN43, ZEN39, MISC42]
+  val_samples:
+    value: [MISC69, MISC56, MISC37, MISC35, MISC34, TENX90, TENX29, ZEN42, ZEN38, MISC72, MISC45, MISC33, TENX89, TENX28, ZEN44]
+
+  # Genes to analyze (edit)
+  genes:
+    value: [RUBCNL, C1QA]
+
+  # Model to explain (update to your actual checkpoint)
+  model_config_path: { value: sweeps/configs/coad }
+  model_state_path:  { value: /abs/path/to/your/out/coad_run/best_model.pth }
+
+  # Output directory
+  out_path: { value: xai_out/pcx_crp_full }
+
+  # XAI toggles
+  lrp: { value: false }
+  crp: { value: true }
+  pcx: { value: true }

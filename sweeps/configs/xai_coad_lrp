@@ -1,0 +1,45 @@
+project: xai_coad_lrp
+name: XAI • COAD • LRP few
+xai_pipeline: true
+
+parameters:
+  run_name:
+    value: xai_coad_lrp
+  group:
+    value: xai_coad_lrp
+  job_type:
+    value: xai
+  tags:
+    value: [xai_coad_lrp]
+  # Logging / runtime
+  log_to_wandb:
+    value: false
+  debug:
+    value: true
+
+  # Dataset
+  dataset:
+    value: coad
+  # Few interesting samples (adjust as needed)
+  train_samples:
+    value: [MISC69]
+  val_samples:
+    value: [TENX29]
+
+  # Model to explain (update to your actual checkpoint)
+  model_config_path:
+    value: sweeps/configs/coad
+  model_state_path:
+    value: /abs/path/to/your/out/coad_run/best_model.pth
+
+  # Output directory
+  out_path:
+    value: xai_out/lrp_few
+
+  # XAI toggles
+  lrp:
+    value: true
+  crp:
+    value: false
+  pcx:
+    value: false
