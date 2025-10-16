@@ -5,13 +5,6 @@ import pandas as pd
 
 
 def get_full_gene_list(cfg: Dict[str, Any]) -> List[str]:
-    # Validate mutually exclusive CSV configuration early
-    if cfg.get("single_csv_path") and (
-        cfg.get("train_csv_path") or cfg.get("val_csv_path") or cfg.get("test_csv_path")
-    ):
-        raise ValueError(
-            "Provide either 'single_csv_path' or split-specific CSVs ('train_csv_path'/'val_csv_path'/'test_csv_path'), not both."
-        )
     data_dir = cfg.get("data_dir")
     meta_dir = str(cfg.get("meta_data_dir", "meta_data")).strip("/")
     fname = cfg.get("gene_data_filename")
