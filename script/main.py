@@ -100,12 +100,8 @@ def _sweep_run():
     if not config_name:
         raise RuntimeError("Sweep run missing 'config_name' in parameters")
 
-    base_cfg_path = _resolve_config_path(config_name)
-    raw_cfg = parse_yaml_config(base_cfg_path)
 
-    sweep_param_names = get_sweep_parameter_names(raw_cfg)
-    run.config.update({"sweep_parameter_names": sweep_param_names}, allow_val_change=True)
-    auto_name = make_run_name_from_config(run_config, sweep_param_names)
+    auto_name = make_run_name_from_config(run_config)
     run.config.update({"auto_run_name": auto_name}, allow_val_change=True)
 
     # Start from base config: top-level value wrappers and fixed parameters.value
@@ -227,6 +223,10 @@ def _build_sweep_config(raw_cfg: Dict[str, Any], config_basename: Optional[str] 
         else:
             fixed_genes = read_config_parameter(raw_cfg, "genes")
             sweep_config["parameters"]["genes"] = {"value": fixed_genes}
+
+
+    sweep_param_names = get_sweep_parameter_names(raw_cfg)
+    sweep_config.update({"sweep_parameter_names": sweep_param_names}, allow_val_change=True)
 
 
     return sweep_config

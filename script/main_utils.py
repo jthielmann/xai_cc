@@ -117,8 +117,9 @@ def _abbr_value(val: Any) -> str:
     return str(val)[:20]
 
 
-def make_run_name_from_config(cfg: Dict[str, Any], param_names: Iterable[str]) -> str:
-    keys = list(dict.fromkeys(param_names))
+def make_run_name_from_config(cfg: Dict[str, Any]) -> str:
+    sweep_param_names = cfg["sweep_param_names"]
+    keys = list(dict.fromkeys(sweep_param_names))
     tokens = []
     for k in keys:
         v = read_config_parameter(cfg, k)
