@@ -418,6 +418,7 @@ class TrainerPipeline:
         return dir_name
 
     def _prepare_output_dir(self) -> str:
+        self.config["model_dir"] = "../models"
         base = self.config["model_dir"]
         subdir = self._run_name_to_dir(self.wandb_run.name)
         out_path = os.path.join(base, subdir)

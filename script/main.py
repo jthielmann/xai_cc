@@ -33,7 +33,7 @@ from main_utils import (
 
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     cfg = dict(cfg); cfg.update(get_dataset_cfg(cfg))
-    out = cfg.get("out_path") or cfg.get("sweep_dir") or cfg.get("model_dir")
+    out = "../models"
     os.makedirs(out, exist_ok=True); ensure_free_disk_space(out)
     with open(os.path.join(out, "config"), "w") as f: yaml.safe_dump(cfg, f, sort_keys=False, default_flow_style=False, allow_unicode=True)
     return cfg
@@ -67,6 +67,7 @@ def _train(cfg: Dict[str, Any]) -> None:
     cfg.setdefault("dump_dir", setup_dump_env())
 
     cfg = _prepare_cfg(cfg)
+    cfg = _flatten_params(cfg)
 
     if bool(cfg.get("train_sae", False)):
         # No gene list inference needed — training uses encoder features only
@@ -94,8 +95,8 @@ def _sweep_run():
     # Ensure dump env in agent subprocess before init
     setup_dump_env()
     run = wandb.init()
-    rcfg = dict(run.config)
-    config_name = rcfg.get("config_name")
+    run_config = dict(run.config)
+    config_name = run_config.get("config_name")
     if not config_name:
         raise RuntimeError("Sweep run missing 'config_name' in parameters")
 
@@ -104,7 +105,7 @@ def _sweep_run():
 
     sweep_param_names = get_sweep_parameter_names(raw_cfg)
     run.config.update({"sweep_parameter_names": sweep_param_names}, allow_val_change=True)
-    auto_name = make_run_name_from_config(rcfg, sweep_param_names)
+    auto_name = make_run_name_from_config(run_config, sweep_param_names)
     run.config.update({"auto_run_name": auto_name}, allow_val_change=True)
 
     # Start from base config: top-level value wrappers and fixed parameters.value
@@ -122,7 +123,7 @@ def _sweep_run():
 
     # Overlay chosen hyperparameters from the sweep run, excluding meta keys
     exclude = {"metric", "method", "_wandb", "config_name"}
-    for k, v in rcfg.items():
+    for k, v in run_config.items():
         if k not in exclude:
             cfg[k] = v
 
@@ -132,33 +133,22 @@ def _sweep_run():
     # Recompute gene chunks from the resolved config so we can log genes_id deterministically
     # Build a temporary cfg to infer gene list without forcing a previously chosen chunk
     tmp_cfg = dict(cfg)
-    chosen_genes = config.get("genes")
+    chosen_genes = run_config.get("genes")
     if chosen_genes is not None:
         # prevent short-circuit in _prepare_gene_list
         tmp_cfg.pop("genes", None)
     tmp_cfg.update(get_dataset_cfg(tmp_cfg))
-    try:
-        gene_chunks = prepare_gene_list(tmp_cfg)
-    except Exception:
-        gene_chunks = None
+    gene_chunks = None
 
     if gene_chunks and chosen_genes is not None and had_split_genes(raw_cfg):
         if isinstance(gene_chunks, list) and gene_chunks and isinstance(gene_chunks[0], str):
             gene_chunks = [gene_chunks]
-        try:
-            idx = next(i for i, ch in enumerate(gene_chunks) if ch == chosen_genes)
-            run.config.update({"genes_id": str(idx)}, allow_val_change=True)
-        except StopIteration:
-            pass
+        idx = next(i for i, ch in enumerate(gene_chunks) if ch == chosen_genes)
+        run.config.update({"genes_id": str(idx)}, allow_val_change=True)
 
 
-    base_model_dir = None
-    try:
-        base_model_dir = read_config_parameter(raw_cfg, "model_dir")
-    except Exception:
-        base_model_dir = None
-    if not base_model_dir:
-        base_model_dir = "../models/"
+
+    base_model_dir = "../models/"
 
     project = cfg.get("project", "xai")
     project_dir = os.path.join(base_model_dir, project)
@@ -198,26 +188,17 @@ def _extract_hyperparams(pdict: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 def _flatten_params(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Flatten a config for runtime/wandb.init:
-
-    - Top-level keys with {value: ...} → value
-    - Merge raw['parameters'][k]['value'] into top-level if present
-    - Keep other structures (e.g., metric/method) intact
-    - Do not inline {values: [...]} — those are for sweeps
-    """
     cfg: Dict[str, Any] = {}
-    for k, v in (raw or {}).items():
-        if k == "parameters":
-            continue
-        if isinstance(v, dict) and "value" in v and "values" not in v:
-            cfg[k] = v["value"]
-        else:
+    for k, v in raw.items():
+        if type(v) == str:
             cfg[k] = v
-    params = (raw or {}).get("parameters", {}) or {}
-    if isinstance(params, dict):
-        for pk, pv in params.items():
-            if isinstance(pv, dict) and "value" in pv and "values" not in pv:
-                cfg[pk] = pv["value"]
+        elif k == "parameters" or "metric":
+            continue
+        else:
+            cfg[k] = v["value"]
+    params = raw.get("parameters")
+    for pk, pv in params.items():
+        cfg[pk] = pv["value"]
     return cfg
 
 def _build_sweep_config(raw_cfg: Dict[str, Any], config_basename: Optional[str] = None) -> Dict[str, Any]:
@@ -247,11 +228,9 @@ def _build_sweep_config(raw_cfg: Dict[str, Any], config_basename: Optional[str] 
         if gene_chunks:
             sweep_config["parameters"]["genes"] = {"values": gene_chunks}
         else:
-            try:
-                fixed_genes = read_config_parameter(raw_cfg, "genes")
-                sweep_config["parameters"]["genes"] = {"value": fixed_genes}
-            except Exception:
-                pass
+            fixed_genes = read_config_parameter(raw_cfg, "genes")
+            sweep_config["parameters"]["genes"] = {"value": fixed_genes}
+
 
     return sweep_config
 
@@ -265,6 +244,11 @@ def main():
     args = parse_args()
 
     raw_cfg = parse_yaml_config(args.config)
+
+    xai_pipeline = (read_config_parameter(raw_cfg, "xai_pipeline"))
+    if xai_pipeline:
+        raise RuntimeError("[info] Detected xai_pipeline config, instead run:\n"
+                           "  python script/eval_main.py --config", args.config)
 
     setup_dump_env()
 
@@ -293,12 +277,6 @@ def main():
                 f.write(sweep_id)
         wandb.agent(sweep_id, function=_sweep_run, project=project)
     else:
-        try:
-            bool(read_config_parameter(raw_cfg, "xai_pipeline"))
-        except Exception:
-            raise RuntimeError("[info] Detected xai_pipeline config, instead run:\n"
-                  "  python script/eval_main.py --config", args.config)
-
         _train(raw_cfg)
 
 if __name__ == "__main__":

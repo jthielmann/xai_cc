@@ -70,7 +70,7 @@ def read_config_parameter(config: dict, parameter: str):
             if "values" in val:
                 return val["values"]
         return val
-    raise ValueError(f"Parameter '{parameter}' not found in config.")
+    return None
 
 
 def get_sweep_parameter_names(config: dict) -> list[str]:
@@ -118,21 +118,7 @@ def _abbr_key(key: str) -> str:
     return "".join(p[0] for p in parts[:3])
 
 
-def _abbr_value(val: Any, key: str = "") -> str:
-    if isinstance(val, (list, tuple)):
-        n = len(val)
-        return f"n{n}"
-    if isinstance(val, bool):
-        return "t" if val else "f"
-    if isinstance(val, int) and not isinstance(val, bool):
-        return str(val)
-    if isinstance(val, float):
-        s = f"{val:g}"
-        return s
-    if isinstance(val, str):
-        stem = os.path.splitext(os.path.basename(val))[0]
-        stem = stem.replace("gene_data_", "")
-        return stem[:20]
+def _abbr_value(val: Any) -> str:
     return str(val)[:20]
 
 
@@ -140,11 +126,12 @@ def make_run_name_from_config(cfg: Dict[str, Any], param_names: Iterable[str]) -
     keys = list(dict.fromkeys(param_names))
     tokens = []
     for k in keys:
-        if k in cfg:
-            v = cfg[k]
-            ak = _abbr_key(k)
-            av = _abbr_value(v, key=k)
-            tokens.append(f"{ak}={av}")
+        v = read_config_parameter(cfg, k)
+        if v == None:
+            raise RuntimeError(f"could not read {k} from {cfg}")
+        ak = _abbr_key(k)
+        av = _abbr_value(v)
+        tokens.append(f"{ak}={av}")
     if not tokens:
         raise RuntimeError("could not infer tokens for make_run_name_from_config")
     name = "-".join(tokens)
