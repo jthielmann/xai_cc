@@ -138,7 +138,8 @@ def _sweep_run():
         # prevent short-circuit in _prepare_gene_list
         tmp_cfg.pop("genes", None)
     tmp_cfg.update(get_dataset_cfg(tmp_cfg))
-    gene_chunks = None
+
+    gene_chunks = prepare_gene_list(tmp_cfg)
 
     if gene_chunks and chosen_genes is not None and had_split_genes(raw_cfg):
         if isinstance(gene_chunks, list) and gene_chunks and isinstance(gene_chunks[0], str):
@@ -146,11 +147,8 @@ def _sweep_run():
         idx = next(i for i, ch in enumerate(gene_chunks) if ch == chosen_genes)
         run.config.update({"genes_id": str(idx)}, allow_val_change=True)
 
-
-
     base_model_dir = "../models/"
-
-    project = cfg.get("project", "xai")
+    project = cfg.get("project")
     project_dir = os.path.join(base_model_dir, project)
     os.makedirs(project_dir, exist_ok=True)
     ensure_free_disk_space(project_dir)
@@ -161,7 +159,6 @@ def _sweep_run():
     wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
     run.config.update(wb_cfg, allow_val_change=True)
 
-
     # Set required W&B run identity fields from sweep config
     for key in ("run_name", "group", "job_type", "tags"):
         if key not in cfg:
@@ -169,10 +166,10 @@ def _sweep_run():
     run.name = cfg["run_name"]
     run.group = cfg["group"]
     run.job_type = cfg["job_type"]
-    run.tags = list(cfg["tags"]) if not isinstance(cfg["tags"], list) else cfg["tags"]
+    run.tags = cfg["tags"]
 
     # Ensure dump_dir present and env set before training
-    cfg.setdefault("dump_dir", setup_dump_env())
+    setup_dump_env()
     cfg = _prepare_cfg(cfg)
     if bool(cfg.get("train_sae", False)):
         SAETrainerPipeline(cfg, run=run).run()
