@@ -1,5 +1,5 @@
-project: coad icms2up dino no finetuning
-name: coad icms2up dino no finetuning
+project: coad icms2up multimodel
+name: coad icms2up multimodel
 method: grid
 metric:
   name: valid_loss
@@ -43,7 +43,7 @@ parameters:
 
     # Encoder
     encoder_type:
-      values: [dino]
+      values: [dino, uni, dinov3_vitl16]
     freeze_encoder:
       value: true
     #  encoder_finetune_layers:
@@ -57,7 +57,7 @@ parameters:
 
     # Training schedule
     epochs:
-      value: 20
+      value: 50
     optimizer:
       value: adamw
     global_fix_learning_rate:

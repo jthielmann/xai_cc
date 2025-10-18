@@ -1,5 +1,5 @@
-project: coad icms3up dino no finetuning
-name: coad icms3up dino no finetuning
+project: coad icms3up multimodel
+name: coad icms3up multimodel
 method: grid
 metric:
   name: valid_loss
@@ -59,7 +59,7 @@ parameters:
 
   # Training schedule
   epochs:
-    value: 20
+    value: 50
   optimizer:
     value: adamw
   global_fix_learning_rate:
