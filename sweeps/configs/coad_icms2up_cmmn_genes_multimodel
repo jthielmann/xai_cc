@@ -17,7 +17,7 @@ parameters:
     log_to_wandb:
       value: true
     debug:
-      value: true
+      value: false
     use_early_stopping:
       value: true
     generate_scatters:
