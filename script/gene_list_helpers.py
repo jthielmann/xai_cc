@@ -91,13 +91,11 @@ def get_active_chunk_idx(cfg: Dict[str, Any], chunk: Optional[List[str]] = None)
         raise RuntimeError(f"chunk not found {chunk} in {chunks}")
 
 def had_split_genes(cfg_dict: Dict[str, Any]) -> bool:
-    # check top-level
     if "split_genes_by" in cfg_dict and cfg_dict["split_genes_by"] is not None:
         try:
             return int(cfg_dict["split_genes_by"]) > 0
         except Exception:
             return False
-    # check parameters.value
     p = cfg_dict.get("parameters", {}).get("split_genes_by")
     if isinstance(p, dict) and "value" in p and p["value"] is not None:
         try:

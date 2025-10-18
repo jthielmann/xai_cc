@@ -454,8 +454,9 @@ def get_dataset(
     precomputed_bin_edges: Dict[str, np.ndarray] | None = None,
     return_edges: bool = False,
 ):
+    print(data_dir)
     if samples is None:
-        samples = [f.name for f in os.scandir(data_dir) if f.is_dir()]
+        samples = [f.name for f in os.scandir(data_dir) if f.is_dir() and not str(f).startswith(".") and not str(f).startswith("_")]
 
     base_result = get_base_dataset(
         data_dir=data_dir,

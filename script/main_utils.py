@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, Iterable
 import os
 import yaml
-
+from script.configs.dataset_config import get_dataset_cfg
 
 def setup_dump_env() -> str:
     dd = "../dump"
@@ -117,11 +117,9 @@ def _abbr_value(val: Any) -> str:
     return str(val)[:20]
 
 
-def make_run_name_from_config(cfg: Dict[str, Any]) -> str:
-    sweep_param_names = cfg["sweep_param_names"]
-    keys = list(dict.fromkeys(sweep_param_names))
+def make_run_name_from_config(cfg: Dict[str, Any], parameter_names) -> str:
     tokens = []
-    for k in keys:
+    for k in parameter_names:
         v = read_config_parameter(cfg, k)
         if v == None:
             raise RuntimeError(f"could not read {k} from {cfg}")
@@ -132,3 +130,11 @@ def make_run_name_from_config(cfg: Dict[str, Any]) -> str:
         raise RuntimeError("could not infer tokens for make_run_name_from_config")
     name = "-".join(tokens)
     return name[:128]
+
+
+def prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    cfg = dict(cfg); cfg.update(get_dataset_cfg(cfg))
+    out = "../models"
+    os.makedirs(out, exist_ok=True); ensure_free_disk_space(out)
+    with open(os.path.join(out, "config"), "w") as f: yaml.safe_dump(cfg, f, sort_keys=False, default_flow_style=False, allow_unicode=True)
+    return cfg

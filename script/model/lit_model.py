@@ -319,11 +319,7 @@ class GeneExpressionRegressor(L.LightningModule):
 
     def forward(self, x):
         freeze_context = getattr(self, "encoder_is_fully_frozen", False)
-        cm = (
-            torch.inference_mode
-            if (freeze_context and hasattr(torch, "inference_mode"))
-            else (torch.no_grad if freeze_context else nullcontext)
-        )
+        cm = torch.no_grad if freeze_context else nullcontext
         with cm():
             z = self.encoder(x)
         if isinstance(z, (list, tuple)):
@@ -339,7 +335,7 @@ class GeneExpressionRegressor(L.LightningModule):
         if self.sae:
             z = self.sae(z)
 
-        outs = [getattr(self, g)(z) for g in self.genes]  # each (B, 1)
+        outs = [getattr(self, g)(z) for g in self.genes]
         out = torch.cat(outs, dim=1)
 
         return out

@@ -15,7 +15,7 @@ import csv, os, random, numpy, torch, yaml, pandas as pd, wandb
 import sys
 sys.path.insert(0, '..')
 
-from script.gene_list_helpers import prepare_gene_list, had_split_genes, get_full_gene_list
+from script.gene_list_helpers import prepare_gene_list, get_full_gene_list, had_split_genes
 from script.train.lit_train_sae import SAETrainerPipeline
 from typing import Dict, Any, List, Union, Optional
 from script.configs.dataset_config import get_dataset_cfg
@@ -27,16 +27,10 @@ from main_utils import (
     read_config_parameter,
     get_sweep_parameter_names,
     make_run_name_from_config,
-    setup_dump_env
+    setup_dump_env,
+    prepare_cfg
 )
 
-
-def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    cfg = dict(cfg); cfg.update(get_dataset_cfg(cfg))
-    out = "../models"
-    os.makedirs(out, exist_ok=True); ensure_free_disk_space(out)
-    with open(os.path.join(out, "config"), "w") as f: yaml.safe_dump(cfg, f, sort_keys=False, default_flow_style=False, allow_unicode=True)
-    return cfg
 
 import os, glob
 import pandas as pd
@@ -66,7 +60,7 @@ def _train(cfg: Dict[str, Any]) -> None:
     # Ensure dump_dir and prepare cfg
     cfg.setdefault("dump_dir", setup_dump_env())
 
-    cfg = _prepare_cfg(cfg)
+    cfg = prepare_cfg(cfg)
     cfg = _flatten_params(cfg)
 
     if bool(cfg.get("train_sae", False)):
@@ -91,6 +85,30 @@ def _resolve_config_path(name: str) -> str:
         return cand
     raise FileNotFoundError(f"Could not resolve config_name '{name}' to a file path")
 
+def _flatten_base_fixed(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extracts fixed values from a base config that may use {"value": ...}
+    wrappers and a 'parameters' section. Only fixed values are retained.
+    """
+    out: Dict[str, Any] = {}
+
+    # Top-level fields: allow either raw values or {"value": ...}
+    for k, v in cfg.items():
+        if k in ("parameters", "metric", "method", "name", "sweep_parameter_names"):
+            continue
+        if isinstance(v, dict) and "value" in v:
+            out[k] = v["value"]
+        else:
+            out[k] = v
+
+    # Fixed values inside the 'parameters' section (ignore sweep search specs)
+    params = cfg.get("parameters") or {}
+    if isinstance(params, dict):
+        for pk, pv in params.items():
+            if isinstance(pv, dict) and "value" in pv and not ("values" in pv or "distribution" in pv):
+                out[pk] = pv["value"]
+    return out
+
 def _sweep_run():
     # Ensure dump env in agent subprocess before init
     setup_dump_env()
@@ -100,77 +118,32 @@ def _sweep_run():
     if not config_name:
         raise RuntimeError("Sweep run missing 'config_name' in parameters")
 
+    base_config = parse_yaml_config("../sweeps/configs/" + run_config["config_name"])
+    parameter_names = get_sweep_parameter_names(base_config)
+    auto_name = make_run_name_from_config(run_config, parameter_names)
+    run.name = auto_name
 
-    auto_name = make_run_name_from_config(run_config)
-    run.config.update({"auto_run_name": auto_name}, allow_val_change=True)
+    base_fixed = _flatten_base_fixed(base_config)
+    merged = dict(base_fixed)
+    merged.update({k: v for k, v in run_config.items() if k != "config_name"})
+    merged["name"] = auto_name
 
-    # Start from base config: top-level value wrappers and fixed parameters.value
-    cfg: Dict[str, Any] = {}
-    for k, v in raw_cfg.items():
-        if k == "parameters":
-            continue
-        if isinstance(v, dict) and "value" in v and "values" not in v:
-            cfg[k] = v["value"]
-        else:
-            cfg[k] = v
-    for k, pv in (raw_cfg.get("parameters", {}) or {}).items():
-        if isinstance(pv, dict) and "value" in pv and "values" not in pv:
-            cfg[k] = pv["value"]
-
-    # Overlay chosen hyperparameters from the sweep run, excluding meta keys
-    exclude = {"metric", "method", "_wandb", "config_name"}
-    for k, v in run_config.items():
-        if k not in exclude:
-            cfg[k] = v
-
-    if cfg.get("encoder_type") in ["dinov3_vits16plus"] or "convnext" in cfg.get("encoder_type"):
-        cfg["image_size"] = 384
-
-    # Recompute gene chunks from the resolved config so we can log genes_id deterministically
-    # Build a temporary cfg to infer gene list without forcing a previously chosen chunk
-    tmp_cfg = dict(cfg)
-    chosen_genes = run_config.get("genes")
-    if chosen_genes is not None:
-        # prevent short-circuit in _prepare_gene_list
-        tmp_cfg.pop("genes", None)
-    tmp_cfg.update(get_dataset_cfg(tmp_cfg))
-
-    gene_chunks = prepare_gene_list(tmp_cfg)
-
-    if gene_chunks and chosen_genes is not None and had_split_genes(raw_cfg):
-        if isinstance(gene_chunks, list) and gene_chunks and isinstance(gene_chunks[0], str):
-            gene_chunks = [gene_chunks]
-        idx = next(i for i, ch in enumerate(gene_chunks) if ch == chosen_genes)
-        run.config.update({"genes_id": str(idx)}, allow_val_change=True)
-
+    project = merged.get("project") or read_config_parameter(base_config, "project")
     base_model_dir = "../models/"
-    project = cfg.get("project")
     project_dir = os.path.join(base_model_dir, project)
     os.makedirs(project_dir, exist_ok=True)
     ensure_free_disk_space(project_dir)
 
-    cfg["model_dir"] = project_dir
-    cfg["sweep_dir"] = project_dir
-
-    wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}
-    run.config.update(wb_cfg, allow_val_change=True)
-
-    # Set required W&B run identity fields from sweep config
-    for key in ("run_name", "group", "job_type", "tags"):
-        if key not in cfg:
-            raise RuntimeError(f"Missing required parameter '{key}' for sweep run")
-    run.name = cfg["run_name"]
-    run.group = cfg["group"]
-    run.job_type = cfg["job_type"]
-    run.tags = cfg["tags"]
+    merged["model_dir"] = project_dir
+    merged["sweep_dir"] = project_dir
+    merged = prepare_cfg(merged)
+    run.config.update(merged, allow_val_change=True)
 
     # Ensure dump_dir present and env set before training
-    setup_dump_env()
-    cfg = _prepare_cfg(cfg)
-    if bool(cfg.get("train_sae", False)):
-        SAETrainerPipeline(cfg, run=run).run()
+    if bool(merged.get("train_sae", False)):
+        SAETrainerPipeline(merged, run=run).run()
     else:
-        TrainerPipeline(cfg, run=run).run()
+        TrainerPipeline(merged, run=run).run()
     run.finish()
 
 def _extract_hyperparams(pdict: Dict[str, Any]) -> Dict[str, Any]:
@@ -185,7 +158,7 @@ def _flatten_params(raw: Dict[str, Any]) -> Dict[str, Any]:
     for k, v in raw.items():
         if type(v) == str:
             cfg[k] = v
-        elif k == "parameters" or "metric":
+        elif k in ("parameters", "metric"):
             continue
         else:
             cfg[k] = v["value"]
@@ -207,11 +180,11 @@ def _build_sweep_config(raw_cfg: Dict[str, Any], config_basename: Optional[str] 
     for key in ("dataset", "debug", "gene_data_filename", "meta_data_dir", "sample_ids", "split_genes_by", "genes"):
         val = read_config_parameter(raw_cfg, key)
         cfg_for_genes[key] = val
-    cfg_for_genes.update(get_dataset_cfg(cfg_for_genes))
+    cfg_for_genes = prepare_cfg(cfg_for_genes)
     gene_chunks = prepare_gene_list(dict(cfg_for_genes))
 
     sweep_config = {
-        "name": make_run_name_from_config(raw_cfg, get_sweep_parameter_names(raw_cfg)),
+        "name": raw_cfg["name"],
         "method": read_config_parameter(raw_cfg, "method"),
         "metric": read_config_parameter(raw_cfg, "metric"),
         "parameters": hyper_params,
@@ -226,7 +199,7 @@ def _build_sweep_config(raw_cfg: Dict[str, Any], config_basename: Optional[str] 
 
 
     sweep_param_names = get_sweep_parameter_names(raw_cfg)
-    sweep_config.update({"sweep_parameter_names": sweep_param_names}, allow_val_change=True)
+    sweep_config["sweep_parameter_names"] = sweep_param_names
 
 
     return sweep_config
@@ -258,12 +231,15 @@ def main():
         print("torch version:", torch.__version__)
         print("cuda available:", torch.cuda.is_available())
 
-    # Decide sweep vs single run from parameters section only (no global flatten)
     is_sweep = _has_sweep_params(raw_cfg)
     if is_sweep:
-        name = make_run_name_from_config(raw_cfg, get_sweep_parameter_names(raw_cfg))
+        name = raw_cfg["name"]
         sweep_id_dir = os.path.join("..", "wandb_sweep_ids", project, name)
         sweep_id_file = os.path.join(sweep_id_dir, "sweep_id.txt")
+        os.environ["WANDB_RUN_GROUP"] = str(read_config_parameter(raw_cfg, "group"))
+        os.environ["WANDB_JOB_TYPE"] = str(read_config_parameter(raw_cfg, "job_type"))
+        tags = read_config_parameter(raw_cfg, "tags") or []
+        os.environ["WANDB_TAGS"] = ",".join(map(str, tags))
         if os.path.exists(sweep_id_file):
             with open(sweep_id_file, "r") as f: sweep_id = f.read().strip()
         else:

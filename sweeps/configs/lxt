@@ -27,7 +27,8 @@ crp: false
 pcx: false
 diff: false
 scatter: false
-forward_to_csv: true
+forward_to_csv: false
+lxt: true
 
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit
