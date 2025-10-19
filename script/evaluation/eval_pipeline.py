@@ -10,11 +10,15 @@ from script.evaluation.tri_plotting import plot_triptych_from_merge
 from script.evaluation.scatter_plotting import plot_scatter
 from script.evaluation.generate_results import generate_results, log_patient_hist_from_csv
 from script.model.model_factory import get_encoder
-from script.model.lit_model import load_model
+from script.model.lit_model import load_lit_regressor
 from script.data_processing.data_loader import get_dataset_from_config, get_dataset
 from script.data_processing.image_transforms import get_transforms, get_eval_transforms
 from torch.utils.data import DataLoader, Subset
 from script.main_utils import prepare_cfg
+from script.evaluation.eval_helpers import (
+    auto_device,
+    collect_state_dicts,
+)
 
 class EvalPipeline:
     def __init__(self, config, run):
@@ -23,59 +27,9 @@ class EvalPipeline:
         self.model_src = self.config.get("model_config_path")
         self.model = self._load_model()
 
-    def _auto_device(self):
-        try:
-            return next(self.model.parameters()).device
-        except Exception:
-            return torch.device(
-                "cuda" if torch.cuda.is_available() else
-                ("mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else "cpu")
-            )
-
-    def _load_state_dict_from_path(self, path: str) -> Dict[str, Any]:
-        state = torch.load(path, map_location="cpu")
-        if not isinstance(state, dict):
-            raise ValueError(f"State dict file {path!r} did not contain a dictionary")
-        return state
-
-    def _normalize_state_dicts(self, raw: Dict[str, Any]) -> Dict[str, Any]:
-        if "state_dict" in raw and isinstance(raw["state_dict"], dict):
-            raw = raw["state_dict"]
-        if any(k in raw for k in ("encoder", "gene_heads", "sae")):
-            return {k: raw[k] for k in ("encoder", "gene_heads", "sae") if k in raw}
-        return {"encoder": raw}
-
-    def _collect_state_dicts(self) -> Optional[Dict[str, Any]]:
-        if self.config.get("encoder_state_path", None) and self.config.get("model_state_path", None):
-            raise RuntimeError(
-                f"corrupted config: encoder_state_path \n{self.config.get('encoder_state_path')}"
-                f"\n{self.config.get('model_state_path')}"
-            )
-
-        if self.config.get("encoder_state_path", None) and self.config.get("gene_head_state_path", None):
-            paths = {
-                "encoder": self.config.get("encoder_state_path"),
-                "gene_heads": self.config.get("gene_head_state_path"),
-                "sae": self.config.get("sae_state_path"),
-            }
-            loaded = {k: self._load_state_dict_from_path("../models" + p) for k, p in paths.items() if p}
-            if loaded:
-                return loaded
-        elif self.config.get("model_state_path") and not self.config.get("encoder_state_path", None):
-            path = self.config.get("model_state_path") + "/best_model.pth"
-            bundled = self._load_state_dict_from_path(path)
-            return self._normalize_state_dicts(bundled)
-        else:
-            raise RuntimeError(
-                f"corrupted config:\n"
-                f"encoder_state_path \n{self.config.get('encoder_state_path', 'None')}"
-                f"gene_head_state_path \n{self.config.get('gene_head_state_path', 'None')}"
-                f"model_state_path \n{self.config.get('model_state_path', 'None')}"
-            )
-
     def _load_model(self):
-        state_dicts = self._collect_state_dicts()
-        return load_model(self.config["model_config"], state_dicts)
+        state_dicts = collect_state_dicts(self.config)
+        return load_lit_regressor(self.config["model_config"], state_dicts)
 
     def run(self):
         if self.config.get("lrp"):
@@ -148,7 +102,7 @@ class EvalPipeline:
             )
             genes = self.config["model_config"]["genes"]
 
-            device = self._auto_device()
+            device = auto_device(self.model)
 
             for p in patients:
                 csv_path = generate_results(

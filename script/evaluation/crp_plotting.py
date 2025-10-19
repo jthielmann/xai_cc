@@ -31,15 +31,6 @@ def _get_composite_and_layer(encoder):
         layer_name = _get_layer_names(encoder, [layer_type])[-1]
     return composite, layer_name
 
-
-def plot_crp(model, data, run=None):
-    """Backwards-compatible minimal CRP call over a single sample.
-
-    Kept for compatibility; prefer `plot_crp_zennit` which iterates over a dataset subset.
-    """
-    return plot_crp_zennit(model, data, run=run, max_items=1)
-
-
 from typing import Optional
 
 
@@ -223,7 +214,7 @@ def _resolve_concept_ids_for_sample(concept_ids, index):
     return concept_ids
 
 
-def plot_crp2(
+def plot_crp(
     model: nn.Module,
     dataset,
     run=None,

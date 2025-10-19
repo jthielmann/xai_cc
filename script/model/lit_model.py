@@ -37,12 +37,12 @@ log = logging.getLogger(__name__)
 
 sys.path.insert(0, '..')
 
-def load_model(config, state_dicts: Dict[str, Any]):
+def load_lit_regressor(config, state_dicts: Dict[str, Any]):
     model = get_model(config)
 
     encoder_state = state_dicts.get("encoder")
     if encoder_state is None:
-        raise ValueError("Missing 'encoder' state dict for load_model")
+        raise ValueError("Missing 'encoder' state dict for load_lit_regressor")
     if encoder_state and encoder_state.keys() and not next(iter(encoder_state)).startswith("encoder."):
         encoder_state = {f"encoder.{k}": v for k, v in encoder_state.items()}
     model.load_state_dict(encoder_state, strict=False)
@@ -60,6 +60,10 @@ def load_model(config, state_dicts: Dict[str, Any]):
             head_module.load_state_dict(gene_dict)
 
     return model
+
+# Backward compatibility alias; prefer load_lit_regressor in new code
+def load_model(config, state_dicts: Dict[str, Any]):
+    return load_lit_regressor(config, state_dicts)
 
 def get_model(config):
     return GeneExpressionRegressor(config)
