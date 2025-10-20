@@ -1,47 +1,6 @@
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torchmetrics.functional import pearson_corrcoef
 from typing import Dict, Optional, Tuple, Union
-
-class SparsityLoss(nn.Module):
-    def __init__(self, layername, model):
-        super(SparsityLoss, self).__init__()
-        self.activations = None
-        for name, module in model.named_modules():
-            if name == layername:
-                module.register_forward_hook(self.fw_hook)
-
-    def fw_hook(self, module, input, output):
-        self.activations = output.clone()
-
-    def forward(self, out, label):
-        a = self.activations.clamp(min=0).amax((2, 3)) / (self.activations.shape[2] * self.activations.shape[3])
-        sparsity_loss = (a[:, a.sum(0) > 0].mean())
-        return sparsity_loss
-
-
-def dino_loss(student_output, teacher_output, temperature):
-    teacher_out = F.softmax(teacher_output / temperature, dim=-1).detach()
-    student_out = F.log_softmax(student_output / temperature, dim=-1)
-    return -torch.mean(torch.sum(teacher_out * student_out, dim=-1))
-
-
-class CompositeLoss(nn.Module):
-    def __init__(self, losses):
-        super().__init__()
-        self.losses = nn.ModuleList(losses)  # so they’re part of .parameters()
-
-    def forward(self, out, target):  # pass-through for extra args
-        weighted_sum = 0.0
-        for idx, loss_fn in enumerate(self.losses):
-            # Each loss_fn decides what to do with *extra (e.g. sample weights)
-            l = loss_fn(out, target)
-            weighted_sum += l
-        return weighted_sum
-
-
 
 class MultiGeneWeightedMSE(nn.Module):
     """Weighted MSE for multi-gene regression with robust shape/broadcast handling."""
@@ -121,29 +80,13 @@ class MultiGeneWeightedMSE(nn.Module):
             return value.sum()
         raise RuntimeError(f"Unhandled reduction '{self.reduction}'.")  # pragma: no cover
 
-    def forward(
+    def _finalize_loss(
         self,
-        pred: torch.Tensor,
-        target: torch.Tensor,
-        sample_weights: torch.Tensor,
+        per_elem: torch.Tensor,
+        w32: torch.Tensor,
         *,
-        return_stats: bool = False,
+        return_stats: bool,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, Dict[str, torch.Tensor]]]:
-        if sample_weights is None:
-            raise ValueError("sample_weights must be provided for MultiGeneWeightedMSE.")
-
-        pred, target = self._ensure_shapes(pred, target)
-        ref_shape = pred.shape
-        w = torch.as_tensor(sample_weights, device=pred.device, dtype=pred.dtype)
-        w = self._broadcast_weights(w, ref_shape)
-        w = self._normalize_weights(w)
-
-        pred32 = pred.to(torch.float32)
-        target32 = target.to(torch.float32)
-        w32 = w.to(torch.float32)
-
-        per_elem = (pred32 - target32).pow(2) * w32
-
         stats: Dict[str, torch.Tensor] = {
             "weight_mean": w32.mean().detach(),
             "weight_max": w32.max().detach(),
@@ -170,11 +113,38 @@ class MultiGeneWeightedMSE(nn.Module):
             stats["numerator_vector"] = numerator.detach()
             stats["denominator_vector"] = denominator.detach()
 
-        loss = self._apply_reduction(value).to(pred.dtype)
+        loss = self._apply_reduction(value)
         if return_stats:
             stats["loss_before_cast"] = value.detach()
             return loss, stats
         return loss
+
+    def forward(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        sample_weights: torch.Tensor,
+        *,
+        return_stats: bool = False,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Dict[str, torch.Tensor]]]:
+        if sample_weights is None:
+            raise ValueError("sample_weights must be provided for MultiGeneWeightedMSE.")
+
+        pred, target = self._ensure_shapes(pred, target)
+        ref_shape = pred.shape
+        w = torch.as_tensor(sample_weights, device=pred.device, dtype=pred.dtype)
+        w = self._broadcast_weights(w, ref_shape)
+        w = self._normalize_weights(w)
+
+        pred32 = pred.to(torch.float32)
+        target32 = target.to(torch.float32)
+        w32 = w.to(torch.float32)
+        per_elem = (pred32 - target32).pow(2) * w32
+        result = self._finalize_loss(per_elem, w32, return_stats=return_stats)
+        if isinstance(result, tuple):
+            loss, stats = result
+            return loss.to(pred.dtype), stats
+        return result.to(pred.dtype)
 
 
 class WeightedHuberLoss(MultiGeneWeightedMSE):
@@ -224,40 +194,12 @@ class WeightedHuberLoss(MultiGeneWeightedMSE):
         delta_tensor = torch.tensor(self.delta, device=diff.device, dtype=diff.dtype)
         quadratic = torch.minimum(abs_diff, delta_tensor)
         linear = abs_diff - quadratic
-        per_elem = 0.5 * quadratic.pow(2) + delta_tensor * linear
-        per_elem = per_elem * w32
-
-        stats: Dict[str, torch.Tensor] = {
-            "weight_mean": w32.mean().detach(),
-            "weight_max": w32.max().detach(),
-            "weight_min": w32.min().detach(),
-            "weight_nonzero_frac": (w32 > 0).float().mean().detach(),
-        }
-
-        if self.normalize == "global":
-            numerator = per_elem.sum()
-            denominator = torch.clamp(w32.sum(), min=self.eps)
-            value = numerator / denominator
-            stats["numerator"] = numerator.detach()
-            stats["denominator"] = denominator.detach()
-        elif self.normalize == "per_sample":
-            numerator = per_elem.sum(dim=1)
-            denominator = torch.clamp(w32.sum(dim=1), min=self.eps)
-            value = numerator / denominator
-            stats["numerator_vector"] = numerator.detach()
-            stats["denominator_vector"] = denominator.detach()
-        else:  # per_gene
-            numerator = per_elem.sum(dim=0)
-            denominator = torch.clamp(w32.sum(dim=0), min=self.eps)
-            value = numerator / denominator
-            stats["numerator_vector"] = numerator.detach()
-            stats["denominator_vector"] = denominator.detach()
-
-        loss = self._apply_reduction(value).to(pred.dtype)
-        if return_stats:
-            stats["loss_before_cast"] = value.detach()
-            return loss, stats
-        return loss
+        per_elem = (0.5 * quadratic.pow(2) + delta_tensor * linear) * w32
+        result = self._finalize_loss(per_elem, w32, return_stats=return_stats)
+        if isinstance(result, tuple):
+            loss, stats = result
+            return loss.to(pred.dtype), stats
+        return result.to(pred.dtype)
 
 
 class PearsonCorrLoss(nn.Module):

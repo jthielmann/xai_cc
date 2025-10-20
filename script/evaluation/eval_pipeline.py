@@ -75,7 +75,7 @@ class EvalPipeline:
                 wandb_run=self.wandb_run
             )
         if self.config.get("forward_to_csv"):
-            patients = [f.name for f in os.scandir(self.config["data_dir"]) if f.is_dir() and not str(f).startswith(".") and not str(f).startswith("_")]
+            patients = [f.name for f in os.scandir(self.config["data_dir"]) if f.is_dir() and not f.name.startswith(".") and not f.name.startswith("_")]
 
             results_dir = self.config.get(
                 "results_dir",
