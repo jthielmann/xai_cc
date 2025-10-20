@@ -23,6 +23,14 @@ class EvalPipeline:
     def __init__(self, config, run):
         self.config = prepare_cfg(config)
         self.wandb_run = run
+        # Derive a robust run_name: prefer explicit config, then W&B run name,
+        # then a generic fallback to keep pipelines working without W&B.
+        self.run_name = (
+            self.config.get("run_name")
+            or (self.wandb_run.name if self.wandb_run else None)
+            or self.config.get("name")
+            or "run"
+        )
         self.model_src = self.config.get("model_config_path")
         self.model = self._load_model()
 
@@ -58,21 +66,21 @@ class EvalPipeline:
             # For now, PCX uses the zennit/CRP-based pipeline in cluster_functions.
             # The backend flag is accepted for parity and future extension.
             cfg_pcx = dict(self.config)
-            cfg_pcx["out_path"] = os.path.join(self.config["out_path"], self.config["run_name"], "pcx")
+            cfg_pcx["out_path"] = os.path.join(self.config["out_path"], self.run_name, "pcx")
             plot_pcx(self.model, cfg_pcx, run=self.wandb_run)
         if self.config.get("diff"):
             plot_triptych_from_merge(
                 self.config["data_dir"],
                 self.config["patient"],
                 self.config["gene"],
-                os.path.join(self.config["out_path"], self.config["run_name"], "diff"),
+                os.path.join(self.config["out_path"], self.run_name, "diff"),
                 is_online=bool(self.wandb_run),
                 wandb_run=self.wandb_run,
             )
 
         if self.config.get("scatter"):
             cfg_scatter = dict(self.config)
-            cfg_scatter["out_path"] = os.path.join(self.config["out_path"], self.config["run_name"], "scatter")
+            cfg_scatter["out_path"] = os.path.join(self.config["out_path"], self.run_name, "scatter")
             plot_scatter(
                 cfg_scatter,
                 self.model,
@@ -84,7 +92,7 @@ class EvalPipeline:
             ])
 
             genes = self.config["model_config"]["genes"]
-            run_name = self.config["run_name"]
+            run_name = self.run_name
             image_size = int(self.config["model_config"].get("image_size", 224))
 
             device = auto_device(self.model)
