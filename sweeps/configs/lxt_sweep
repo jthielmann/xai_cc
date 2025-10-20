@@ -39,3 +39,8 @@ pcx_backend: zennit
 lxt_conv_gamma_list: [0.0, 0.25, 0.5]
 lxt_lin_gamma_list: [0.0, 0.25]
 
+# Optional: provide explicit tiles to visualize with LXT
+# If set, these paths are used instead of sampling from the dataset.
+# lxt_tilepaths:
+#   - /absolute/path/to/tile1.png
+#   - /absolute/path/to/tile2.png
