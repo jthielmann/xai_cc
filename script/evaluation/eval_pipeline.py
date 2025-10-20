@@ -23,14 +23,10 @@ class EvalPipeline:
     def __init__(self, config, run):
         self.config = prepare_cfg(config)
         self.wandb_run = run
-        # Derive a robust run_name: prefer explicit config, then W&B run name,
-        # then a generic fallback to keep pipelines working without W&B.
-        self.run_name = (
-            self.config.get("run_name")
-            or (self.wandb_run.name if self.wandb_run else None)
-            or self.config.get("name")
-            or "run"
-        )
+        # Single source of truth for run_name: require it in config
+        self.run_name = self.config.get("run_name")
+        if not self.run_name:
+            raise ValueError("Config must provide 'run_name' (single source of truth).")
         self.model_src = self.config.get("model_config_path")
         self.model = self._load_model()
 
@@ -92,12 +88,7 @@ class EvalPipeline:
             ])
 
             genes = self.config["model_config"]["genes"]
-<<<<<<< Updated upstream
             run_name = self.run_name
-=======
-            print(self.config)
-            run_name = self.config["run_name"]
->>>>>>> Stashed changes
             image_size = int(self.config["model_config"].get("image_size", 224))
 
             device = auto_device(self.model)

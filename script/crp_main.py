@@ -128,6 +128,7 @@ def main() -> None:
             if key not in cfg:
                 raise ValueError(f"Missing required parameter '{key}' in config")
         wb_cfg = {k: v for k, v in cfg.items() if k not in ("project", "metric", "method", "run_name", "group", "job_type", "tags")}
+        original_run_name = cfg.get("run_name")
         run = wandb.init(
             project=cfg.get("project", "xai"),
             name=cfg["run_name"],
@@ -136,10 +137,11 @@ def main() -> None:
             tags=cfg["tags"],
             config=wb_cfg
         )
-        # Preserve special fields that are not stored in run.config
-        # while still reflecting any values logged to W&B.
-        cfg = dict(run.config)
-        cfg["run_name"] = run.name
+        # Merge back W&B-config values without losing our explicit run_name
+        cfg = dict(cfg)  # start from original cfg as source of truth
+        cfg.update(dict(run.config))
+        if original_run_name is not None:
+            cfg["run_name"] = original_run_name
     cfg = _prepare_cfg(cfg)
 
     EvalPipeline(cfg, run=run).run()
