@@ -1,12 +1,12 @@
 project: xai_minimal
-name: xai minimal example
+name: xai minimal sweep (LXT)
 xai_pipeline: true
 
 
-run_name: xai_minimal
-group: xai_minimal
+run_name: xai_lxt_sweep
+group: xai_lxt
 job_type: xai
-tags: [xai_minimal]
+tags: [xai_minimal, lxt_sweep]
 debug: true
 log_to_wandb: true
 
@@ -20,7 +20,7 @@ encoder_state_path: null
 gene_head_state_path: null
 sae_state_path: null
 
-out_path: ../crp_out/xai_minimal
+out_path: ../crp_out/xai_minimal_lxt_sweep
 
 lrp: false
 crp: false
@@ -35,9 +35,7 @@ lrp_backend: zennit
 crp_backend: zennit
 pcx_backend: zennit
 
-# Optional overrides for specific visualizations
-patient: p007
+# LXT gamma parameter sweep (no defaults; lists required here)
+lxt_conv_gamma_list: [0.0, 0.25, 0.5]
+lxt_lin_gamma_list: [0.0, 0.25]
 
-# LXT gamma parameters (single-run)
-lxt_conv_gamma: 0.25
-lxt_lin_gamma: 0.0
