@@ -456,7 +456,7 @@ def get_dataset(
 ):
     print(data_dir)
     if samples is None:
-        samples = [f.name for f in os.scandir(data_dir) if f.is_dir() and not str(f).startswith(".") and not str(f).startswith("_")]
+        samples = [f.name for f in os.scandir(data_dir) if f.is_dir() and not f.name.startswith(".") and not f.name.startswith("_")]
 
     base_result = get_base_dataset(
         data_dir=data_dir,

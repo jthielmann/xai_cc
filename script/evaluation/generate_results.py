@@ -29,11 +29,13 @@ def generate_results(
     data_dir,
     genes: List[str],
     run_name,
+    out_path,
     meta_data_dir,
     gene_data_filename,
     patient=None,
     make_hists=False,
-    wandb_run=None
+    wandb_run=None,
+    image_size: int = 224,
 ):
     if patient is None:
         raise ValueError("Please provide a `patient` (string).")
@@ -44,7 +46,7 @@ def generate_results(
 
     model = model.to(device)
     model.eval()
-    results_dir = f"../evaluation/{run_name}/predictions/"
+    results_dir = f"../{out_path}/{run_name}/predictions/"
     os.makedirs(results_dir, exist_ok=True)
     filename = os.path.join(results_dir, "results.csv")
     if os.path.exists(filename):
@@ -55,7 +57,7 @@ def generate_results(
             filename, index=False
         )
 
-    eval_tf = get_eval_transforms(image_size=224)
+    eval_tf = get_eval_transforms(image_size=int(image_size))
     base_ds = get_dataset(
         data_dir=data_dir,
         genes=genes,

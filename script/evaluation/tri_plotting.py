@@ -48,6 +48,7 @@ def plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=Fals
     for ax, (name, vals, (vmin, vmax), cbar) in zip(axes, panels):
         _scatter(ax, x, y, vals, vmin, vmax, f"{patient} • {gene} ({name})", cbar)
 
+    os.makedirs(out_path, exist_ok=True)
     out_file = os.path.join(out_path, f"{patient}_{gene}_spatial.png")
     fig.savefig(out_file, dpi=200)
 

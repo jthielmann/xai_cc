@@ -7,7 +7,7 @@ from script.evaluation.lxt_plotting import plot_lxt
 from script.evaluation.pcx_plotting import plot_pcx
 from script.evaluation.tri_plotting import plot_triptych_from_merge
 from script.evaluation.scatter_plotting import plot_scatter
-from script.evaluation.generate_results import generate_results, log_patient_hist_from_csv
+from script.evaluation.generate_results import generate_results
 from script.model.model_factory import get_encoder
 from script.model.lit_model import load_lit_regressor
 from script.data_processing.data_loader import get_dataset_from_config, get_dataset
@@ -57,55 +57,51 @@ class EvalPipeline:
             pcx_backend = str(self.config.get("pcx_backend", "zennit")).lower()
             # For now, PCX uses the zennit/CRP-based pipeline in cluster_functions.
             # The backend flag is accepted for parity and future extension.
-            plot_pcx(self.model, self.config, run=self.wandb_run)
+            cfg_pcx = dict(self.config)
+            cfg_pcx["out_path"] = os.path.join(self.config["out_path"], self.config["run_name"], "pcx")
+            plot_pcx(self.model, cfg_pcx, run=self.wandb_run)
         if self.config.get("diff"):
             plot_triptych_from_merge(
                 self.config["data_dir"],
                 self.config["patient"],
                 self.config["gene"],
-                self.config["out_path"],
+                os.path.join(self.config["out_path"], self.config["run_name"], "diff"),
                 is_online=bool(self.wandb_run),
                 wandb_run=self.wandb_run,
             )
 
         if self.config.get("scatter"):
+            cfg_scatter = dict(self.config)
+            cfg_scatter["out_path"] = os.path.join(self.config["out_path"], self.config["run_name"], "scatter")
             plot_scatter(
-                self.config,
+                cfg_scatter,
                 self.model,
                 wandb_run=self.wandb_run
             )
         if self.config.get("forward_to_csv"):
-            patients = [f.name for f in os.scandir(self.config["data_dir"]) if f.is_dir() and not f.name.startswith(".") and not f.name.startswith("_")]
+            patients = sorted([
+                f.name for f in os.scandir(self.config["data_dir"]) if f.is_dir() and not f.name.startswith((".", "_"))
+            ])
 
-            results_dir = self.config.get(
-                "results_dir",
-                os.path.join(self.config.get("out_path", "."), "forward_results")
-            )
             genes = self.config["model_config"]["genes"]
+            run_name = self.config["run_name"]
+            image_size = int(self.config["model_config"].get("image_size", 224))
 
             device = auto_device(self.model)
 
             for p in patients:
-                csv_path = generate_results(
+                _ = generate_results(
                     model=self.model,
                     device=device,
                     data_dir=self.config["data_dir"],
-                    run_name=self.config["model_config"]["name"],
+                    run_name=run_name,
+                    out_path=self.config["out_path"],
                     patient=p,
                     genes=genes,
                     meta_data_dir=self.config["meta_data_dir"],
-                    gene_data_filename=self.config["gene_data_filename"]
+                    gene_data_filename=self.config["gene_data_filename"],
+                    image_size=image_size,
                 )
-                """
-                # Log prediction vs. original histograms to W&B (and save an image)
-                log_patient_hist_from_csv(
-                    results_csv=csv_path,
-                    data_dir=self.config["data_dir"],
-                    patient=p,
-                    genes=genes,
-                    results_dir=results_dir
-                )
-                """
         if self.config.get("lxt"):
             # Delegate to dedicated LXT plotting function
             plot_lxt(self.model, self.config, run=self.wandb_run)
