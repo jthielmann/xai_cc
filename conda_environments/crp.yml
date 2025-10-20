@@ -1,4 +1,4 @@
-name: crp2
+name: crp
 channels:
   - bioconda
   - conda-forge
@@ -19,5 +19,3 @@ dependencies:
   - umap-learn
   - wandb
   - pandas<2.0.0 # required by anndata
-  - timm
-  - anndata

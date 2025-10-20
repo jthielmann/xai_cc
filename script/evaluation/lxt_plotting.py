@@ -1,6 +1,8 @@
 import itertools
 from typing import Optional, Tuple, List
 import os
+
+import numpy as np
 import pandas as pd
 
 import torch
@@ -140,6 +142,7 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
 
         if not heatmaps:
             continue
+        print('heatmaps.shape:', np.array(heatmaps).shape)
         grid_img = imgify(heatmaps, vmin=-1, vmax=1)
         last_img = grid_img
         if run is not None:
