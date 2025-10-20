@@ -136,7 +136,10 @@ def main() -> None:
             tags=cfg["tags"],
             config=wb_cfg
         )
+        # Preserve special fields that are not stored in run.config
+        # while still reflecting any values logged to W&B.
         cfg = dict(run.config)
+        cfg["run_name"] = run.name
     cfg = _prepare_cfg(cfg)
 
     EvalPipeline(cfg, run=run).run()
