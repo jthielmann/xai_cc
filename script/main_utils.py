@@ -133,8 +133,10 @@ def make_run_name_from_config(cfg: Dict[str, Any], parameter_names) -> str:
 
 
 def prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    cfg = dict(cfg); cfg.update(get_dataset_cfg(cfg))
+    cfg = dict(cfg)
+    cfg.update(get_dataset_cfg(cfg))
     out = "../models"
-    os.makedirs(out, exist_ok=True); ensure_free_disk_space(out)
+    os.makedirs(out, exist_ok=True)
+    ensure_free_disk_space(out)
     with open(os.path.join(out, "config"), "w") as f: yaml.safe_dump(cfg, f, sort_keys=False, default_flow_style=False, allow_unicode=True)
     return cfg

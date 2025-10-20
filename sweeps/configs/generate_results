@@ -1,9 +1,9 @@
-project: xai_minimal
-name: xai minimal example
+project: forward_to_csv
+name: forward_to_csv
 xai_pipeline: true
 
 
-run_name: xai_minimal
+run_name: forward_to_csv
 group: xai_minimal
 job_type: xai
 tags: [xai_minimal]
