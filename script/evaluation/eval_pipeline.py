@@ -92,7 +92,12 @@ class EvalPipeline:
             ])
 
             genes = self.config["model_config"]["genes"]
+<<<<<<< Updated upstream
             run_name = self.run_name
+=======
+            print(self.config)
+            run_name = self.config["run_name"]
+>>>>>>> Stashed changes
             image_size = int(self.config["model_config"].get("image_size", 224))
 
             device = auto_device(self.model)

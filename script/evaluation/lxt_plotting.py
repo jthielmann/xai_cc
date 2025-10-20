@@ -143,11 +143,12 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
         if not heatmaps:
             continue
         print('heatmaps.shape:', np.array(heatmaps).shape)
-        grid_img = imgify(heatmaps, vmin=-1, vmax=1)
-        last_img = grid_img
-        if run is not None:
-            run.log({f"lxt/heatmaps[conv={conv_gamma},lin={lin_gamma}]": wandb.Image(grid_img)}, commit=True)
-            any_logged = True
+        for heatmap in heatmaps:
+            grid_img = imgify(np.asarray(heatmap)[..., None], vmin=-1, vmax=1)
+            last_img = grid_img
+            if run is not None:
+                run.log({f"lxt/heatmaps[conv={conv_gamma},lin={lin_gamma}]": wandb.Image(grid_img)}, commit=True)
+                any_logged = True
 
     if last_img is None:
         return None
