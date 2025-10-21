@@ -21,7 +21,6 @@ gene_data_filename: gene_log1p.csv
 parameters:
   model_state_path:
     values:
-      - coad icms2up uni 3/enc-uni
       - coad icms2down uni 3/enc-uni
       - coad icms3up uni 3/enc-uni
       - coad icms3down uni 3/enc-uni
