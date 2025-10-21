@@ -189,14 +189,12 @@ class EvalPipeline:
             max_samples = self.config.get("umap_max_samples")
 
             if layer == "encoder":
-                if not getattr(self.model, "sae", None):
-                    raise ValueError("'umap_layer' set to 'encoder' requires an attached SAE (model.sae not found).")
+                # Use encoder features directly for UMAP when layer == "encoder".
                 with torch.no_grad():
                     for imgs in loader:
                         imgs = imgs.to(device)
                         z = self.model.encoder(imgs)
                         z = _as_2d(z)
-                        z = self.model.sae(z)
                         features.append(z.detach().cpu().numpy())
                         if max_samples is not None and sum(f.shape[0] for f in features) >= max_samples:
                             break

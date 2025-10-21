@@ -39,6 +39,13 @@ batch_size: 32
 num_workers: 2
 epochs: 10
 
+# Sparse autoencoder hyperparameters
+d_hidden: 512
+k: 32
+allow_negative_topk: false
+topk_by_magnitude: false
+lr: 0.001
+
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit
 crp_backend: zennit
