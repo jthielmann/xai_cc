@@ -31,6 +31,49 @@ class UMAPCallback(Callback):
         print("UMAP plots generated.")
 
 
+class WandbMetricCallback(Callback):
+    """Forward selected metrics to an existing W&B run handle.
+
+    This is useful when Lightning's WandbLogger is disabled, but we still want
+    to log key metrics (e.g., in nested pipelines).
+    """
+    def __init__(self, pipeline):
+        super().__init__()
+        self.pipeline = pipeline
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        run = getattr(self.pipeline, "wandb_run", None)
+        if run is None:
+            return
+        metrics = trainer.callback_metrics or {}
+        payload = {"epoch": trainer.current_epoch}
+        # Cosine similarity
+        # Reasoning: metrics can be tensors on CUDA, CPU, or metric wrapper types.
+        # We prefer detach().cpu().item() for robustness; if the object is already a plain
+        # Python scalar (or an unexpected type that doesn't support .detach()), we silently
+        # fall back to float(..). Silent except is acceptable because this path is best-effort
+        # logging only; failures here should never interrupt training, and the fallback covers
+        # common non-tensor cases without cluttering logs.
+        val_cos = metrics.get("val_cosine_sae")
+        if val_cos is not None:
+            try:
+                payload["val_cosine_sae"] = float(val_cos.detach().cpu().item()) if hasattr(val_cos, 'detach') else float(val_cos)
+            except Exception:
+                payload["val_cosine_sae"] = float(val_cos)
+        # Validation MSE (as logged by Lightning)
+        # Same casting rationale as above: handle tensors and non-tensors uniformly. Silent except
+        # is deliberate to avoid noisy logs on metrics conversion while ensuring metrics are logged
+        # when possible.
+        val_mse = metrics.get("val_MSELoss_sae")
+        if val_mse is not None:
+            try:
+                payload["val_MSELoss_sae"] = float(val_mse.detach().cpu().item()) if hasattr(val_mse, 'detach') else float(val_mse)
+            except Exception:
+                payload["val_MSELoss_sae"] = float(val_mse)
+        if len(payload) > 1:
+            run.log(payload)
+
+
 class SAETrainerPipeline:
     def __init__(self, config: dict, run: wandb.sdk.wandb_run.Run, *, encoder: nn.Module, gene_head: Optional[nn.Module] = None):
         self.config = config
@@ -70,14 +113,15 @@ class SAETrainerPipeline:
         if self.config.get("log_to_wandb"):
             logger = WandbLogger(project=self.config["project"], name=self.config["name"])
 
-        callbacks: list[Callback] = [UMAPCallback(self)]
+        callbacks: list[Callback] = [UMAPCallback(self), WandbMetricCallback(self)]
         
         if self.config.get("model_dir"):
             checkpoint_callback = ModelCheckpoint(
                 dirpath=self.config.get("model_dir"),
-                filename='{epoch}-{val_MSELoss_sae:.2f}',
+                filename='{epoch}-{val_cosine_sae:.4f}',
                 save_top_k=1,
-                monitor='val_MSELoss_sae'
+                monitor='val_cosine_sae',
+                mode='max'
             )
             callbacks.append(checkpoint_callback)
 

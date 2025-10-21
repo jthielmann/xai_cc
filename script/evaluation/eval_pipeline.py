@@ -274,21 +274,26 @@ class EvalPipeline:
             run_name = self.model_name
             image_size = int(self.config["model_config"].get("image_size", 224))
 
-            device = auto_device(self.model)
-
-            for p in patients:
-                _ = generate_results(
-                    model=self.model,
-                    device=device,
-                    data_dir=self.config["data_dir"],
-                    run_name=run_name,
-                    out_path=self.config["out_path"],
-                    patient=p,
-                    genes=genes,
-                    meta_data_dir=self.config["meta_data_dir"],
-                    gene_data_filename=self.config["gene_data_filename"],
-                    image_size=image_size,
-                )
+            # Early‑exit if the aggregate target already exists to avoid doing any forwards
+            results_dir = os.path.join(self.config["out_path"], run_name, "predictions")
+            results_csv = os.path.join(results_dir, "results.csv")
+            if os.path.exists(results_csv):
+                print(f"[EvalPipeline] predictions already exist at {results_csv}; skipping forward_to_csv.")
+            else:
+                device = auto_device(self.model)
+                for p in patients:
+                    _ = generate_results(
+                        model=self.model,
+                        device=device,
+                        data_dir=self.config["data_dir"],
+                        run_name=run_name,
+                        out_path=self.config["out_path"],
+                        patient=p,
+                        genes=genes,
+                        meta_data_dir=self.config["meta_data_dir"],
+                        gene_data_filename=self.config["gene_data_filename"],
+                        image_size=image_size,
+                    )
         if self.config.get("lxt"):
             # Delegate to dedicated LXT plotting function
             plot_lxt(self.model, self.config, run=self.wandb_run)

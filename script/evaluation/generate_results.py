@@ -50,8 +50,7 @@ def generate_results(
     results_dir = os.path.join(out_path, run_name, "predictions")
     os.makedirs(results_dir, exist_ok=True)
     filename = os.path.join(results_dir, "results.csv")
-    if os.path.exists(filename):
-        raise RuntimeError("output file already exists")
+    # If the file already exists, we append to it; otherwise create with header once
     write_header = not os.path.exists(filename)
     if write_header:
         pd.DataFrame(columns=["labels", "output", "path", "tile", "patient"]).to_csv(
