@@ -30,6 +30,15 @@ forward_to_csv: false
 lxt: false
 sae: false
 umap: true
+umap_layer: encoder
+
+# SAE/transforms essentials (set here so SAE or transform-dependent steps have what they need)
+encoder_type: uni
+image_size: 224
+freeze_encoder: true
+batch_size: 32
+num_workers: 2
+epochs: 10
 
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit

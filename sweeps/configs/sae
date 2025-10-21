@@ -30,6 +30,15 @@ forward_to_csv: false
 lxt: false
 sae: true
 
+# SAE trainer requirements (used by eval pipeline when 'sae: true')
+# Match your encoder to the trained model in '../models/<model_state_path>/config'
+encoder_type: uni
+image_size: 224
+freeze_encoder: true
+batch_size: 32
+num_workers: 2
+epochs: 10
+
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit
 crp_backend: zennit
