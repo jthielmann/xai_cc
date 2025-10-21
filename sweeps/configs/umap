@@ -1,16 +1,15 @@
-project: eval
-name: xai minimal example
+project: sae hello world training
+name: sae hello world training
 xai_pipeline: true
 
 
-run_name: eval
-group: eval
+run_name: sae hello world training
+group: xai
 job_type: xai
-tags: [eval]
+tags: [xai]
 debug: true
 log_to_wandb: true
 
-# Model configuration to inherit architecture/dataset details from
 dataset: coad
 meta_data_dir: metadata
 gene_data_filename: gene_log1p.csv
@@ -27,12 +26,10 @@ crp: false
 pcx: false
 diff: false
 scatter: false
-forward_to_csv: true
-
-# 'diff', 'patient', 'gene'
-# 'scatter', 'scatter_max_items', 'scatter_batch_size'
-# 'umap', 'umap_layer', 'umap_batch_size', 'umap_max_samples', 'umap_n_components', 'umap_sweep_params', 'umap_generate_image_plots'
-# 'sae', 'd_hidden', 'k', 'allow_negative_topk', 'topk_by_magnitude', 'lr', 'epochs', 'batch_size'
+forward_to_csv: false
+lxt: false
+sae: false
+umap: true
 
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit
@@ -41,3 +38,13 @@ pcx_backend: zennit
 
 # Optional overrides for specific visualizations
 patient: p007
+
+# LXT gamma parameters (single-run)
+lxt_conv_gamma: 0.25
+lxt_lin_gamma: 0.0
+
+# Optional: provide explicit tiles to visualize with LXT
+# If set, these paths are used instead of sampling from the dataset.
+# lxt_tilepaths:
+#   - /absolute/path/to/tile1.png
+#   - /absolute/path/to/tile2.png

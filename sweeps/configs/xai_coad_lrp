@@ -37,6 +37,7 @@ parameters:
     value: xai_out/lrp_few
 
   # XAI toggles
+  # 'lrp', 'lrp_backend'
   lrp:
     value: true
   crp:

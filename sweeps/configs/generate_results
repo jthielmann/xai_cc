@@ -30,6 +30,8 @@ scatter: false
 forward_to_csv: true
 lxt: false
 
+# 'forward_to_csv'
+
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit
 crp_backend: zennit

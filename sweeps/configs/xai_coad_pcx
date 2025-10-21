@@ -35,6 +35,7 @@ parameters:
   out_path: { value: xai_out/pcx_crp_full }
 
   # XAI toggles
+  # 'pcx', 'pcx_backend'
   lrp: { value: false }
   crp: { value: true }
   pcx: { value: true }

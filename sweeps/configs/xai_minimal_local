@@ -27,6 +27,11 @@ diff: false
 scatter: false
 forward_to_csv: true
 
+# 'diff', 'patient', 'gene'
+# 'scatter', 'scatter_max_items', 'scatter_batch_size'
+# 'umap', 'umap_layer', 'umap_batch_size', 'umap_max_samples', 'umap_n_components', 'umap_sweep_params', 'umap_generate_image_plots'
+# 'sae', 'd_hidden', 'k', 'allow_negative_topk', 'topk_by_magnitude', 'lr', 'epochs', 'batch_size'
+
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit
 crp_backend: zennit
@@ -34,4 +39,3 @@ pcx_backend: zennit
 
 # Optional overrides for specific visualizations
 patient: p007
-

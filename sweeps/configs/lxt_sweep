@@ -30,6 +30,8 @@ scatter: false
 forward_to_csv: false
 lxt: true
 
+# 'lxt', 'lxt_conv_gamma', 'lxt_lin_gamma', 'lxt_conv_gamma_list', 'lxt_lin_gamma_list', 'lxt_tilepaths'
+
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit
 crp_backend: zennit
