@@ -1,16 +1,15 @@
-project: eval
-name: xai minimal example
+project: sae hello world training
+name: sae hello world training
 xai_pipeline: true
 
 
-run_name: eval
-group: eval
+run_name: sae hello world training
+group: xai
 job_type: xai
-tags: [eval]
+tags: [xai]
 debug: true
 log_to_wandb: true
 
-# Model configuration to inherit architecture/dataset details from
 dataset: coad
 meta_data_dir: metadata
 gene_data_filename: gene_log1p.csv
@@ -28,7 +27,8 @@ pcx: false
 diff: false
 scatter: false
 forward_to_csv: false
-lxt: true
+lxt: false
+sae: true
 
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit

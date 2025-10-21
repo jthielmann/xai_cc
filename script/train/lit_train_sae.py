@@ -2,6 +2,8 @@ import os
 import lightning as L
 import numpy as np
 import torch
+import torch.nn as nn
+from typing import Optional, Tuple
 import wandb
 from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
@@ -13,7 +15,6 @@ from umap import UMAP
 
 from script.data_processing.lit_STDataModule import get_data_module
 from script.model.lit_sae import LitSparseAutoencoder
-from script.model.model_factory import get_encoder
 
 
 class UMAPCallback(Callback):
@@ -31,9 +32,13 @@ class UMAPCallback(Callback):
 
 
 class SAETrainerPipeline:
-    def __init__(self, config: dict, run: wandb.sdk.wandb_run.Run):
+    def __init__(self, config: dict, run: wandb.sdk.wandb_run.Run, *, encoder: nn.Module, gene_head: Optional[nn.Module] = None):
         self.config = config
         self.wandb_run = run
+        self.encoder = encoder
+        if self.encoder is None:
+            raise ValueError("SAETrainerPipeline requires a non-None encoder")
+        self.gene_head = gene_head
         self.sae = None
         self.data_module = get_data_module(self.config)
         self.data_module.setup("fit")
@@ -41,11 +46,8 @@ class SAETrainerPipeline:
         self.val_loader   = self.data_module.val_dataloader()
         self.test         = self.data_module.test_dataloader()
         self.trainer = None
-        self.encoder = None
 
     def setup(self):
-
-        self.encoder = get_encoder(self.config.get("encoder_type"))
 
         # Infer d_in from the encoder output if not specified
         if "d_in" not in self.config:
@@ -87,7 +89,7 @@ class SAETrainerPipeline:
             callbacks=callbacks,
         )
 
-    def run(self):
+    def run(self) -> Tuple[nn.Module, nn.Module]:
         if not self.trainer:
             self.setup()
 
@@ -95,6 +97,8 @@ class SAETrainerPipeline:
 
         if self.config.get("test_samples"):
             self.trainer.test(self.sae, datamodule=self.data_module)
+        # Return the encoder and the trained SAE module (not the Lightning wrapper)
+        return self.encoder, self.sae.sae
 
     def generate_umap(self, epoch=None):
         # --- 1. Feature Extraction ---

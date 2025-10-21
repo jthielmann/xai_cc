@@ -4,9 +4,9 @@ xai_pipeline: true
 
 
 run_name: forward_to_csv
-group: xai_minimal
+group: eval
 job_type: xai
-tags: [xai_minimal]
+tags: [eval]
 debug: true
 log_to_wandb: true
 

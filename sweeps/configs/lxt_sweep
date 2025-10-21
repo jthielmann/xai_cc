@@ -1,4 +1,4 @@
-project: xai_minimal
+project: eval
 name: xai minimal sweep (LXT)
 xai_pipeline: true
 
@@ -6,7 +6,7 @@ xai_pipeline: true
 run_name: xai_lxt_sweep
 group: xai_lxt
 job_type: xai
-tags: [xai_minimal, lxt_sweep]
+tags: [eval, lxt_sweep]
 debug: true
 log_to_wandb: true
 
@@ -20,7 +20,7 @@ encoder_state_path: null
 gene_head_state_path: null
 sae_state_path: null
 
-out_path: ../crp_out/xai_minimal_lxt_sweep
+out_path: ../crp_out/eval_lxt_sweep
 
 lrp: false
 crp: false

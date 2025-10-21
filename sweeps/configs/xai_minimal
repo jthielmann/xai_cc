@@ -1,12 +1,12 @@
-project: xai_minimal
+project: eval
 name: xai minimal example
 xai_pipeline: true
 
 
-run_name: xai_minimal
-group: xai_minimal
+run_name: eval
+group: eval
 job_type: xai
-tags: [xai_minimal]
+tags: [eval]
 debug: true
 log_to_wandb: true
 
@@ -20,7 +20,7 @@ encoder_state_path: null
 gene_head_state_path: null
 sae_state_path: null
 
-out_path: ../crp_out/xai_minimal
+out_path: ../crp_out/eval
 
 lrp: false
 crp: false
