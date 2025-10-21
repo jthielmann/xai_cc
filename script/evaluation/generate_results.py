@@ -46,7 +46,8 @@ def generate_results(
 
     model = model.to(device)
     model.eval()
-    results_dir = f"../{out_path}/{run_name}/predictions/"
+    # Respect the configured out_path verbatim; don't prepend "../" here
+    results_dir = os.path.join(out_path, run_name, "predictions")
     os.makedirs(results_dir, exist_ok=True)
     filename = os.path.join(results_dir, "results.csv")
     if os.path.exists(filename):
