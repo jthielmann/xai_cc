@@ -1,4 +1,4 @@
-project: sae hello world training
+project: sae 64
 name: sae hello world training
 xai_pipeline: true
 
@@ -41,7 +41,7 @@ epochs: 10
 
 # Sparse autoencoder hyperparameters
 d_hidden: 512
-k: 32
+k: 64
 allow_negative_topk: false
 topk_by_magnitude: false
 lr: 0.001
