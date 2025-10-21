@@ -7,7 +7,7 @@ run_name: sae hello world training
 group: xai
 job_type: xai
 tags: [xai]
-debug: true
+debug: false
 log_to_wandb: true
 
 dataset: coad
