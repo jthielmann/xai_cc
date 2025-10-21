@@ -111,9 +111,17 @@ def _setup_model_config(config_name:str):
     return config
 
 
-def main() -> None:
-    args = parse_args()
-    raw_cfg = parse_yaml_config(args.config)
+def _sanitize_token(s: str) -> str:
+    return (
+        str(s)
+        .replace("\\", "/")
+        .rstrip("/")
+        .replace("/", "__")
+        .replace(" ", "_")
+    )[:128]
+
+
+def _run_single(raw_cfg: Dict[str, Any]) -> None:
     cfg = _build_cfg(raw_cfg)
     if not bool(cfg.get("xai_pipeline", False)):
         raise ValueError("Config must set 'xai_pipeline: true' when using script/eval_main.py")
@@ -123,7 +131,6 @@ def main() -> None:
 
     run = None
     if bool(cfg.get("log_to_wandb")):
-        # Enforce required W&B identity parameters
         for key in ("run_name", "group", "job_type", "tags"):
             if key not in cfg:
                 raise ValueError(f"Missing required parameter '{key}' in config")
@@ -135,10 +142,9 @@ def main() -> None:
             group=cfg["group"],
             job_type=cfg["job_type"],
             tags=cfg["tags"],
-            config=wb_cfg
+            config=wb_cfg,
         )
-        # Merge back W&B-config values without losing our explicit run_name
-        cfg = dict(cfg)  # start from original cfg as source of truth
+        cfg = dict(cfg)
         cfg.update(dict(run.config))
         if original_run_name is not None:
             cfg["run_name"] = original_run_name
@@ -148,6 +154,27 @@ def main() -> None:
 
     if run:
         run.finish()
+
+
+def main() -> None:
+    args = parse_args()
+    raw_cfg = parse_yaml_config(args.config)
+
+    # Detect sweep-style lists for model_state_path and expand into multiple runs.
+    ms_param = read_config_parameter(raw_cfg, "model_state_path")
+    if isinstance(ms_param, list):
+        base_run_name = raw_cfg.get("run_name") or "forward_to_csv"
+        for ms in ms_param:
+            per_cfg = dict(raw_cfg)
+            per_cfg["model_state_path"] = ms
+            # Ensure a unique, informative run_name for each model
+            token = _sanitize_token(ms)
+            per_cfg["run_name"] = f"{base_run_name}__{token}"[:128]
+            _run_single(per_cfg)
+        return
+
+    # Fallback to single-run behavior
+    _run_single(raw_cfg)
 
 
 if __name__ == "__main__":
