@@ -350,8 +350,16 @@ def get_base_dataset(
     edges_result: Dict[str, np.ndarray] = dict(edges_lookup) if return_edges else edges_lookup
 
     if lds_smoothing_csv is not None:
-        gene2weights = load_gene_weights(lds_smoothing_csv, genes=genes, weight_transform=weight_transform)
+        lgw_res = load_gene_weights(
+            lds_smoothing_csv, genes=genes, weight_transform=weight_transform, return_scales=True
+        )
+        gene2weights, calib_by_gene = lgw_res
         gene2weights = make_weights(gene2weights, clip_max=weight_clamp, r1=20, r2=100)
+        # Apply per-gene calibration scale AFTER make_weights normalization
+        for g in list(gene2weights.keys()):
+            scale = float(calib_by_gene.get(g, 1.0))
+            if scale != 1.0:
+                gene2weights[g] = gene2weights[g] * scale
 
         # Collect weight columns first to avoid DataFrame fragmentation from many inserts
         weight_cols: Dict[str, np.ndarray] = {}
@@ -668,10 +676,16 @@ def get_base_dataset_single_file(
             genes = list(candidates)
 
         if genes:
-            gene2weights = load_gene_weights(
-                lds_smoothing_csv, genes=genes, weight_transform=weight_transform
+            lgw_res = load_gene_weights(
+                lds_smoothing_csv, genes=genes, weight_transform=weight_transform, return_scales=True
             )
+            gene2weights, calib_by_gene = lgw_res
             gene2weights = make_weights(gene2weights, clip_max=weight_clamp, r1=20, r2=100)
+            # Apply per-gene calibration after normalization
+            for g in list(gene2weights.keys()):
+                scale = float(calib_by_gene.get(g, 1.0))
+                if scale != 1.0:
+                    gene2weights[g] = gene2weights[g] * scale
 
             # Batch-add weight columns to avoid fragmentation
             weight_cols: Dict[str, np.ndarray] = {}
@@ -898,7 +912,8 @@ def load_gene_weights(
     eps: float = 1e-12,
     renorm_mean1: bool = True,
     clip_max: Optional[float] = None,
-) -> Dict[str, torch.Tensor]:
+    return_scales: bool = False,
+) -> Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Dict[str, float]]]:
     csv_path = Path(csv_path)
     if not csv_path.is_file():
         raise FileNotFoundError(csv_path)
@@ -927,6 +942,7 @@ def load_gene_weights(
     best_rows = df.loc[idx].set_index("gene")
 
     gene2weights: Dict[str, torch.Tensor] = {}
+    calib_by_gene: Dict[str, float] = {}
     for gene in genes:
         if gene not in best_rows.index:
             continue  # skip genes not present in CSV
@@ -956,7 +972,17 @@ def load_gene_weights(
             w = w / torch.clamp(w.mean(), min=eps)
 
         gene2weights[gene] = w
+        # Optional per-gene calibration scale if present in CSV (e.g., from tune_wmse_weights)
+        if "calibration_scale" in best_rows.columns:
+            try:
+                calib_by_gene[gene] = float(row["calibration_scale"])
+            except Exception:
+                calib_by_gene[gene] = 1.0
+        else:
+            calib_by_gene[gene] = 1.0
 
+    if return_scales:
+        return gene2weights, calib_by_gene
     return gene2weights
 
 

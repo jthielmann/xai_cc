@@ -102,8 +102,9 @@ def map_to_dataset_and_summarize(
     else:
         raise ValueError("split must be one of: train, val, test")
 
-    gdf_name = gene_data_filename or cfg.get("gene_data_filename", "gene_data.csv")
-    meta_dir = meta_data_dir or cfg.get("meta_data_dir", "/meta_data/")
+    # Hardcode dataset metadata layout for now
+    gdf_name = "gene_log1p.csv"
+    meta_dir = "metadata"
 
     # Use genes from the weights CSV to avoid ambiguity and satisfy lds_smoothing_csv requirements
     genes_csv = list(map(str, df_weights["gene"].tolist()))
@@ -160,10 +161,11 @@ def maybe_generate_plots(
     from script.data_processing.lds import LDS, LDSParams
 
     cfg = get_dataset_cfg({"dataset": dataset_name, "debug": False})
+    # Hardcode dataset metadata layout for now
     ds = label_dataset(
         cfg["data_dir"], cfg["train_samples"],
-        gene_data_filename or cfg.get("gene_data_filename", "gene_data.csv"),
-        meta_data_dir=meta_data_dir or cfg.get("meta_data_dir", "/meta_data/"),
+        "gene_log1p.csv",
+        meta_data_dir="metadata",
     )
     lds = LDS(kernel_type="gaussian", dataset=ds)
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)

@@ -60,6 +60,8 @@ def _attach_and_measure_means(
     max_rows: int | None,
     meta_data_dir: str | None,
     gene_data_filename: str | None,
+    data_dir_override: str | None = None,
+    samples_override: List[str] | None = None,
 ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """Map weights to dataset and compute per-gene dataset-level mean weight.
 
@@ -70,8 +72,10 @@ def _attach_and_measure_means(
     from script.data_processing.data_loader import get_dataset
 
     cfg = get_dataset_cfg({"dataset": dataset, "debug": False})
-    data_dir = cfg["data_dir"]
-    if split == "train":
+    data_dir = data_dir_override or cfg["data_dir"]
+    if samples_override is not None:
+        samples = list(samples_override)
+    elif split == "train":
         samples = cfg["train_samples"]
     elif split == "val":
         samples = cfg["val_samples"]
@@ -85,8 +89,9 @@ def _attach_and_measure_means(
     dfw = _load_weights_df(weights_csv)
     genes = list(map(str, dfw["gene"].tolist()))
 
-    gdf_name = gene_data_filename or cfg.get("gene_data_filename", "gene_data.csv")
-    meta_dir = meta_data_dir or cfg.get("meta_data_dir", "/meta_data/")
+    # Hardcode dataset metadata layout for now
+    gdf_name = "gene_log1p.csv"
+    meta_dir = "metadata"
 
     ds = get_dataset(
         data_dir=data_dir,
@@ -152,6 +157,8 @@ def _plot_overlays(
     gene_data_filename: str | None,
     plot_out: str | Path,
     n: int,
+    data_dir_override: str | None = None,
+    samples_override: List[str] | None = None,
 ):
     """Plot empirical vs original WMSE vs tuned WMSE for up to n genes."""
     from script.configs.dataset_config import get_dataset_cfg
@@ -159,10 +166,13 @@ def _plot_overlays(
     from script.data_processing.lds import LDS, LDSParams
 
     cfg = get_dataset_cfg({"dataset": dataset, "debug": False})
+    data_dir = data_dir_override or cfg["data_dir"]
+    samples = samples_override or cfg["train_samples"]
+    # Hardcode dataset metadata layout for now
     ds = label_dataset(
-        cfg["data_dir"], cfg["train_samples"],
-        gene_data_filename or cfg.get("gene_data_filename", "gene_data.csv"),
-        meta_data_dir=meta_data_dir or cfg.get("meta_data_dir", "/meta_data/"),
+        data_dir, samples,
+        "gene_log1p.csv",
+        meta_data_dir="metadata",
     )
     lds = LDS(kernel_type="gaussian", dataset=ds)
     out_dir = Path(plot_out)
@@ -216,6 +226,8 @@ def main():
     ap.add_argument("--max-rows", type=int, default=None, help="Limit rows when building dataset")
     ap.add_argument("--meta-data-dir", default=None, help="Override meta_data_dir token (optional)")
     ap.add_argument("--gene-data-filename", default=None, help="Override gene_data_filename (optional)")
+    ap.add_argument("--data-dir", default=None, help="Override dataset root directory (optional)")
+    ap.add_argument("--samples", nargs="*", default=None, help="Optional explicit list of sample IDs to use for split")
     ap.add_argument("--out-csv", default=None, help="Where to write tuned CSV (default adds _tuned.csv next to input)")
     ap.add_argument("--plot-out", default=None, help="Directory to write empirical vs wmse vs tuned plots")
     ap.add_argument("--plot-n", type=int, default=0, help="Number of genes to plot")
@@ -235,6 +247,8 @@ def main():
             max_rows=args.max_rows,
             meta_data_dir=args.meta_data_dir,
             gene_data_filename=args.gene_data_filename,
+            data_dir_override=args.data_dir,
+            samples_override=args.samples,
         )
     except Exception as e:
         _eprint(f"[ERROR] dataset mapping failed: {e}")
@@ -256,7 +270,9 @@ def main():
                            meta_data_dir=args.meta_data_dir,
                            gene_data_filename=args.gene_data_filename,
                            plot_out=args.plot_out,
-                           n=args.plot_n)
+                           n=args.plot_n,
+                           data_dir_override=args.data_dir,
+                           samples_override=args.samples)
         except Exception as e:
             _eprint(f"[WARN] plot generation failed: {e}")
 
