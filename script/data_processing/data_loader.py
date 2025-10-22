@@ -812,12 +812,16 @@ class NCT_CRC_Dataset(torch.utils.data.Dataset):
 def get_label_dataframe(data_dir, samples, meta_data_dir="/meta_data/", max_len=None, gene_data_filename="gene_data.csv"):
     datasets = []  # Use a list to store DataFrames
 
-    for i in samples:
-        file_path = data_dir + i + meta_data_dir + gene_data_filename
+    # Normalize meta_data_dir to a single path token (no leading/trailing slashes)
+    meta_dir = str(meta_data_dir).strip("/")
+
+    for patient in samples:
+        # Build path robustly: <data_dir>/<patient>/<meta_dir>/<gene_data_filename>
+        file_path = os.path.join(data_dir, patient, meta_dir, gene_data_filename)
         # Read the CSV file, excluding the 'tile' column because it is not needed for label smoothing
         st_dataset_patient = pd.read_csv(file_path, nrows=max_len, usecols=lambda col: col != "tile")
         datasets.append(st_dataset_patient)
-    st_dataset = pd.concat(datasets)
+    st_dataset = pd.concat(datasets, ignore_index=True)
     return st_dataset
 
 

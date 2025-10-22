@@ -167,7 +167,7 @@
 - **Per‑gene Pearson + MSE tracking:**
   - During validation, compute both per‑gene Pearson `r_g` and per‑gene MSE `mse_g`.
   - Track two “bests”:
-    - Best by training criterion (e.g. MSE/WMSE/Huber) with its epoch.
+    - Best by training criterion (e.g. MSE/WMSE) with its epoch.
     - Best by mean Pearson (independent of loss) with its epoch.
 - **CSV outputs at `on_train_end`:**
   - Append to `../results/all.csv` and per‑project results, including per‑gene `pearson_<gene>` and `mse_<gene>` columns and the best epochs.

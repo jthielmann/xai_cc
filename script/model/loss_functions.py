@@ -146,62 +146,6 @@ class MultiGeneWeightedMSE(nn.Module):
             return loss.to(pred.dtype), stats
         return result.to(pred.dtype)
 
-
-class WeightedHuberLoss(MultiGeneWeightedMSE):
-    """Weighted Huber (smooth L1) loss sharing normalization semantics with WMSE."""
-
-    def __init__(
-        self,
-        delta: float = 1.0,
-        eps: float = 1e-8,
-        reduction: str = "mean",
-        normalize: str = "global",
-        clip_weights: Optional[float] = None,
-        check_finite: bool = True,
-    ):
-        super().__init__(
-            eps=eps,
-            reduction=reduction,
-            normalize=normalize,
-            clip_weights=clip_weights,
-            check_finite=check_finite,
-        )
-        self.delta = float(delta)
-
-    def forward(
-        self,
-        pred: torch.Tensor,
-        target: torch.Tensor,
-        sample_weights: torch.Tensor,
-        *,
-        return_stats: bool = False,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Dict[str, torch.Tensor]]]:
-        if sample_weights is None:
-            raise ValueError("sample_weights must be provided for WeightedHuberLoss.")
-
-        pred, target = self._ensure_shapes(pred, target)
-        ref_shape = pred.shape
-        w = torch.as_tensor(sample_weights, device=pred.device, dtype=pred.dtype)
-        w = self._broadcast_weights(w, ref_shape)
-        w = self._normalize_weights(w)
-
-        pred32 = pred.to(torch.float32)
-        target32 = target.to(torch.float32)
-        w32 = w.to(torch.float32)
-        diff = pred32 - target32
-        abs_diff = diff.abs()
-
-        delta_tensor = torch.tensor(self.delta, device=diff.device, dtype=diff.dtype)
-        quadratic = torch.minimum(abs_diff, delta_tensor)
-        linear = abs_diff - quadratic
-        per_elem = (0.5 * quadratic.pow(2) + delta_tensor * linear) * w32
-        result = self._finalize_loss(per_elem, w32, return_stats=return_stats)
-        if isinstance(result, tuple):
-            loss, stats = result
-            return loss.to(pred.dtype), stats
-        return result.to(pred.dtype)
-
-
 class PearsonCorrLoss(nn.Module):
     def __init__(self, dim: int = 0, eps: float = 1e-8, reduction: str = "mean"):
         super().__init__()

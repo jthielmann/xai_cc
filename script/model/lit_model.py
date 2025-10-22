@@ -29,7 +29,7 @@ from script.model.lit_model_helpers import (
     select_per_gene_values,
 )
 from script.evaluation.scatter_plotting import make_scatter_figure
-from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss, WeightedHuberLoss
+from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss
 from script.model.model_factory import get_encoder, infer_encoder_out_dim
 
 import logging
@@ -129,16 +129,6 @@ class GeneExpressionRegressor(L.LightningModule):
                 "check_finite": bool(self.config.get("wmse_check_finite", True)),
             }
             self.loss_fn = MultiGeneWeightedMSE(**wmse_kwargs)
-        elif loss_switch in {"weighted huber", "wmse huber", "weighted smoothl1"}:
-            huber_kwargs = {
-                "delta": float(self.config.get("weighted_huber_delta", 1.0)),
-                "eps": float(self.config.get("wmse_eps", 1e-8)),
-                "reduction": str(self.config.get("wmse_reduction", "mean")).lower(),
-                "normalize": str(self.config.get("wmse_normalize", "global")).lower(),
-                "clip_weights": self.config.get("wmse_clip_weights"),
-                "check_finite": bool(self.config.get("wmse_check_finite", True)),
-            }
-            self.loss_fn = WeightedHuberLoss(**huber_kwargs)
         elif loss_switch == "pearson":
             self.loss_fn = PearsonCorrLoss()
         else:
@@ -357,7 +347,7 @@ class GeneExpressionRegressor(L.LightningModule):
 
         bs = y.size(0)
         loss_switch = self.config["loss_fn_switch"].lower()
-        if loss_switch in {"wmse", "weighted mse", "weighted huber", "wmse huber", "weighted smoothl1"} and stats:
+        if loss_switch in {"wmse", "weighted mse"} and stats:
             if "numerator" in stats and "denominator" in stats:
                 self.val_loss_total += float(stats["numerator"])
                 self.val_loss_weight_sum += float(stats["denominator"])
@@ -431,16 +421,6 @@ class GeneExpressionRegressor(L.LightningModule):
                     "Expected (x, y, w) batch for WMSE. Ensure 'lds_weight_csv' is set and DataModule passes weights."
                 )
             x, y, w = batch
-        elif loss_switch in {"weighted huber", "wmse huber", "weighted smoothl1"}:
-            if not (isinstance(batch, (list, tuple)) and len(batch) in {2, 3}):
-                raise ValueError(
-                    "Expected (x, y, w) or (x, y) batch for weighted Huber. Provide weights or switch to unweighted loss."
-                )
-            if len(batch) == 3:
-                x, y, w = batch
-            else:
-                x, y = batch
-                w = None
         else:
             # Plain MSE or other losses generally expect (x, y) only, but we tolerate (x, y, w) by ignoring w.
             if isinstance(batch, (list, tuple)):
@@ -476,12 +456,6 @@ class GeneExpressionRegressor(L.LightningModule):
         if loss_switch in {"wmse", "weighted mse"}:
             if w is None:
                 raise ValueError("Missing sample weights for WMSE.")
-            result = self.loss_fn(y_hat, y, w, return_stats=True)
-            if isinstance(result, tuple):
-                loss, stats = result
-            else:
-                loss, stats = result, None
-        elif loss_switch in {"weighted huber", "wmse huber", "weighted smoothl1"}:
             result = self.loss_fn(y_hat, y, w, return_stats=True)
             if isinstance(result, tuple):
                 loss, stats = result
@@ -567,7 +541,7 @@ class GeneExpressionRegressor(L.LightningModule):
             self.log_dict({f"pearson_{g}": r for g, r in zip(self.genes, per_gene_r)}, on_epoch=True)
 
         loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
-        if loss_switch in {"wmse", "weighted mse", "weighted huber", "wmse huber", "weighted smoothl1"}:
+        if loss_switch in {"wmse", "weighted mse"}:
             denom_base = getattr(self.loss_fn, "eps", 1e-8)
             denominator = max(self.val_loss_weight_sum, denom_base)
             val_loss_mean = float(self.val_loss_total / denominator) if denominator > 0 else float("nan")

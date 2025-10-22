@@ -32,7 +32,7 @@ class STDataModule(L.LightningDataModule):
 
         # Determine if WMSE is selected; only then attach LDS weights
         loss_switch = str(self.cfg.get('loss_fn_switch', '')).lower()
-        wmse_selected = loss_switch in {"wmse", "weighted mse", "weighted huber", "wmse huber", "weighted smoothl1"}
+        wmse_selected = loss_switch in {"wmse", "weighted mse"}
         if wmse_selected and not self.cfg.get('lds_weight_csv'):
             raise ValueError("WMSE selected but 'lds_weight_csv' is not set in config.")
         lds_csv = self.cfg.get('lds_weight_csv', None) if wmse_selected else None
