@@ -353,6 +353,8 @@ def get_base_dataset(
         gene2weights = load_gene_weights(lds_smoothing_csv, genes=genes, weight_transform=weight_transform)
         gene2weights = make_weights(gene2weights, clip_max=weight_clamp, r1=20, r2=100)
 
+        # Collect weight columns first to avoid DataFrame fragmentation from many inserts
+        weight_cols: Dict[str, np.ndarray] = {}
         for g in genes:
             if g not in gene2weights:
                 raise ValueError(f"No weights for {g}")
@@ -374,7 +376,11 @@ def get_base_dataset(
             if edges.shape[0] != K + 1:
                 raise ValueError(f"Edges for gene '{g}' must have length {K + 1}, got {edges.shape[0]}.")
             idx = np.clip(np.searchsorted(edges, vals, side="right") - 1, 0, K - 1)
-            base_df[f"{g}_lds_w"] = w_vec[idx]
+            weight_cols[f"{g}_lds_w"] = w_vec[idx]
+
+        if weight_cols:
+            wdf = pd.DataFrame(weight_cols, index=base_df.index)
+            base_df = pd.concat([base_df, wdf], axis=1)
 
     if bins > 1 and genes:
         gene_values = base_df[genes[0]]
@@ -667,6 +673,8 @@ def get_base_dataset_single_file(
             )
             gene2weights = make_weights(gene2weights, clip_max=weight_clamp, r1=20, r2=100)
 
+            # Batch-add weight columns to avoid fragmentation
+            weight_cols: Dict[str, np.ndarray] = {}
             for g in genes:
                 if g not in gene2weights:
                     raise ValueError(f"No weights for {g}")
@@ -689,7 +697,11 @@ def get_base_dataset_single_file(
                         f"Edges for gene '{g}' must have length {K + 1}, got {edges.shape[0]}."
                     )
                 idx = np.clip(np.searchsorted(edges, vals, side="right") - 1, 0, K - 1)
-                df[f"{g}_lds_w"] = w_vec[idx]
+                weight_cols[f"{g}_lds_w"] = w_vec[idx]
+
+            if weight_cols:
+                wdf = pd.DataFrame(weight_cols, index=df.index)
+                df = pd.concat([df, wdf], axis=1)
 
     # Optional bin oversampling based on the first gene
     if bins > 1 and genes:

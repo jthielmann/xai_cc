@@ -27,6 +27,7 @@ from typing import List, Tuple
 
 import pandas as pd
 import torch
+import numpy as np
 
 
 def _eprint(*a, **k):
@@ -169,7 +170,7 @@ def maybe_generate_plots(
 
     for _, r in df_weights.head(max(0, int(n))).iterrows():
         g = str(r["gene"]); bins = int(r["bins"]); ks = int(r["kernel_size"]); sigma = float(r["sigma"])
-        w = json.loads(r["weights_json"]) 
+        w = np.asarray(json.loads(r["weights_json"]), dtype=float)
         lds.compare_plot(g, LDSParams(bins=bins, kernel_size=ks, sigma=sigma), w, out)
     print(f"[OK] wrote overlay plots to {out}")
 
