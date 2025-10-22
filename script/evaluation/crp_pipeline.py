@@ -73,6 +73,8 @@ class EvalPipeline:
                 transforms=eval_tf,
                 samples=None,
                 only_inputs=False,
+                meta_data_dir=self.config.get("meta_data_dir", "/meta_data/"),
+                gene_data_filename=self.config.get("gene_data_filename", "gene_data.csv"),
             )
             n = min(10, len(ds))
             ds_subset = Subset(ds, list(range(n)))
