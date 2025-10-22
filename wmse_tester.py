@@ -104,9 +104,12 @@ def map_to_dataset_and_summarize(
     gdf_name = gene_data_filename or cfg.get("gene_data_filename", "gene_data.csv")
     meta_dir = meta_data_dir or cfg.get("meta_data_dir", "/meta_data/")
 
+    # Use genes from the weights CSV to avoid ambiguity and satisfy lds_smoothing_csv requirements
+    genes_csv = list(map(str, df_weights["gene"].tolist()))
+
     ds = get_dataset(
         data_dir=data_dir,
-        genes=None,
+        genes=genes_csv,
         samples=samples,
         gene_data_filename=gdf_name,
         meta_data_dir=meta_dir,
@@ -114,19 +117,18 @@ def map_to_dataset_and_summarize(
         max_len=max_rows,
     )
     df = ds.df
-    # Infer numeric columns as genes (exclude helper columns)
-    numeric_cols = [
-        c for c in df.columns
-        if c not in {"tile", "patient"} and pd.api.types.is_numeric_dtype(df[c]) and not str(c).endswith("_lds_w")
-    ]
-    want_genes = set(map(str, df_weights["gene"].tolist()))
-    missing_in_data = [g for g in want_genes if g not in numeric_cols]
+    want_genes = set(genes_csv)
+    # Report any genes present in weights CSV but not in the dataset frame
+    missing_in_data = [g for g in want_genes if g not in df.columns]
     if missing_in_data:
         _eprint(f"[WARN] {len(missing_in_data)} genes from CSV not found in dataset columns (first 10): {missing_in_data[:10]}")
 
     stats = []
     problems: List[Tuple[str, str]] = []
-    for g in numeric_cols:
+    for g in sorted(want_genes):
+        if g not in df.columns:
+            problems.append((g, "missing_gene_column"))
+            continue
         wcol = f"{g}_lds_w"
         if wcol not in df.columns:
             problems.append((g, "missing_weight_col"))
@@ -241,4 +243,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
