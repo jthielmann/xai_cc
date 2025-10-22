@@ -89,7 +89,10 @@ def main() -> None:
     # Auto-detect gene columns: take all numeric columns from the label dataframe
     df = ds.dataframe
     import pandas as pd  # local import to avoid global dependency at module import
-    auto_genes = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    auto_genes = [
+        c for c in df.columns
+        if pd.api.types.is_numeric_dtype(df[c]) and not str(c).startswith("Unnamed")
+    ]
     if not auto_genes:
         raise RuntimeError("No numeric gene columns found in the dataset for WMSE weight generation.")
 
@@ -97,6 +100,9 @@ def main() -> None:
     lds = LDS(kernel_type=str(kernel_type), dataset=ds)
     df = grid_search_lds(lds, list(auto_genes), list(bin_space), list(ks_space), list(sigma_space))
     df_out = df.drop(columns=["weights"]).copy() if "weights" in df.columns else df
+    # Extra safety: drop any accidental rows with genes like 'Unnamed:*'
+    if "gene" in df_out.columns:
+        df_out = df_out[df_out["gene"].astype(str).str.startswith("Unnamed") == False]
     df_out.to_csv(out_csv, index=False)
 
     print(f"Saved LDS/WMSE weights to: {out_csv}")

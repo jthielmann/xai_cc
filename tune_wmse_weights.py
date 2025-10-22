@@ -49,6 +49,8 @@ def _load_weights_df(path: str | Path) -> pd.DataFrame:
     missing = required - set(df.columns)
     if missing:
         raise RuntimeError(f"Missing required columns in CSV: {sorted(missing)}")
+    # Drop any spurious rows with gene labels like 'Unnamed: 0'
+    df = df[df["gene"].astype(str).str.startswith("Unnamed") == False].copy()
     return df
 
 

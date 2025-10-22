@@ -75,7 +75,9 @@ class STDataset(Dataset):
             # auto-detect genes = all numeric columns except 'tile' and *_lds_w
             candidates = []
             for c in self.df.columns:
-                if c == "tile" or str(c).endswith("_lds_w"):
+                if c == "tile" or c == "patient" or str(c).endswith("_lds_w"):
+                    continue
+                if str(c).startswith("Unnamed"):
                     continue
                 # keep only numeric columns
                 if pd.api.types.is_numeric_dtype(self.df[c]):
@@ -846,6 +848,10 @@ def get_label_dataframe(data_dir, samples, meta_data_dir="/meta_data/", max_len=
         file_path = os.path.join(data_dir, patient, meta_dir, gene_data_filename)
         # Read the CSV file, excluding the 'tile' column because it is not needed for label smoothing
         st_dataset_patient = pd.read_csv(file_path, nrows=max_len, usecols=lambda col: col != "tile")
+        # Drop accidental index columns like 'Unnamed: 0'
+        bad = [c for c in st_dataset_patient.columns if str(c).startswith("Unnamed") or str(c).strip() == ""]
+        if bad:
+            st_dataset_patient = st_dataset_patient.drop(columns=bad)
         datasets.append(st_dataset_patient)
     st_dataset = pd.concat(datasets, ignore_index=True)
     return st_dataset
