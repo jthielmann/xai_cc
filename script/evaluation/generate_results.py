@@ -10,19 +10,6 @@ import matplotlib.pyplot as plt
 import wandb
 
 
-class _WithTileName(Dataset):
-    def __init__(self, base_ds):
-        self.base = base_ds
-
-    def __len__(self):
-        return len(self.base)
-
-    def __getitem__(self, idx):
-        img, y = self.base[idx]
-        name = self.base.get_tilename(idx)
-        return img, y, name
-
-
 def generate_results(
     model,
     device,
@@ -67,7 +54,7 @@ def generate_results(
         )
 
     eval_tf = get_eval_transforms(image_size=int(image_size))
-    base_ds = get_dataset(
+    ds = get_dataset(
         data_dir=data_dir,
         genes=genes,
         transforms=eval_tf,
@@ -77,7 +64,6 @@ def generate_results(
         gene_data_filename=gene_data_filename,
         return_patient_and_tilepath=True
     )
-    loader = _WithTileName(base_ds)
 
     outputs_by_gene = {g: None for g in genes}
     handles = []
@@ -90,10 +76,10 @@ def generate_results(
     for g in genes:
         handles.append(getattr(model, g).register_forward_hook(make_hook(g)))
 
-    i, j = 0, len(loader)
+    i, j = 0, len(ds)
     results = []
     with torch.no_grad():
-        for images, labels, name in loader:
+        for images, labels, patient, name in ds:
             if i % 10 == 0:
                 print(i, "/", j)
             i += 1
