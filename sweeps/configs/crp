@@ -21,6 +21,7 @@ gene_head_state_path: null
 sae_state_path: null
 
 eval_dir: ../evaluation
+target_layer: encoder
 
 lrp: false
 crp: true

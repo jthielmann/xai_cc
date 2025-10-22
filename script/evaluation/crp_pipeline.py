@@ -80,7 +80,17 @@ class EvalPipeline:
             ds_subset = Subset(ds, list(range(n)))
             out_dir = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "crp")
             os.makedirs(out_dir, exist_ok=True)
+            # Require explicit target_layer in config (no default). Allow special value 'encoder'.
+            target_layer = self.config.get("target_layer")
+            if not target_layer or not isinstance(target_layer, str):
+                raise ValueError("CRP requires 'target_layer' in config (e.g., 'encoder' or a dot-path layer name).")
+            # Validate target_layer exists on model
+            if target_layer != "encoder":
+                names = {n for n, _ in self.model.named_modules()}
+                if target_layer not in names:
+                    raise KeyError(f"target_layer '{target_layer}' not found in model named_modules().")
+
             if crp_backend == "custom":
-                plot_crp(self.model, ds_subset, run=self.wandb_run, out_dir=out_dir)
+                plot_crp(self.model, ds_subset, run=self.wandb_run, out_dir=out_dir, layer_name=target_layer)
             else:
-                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=n, out_dir=out_dir)
+                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=n, out_dir=out_dir, layer_name=target_layer)
