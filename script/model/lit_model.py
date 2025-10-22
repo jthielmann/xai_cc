@@ -507,21 +507,13 @@ class GeneExpressionRegressor(L.LightningModule):
         return False
 
     def _save_outputs_csv(self, y_pred: torch.Tensor, y_true: torch.Tensor, split: str) -> None:
-        """Persist predictions and targets to CSV next to best_model.pth.
-
-        - Overwrites the file on each call (used for val on new best).
-        - Columns: pred_{gene}, target_{gene} for each gene in order.
-        """
-        # Resolve base directory next to best_model.pth
         best_path = self.best_model_path or os.path.join(self.config.get("out_path", "."), "best_model.pth")
         base_dir = os.path.dirname(best_path) if best_path else self.config.get("out_path", ".")
         os.makedirs(base_dir, exist_ok=True)
 
-        # Ensure tensors on CPU and as numpy
         yp = torch.as_tensor(y_pred).detach().cpu().float().numpy()
         yt = torch.as_tensor(y_true).detach().cpu().float().numpy()
 
-        # Build a wide dataframe with named columns
         pred_cols = [f"pred_{g}" for g in self.genes]
         targ_cols = [f"target_{g}" for g in self.genes]
         data = {name: yp[:, i] for i, name in enumerate(pred_cols)}

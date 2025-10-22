@@ -61,12 +61,14 @@ class STDataset(Dataset):
         use_weights: bool = False,
         return_floats: bool = False,
         gene_list_index = -1,
-        split_genes_by = 100
+        split_genes_by = 100,
+        return_patient_and_tilepath = True
     ):
         self.df = df.reset_index(drop=True)
         self.transforms = image_transforms
         self.inputs_only = inputs_only
         self.return_floats = return_floats
+        self.return_patient_and_tilepath = return_patient_and_tilepath
 
         # Determine gene columns explicitly (stable order)
         if genes is None:
@@ -115,6 +117,9 @@ class STDataset(Dataset):
     def get_tilename(self, index: int) -> str:
         return self.df.iloc[index]["tile"]
 
+    def get_patient(self, index: int) -> str:
+        return self.df.iloc[index]["patient"]
+
     def _load_image(self, path: str):
         img = Image.open(path).convert("RGB")
         if self.transforms:
@@ -150,7 +155,11 @@ class STDataset(Dataset):
         if self.use_weights:
             w = self._row_to_weights(row)  # torch.float32, shape (G,)
             return img, y, w
-        return img, y
+
+        if self.return_patient_and_tilepath:
+            return img, y, self.get_patient(index), self.get_tilename(index)
+        else:
+            return img, y
 
 
 class STDatasetUMAP(STDataset):
@@ -453,6 +462,7 @@ def get_dataset(
     lds_bin_edge_clip: float = 0.0,
     precomputed_bin_edges: Dict[str, np.ndarray] | None = None,
     return_edges: bool = False,
+    return_patient_and_tilepath=False
 ):
     print(data_dir)
     if samples is None:
@@ -487,7 +497,8 @@ def get_dataset(
         inputs_only=only_inputs,
         genes=genes,
         use_weights=lds_smoothing_csv is not None,
-        return_floats=return_floats
+        return_floats=return_floats,
+        return_patient_and_tilepath=return_patient_and_tilepath
     )
     if return_edges:
         return ds, edges

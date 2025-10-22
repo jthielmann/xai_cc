@@ -52,8 +52,17 @@ def generate_results(
     filename = os.path.join(results_dir, "results.csv")
     # If the file already exists, we append to it; otherwise create with header once
     write_header = not os.path.exists(filename)
+    columns = []
+    for g in genes:
+        columns.append(f"label_{g}")
+        columns.append(f"pred_{g}")
+    columns.append("path")
+    columns.append("tile")
+    columns.append("patient")
+
+
     if write_header:
-        pd.DataFrame(columns=["labels", "output", "path", "tile", "patient"]).to_csv(
+        pd.DataFrame(columns=columns).to_csv(
             filename, index=False
         )
 
@@ -65,7 +74,8 @@ def generate_results(
         samples=[patient],
         only_inputs=False,
         meta_data_dir=meta_data_dir,
-        gene_data_filename=gene_data_filename
+        gene_data_filename=gene_data_filename,
+        return_patient_and_tilepath=True
     )
     loader = _WithTileName(base_ds)
 
@@ -105,14 +115,15 @@ def generate_results(
                 for g in genes
             ]
             results.append(out_list)
+            row_dict = {}
+            for idx, g in enumerate(genes):
+                row_dict[f"label_{g}"] = lbl_list[idx]
+                row_dict[f"pred_{g}"] = out_list[idx]
 
-            row = pd.DataFrame({
-                "labels": [lbl_list],
-                "output": [out_list],
-                "path":   [name],
-                "tile":   [os.path.basename(name)],
-                "patient": patient
-            })
+            row_dict["path"] = name
+            row_dict["tile"] = os.path.basename(name)
+            row_dict["patient"] = patient
+            row = pd.DataFrame(row_dict)
             row.to_csv(filename, index=False, mode="a", header=False)
 
     for h in handles:
