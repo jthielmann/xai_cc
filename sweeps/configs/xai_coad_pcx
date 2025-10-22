@@ -32,7 +32,7 @@ parameters:
   model_state_path:  { value: /abs/path/to/your/out/coad_run/best_model.pth }
 
   # Output directory
-  out_path: { value: xai_out/pcx_crp_full }
+  eval_dir: { value: ../evaluation }
 
   # XAI toggles
   # 'pcx', 'pcx_backend'

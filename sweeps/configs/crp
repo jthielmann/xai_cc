@@ -1,9 +1,9 @@
-project: forward_to_csv
-name: forward_to_csv
+project: eval
+name: crp example
 xai_pipeline: true
 
 
-run_name: forward_to_csv
+run_name: eval
 group: eval
 job_type: xai
 tags: [eval]
@@ -23,14 +23,14 @@ sae_state_path: null
 eval_dir: ../evaluation
 
 lrp: false
-crp: false
+crp: true
 pcx: false
 diff: false
 scatter: false
-forward_to_csv: true
+forward_to_csv: false
 lxt: false
 
-# 'forward_to_csv'
+# 'lxt', 'lxt_conv_gamma', 'lxt_lin_gamma', 'lxt_conv_gamma_list', 'lxt_lin_gamma_list', 'lxt_tilepaths'
 
 # XAI backends (choose: zennit|custom)
 lrp_backend: zennit

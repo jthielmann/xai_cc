@@ -19,7 +19,7 @@ encoder_state_path: null
 gene_head_state_path: null
 sae_state_path: null
 
-out_path: ../crp_out/eval
+eval_dir: ../evaluation
 
 lrp: false
 crp: false

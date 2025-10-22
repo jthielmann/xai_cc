@@ -37,7 +37,7 @@ class EvalPipeline:
         self.model = self._load_model()
         # Derive a folder name from provided state paths (preferred over run_name)
         self.model_name = self._derive_model_name()
-        os.makedirs(os.path.join(self.config["out_path"], self.model_name), exist_ok=True)
+        os.makedirs(os.path.join(self.config["eval_path"], self.model_name), exist_ok=True)
 
     def _load_model(self):
         state_dicts = collect_state_dicts(self.config)
@@ -102,21 +102,21 @@ class EvalPipeline:
             # For now, PCX uses the zennit/CRP-based pipeline in cluster_functions.
             # The backend flag is accepted for parity and future extension.
             cfg_pcx = dict(self.config)
-            cfg_pcx["out_path"] = os.path.join(self.config["out_path"], self.model_name, "pcx")
+            cfg_pcx["out_path"] = os.path.join(self.config["eval_path"], self.model_name, "pcx")
             plot_pcx(self.model, cfg_pcx, run=self.wandb_run)
         if self.config.get("diff"):
             plot_triptych_from_merge(
                 self.config["data_dir"],
                 self.config["patient"],
                 self.config["gene"],
-                os.path.join(self.config["out_path"], self.model_name, "diff"),
+                os.path.join(self.config["eval_path"], self.model_name, "diff"),
                 is_online=bool(self.wandb_run),
                 wandb_run=self.wandb_run,
             )
 
         if self.config.get("scatter"):
             cfg_scatter = dict(self.config)
-            cfg_scatter["out_path"] = os.path.join(self.config["out_path"], self.model_name, "scatter")
+            cfg_scatter["out_path"] = os.path.join(self.config["eval_path"], self.model_name, "scatter")
             plot_scatter(
                 cfg_scatter,
                 self.model,
@@ -136,7 +136,7 @@ class EvalPipeline:
             cfg_sae["train_sae"] = True
             cfg_sae["log_to_wandb"] = False
             # Case-specific output directory for SAE; follow case pattern (use out_path)
-            sae_dir = os.path.join(self.config["out_path"], self.model_name, "sae")
+            sae_dir = os.path.join(self.config["eval_path"], self.model_name, "sae")
             os.makedirs(sae_dir, exist_ok=True)
             cfg_sae["out_path"] = sae_dir
             cfg_sae["model_dir"] = sae_dir  # keep checkpoints enabled
@@ -149,7 +149,7 @@ class EvalPipeline:
             if not layer or not isinstance(layer, str):
                 raise ValueError("'umap' is enabled, but 'umap_layer' is missing. Provide a dot-path layer name.")
 
-            umap_dir = os.path.join(self.config["out_path"], self.model_name, "umap")
+            umap_dir = os.path.join(self.config["eval_path"], self.model_name, "umap")
             os.makedirs(umap_dir, exist_ok=True)
 
             # Build eval loader (inputs only)
@@ -275,7 +275,7 @@ class EvalPipeline:
             image_size = int(self.config["model_config"].get("image_size", 224))
 
             # Early‑exit if the aggregate target already exists to avoid doing any forwards
-            results_dir = os.path.join(self.config["out_path"], run_name, "predictions")
+            results_dir = os.path.join(self.config["eval_path"], run_name, "predictions")
             results_csv = os.path.join(results_dir, "results.csv")
             if os.path.exists(results_csv):
                 print(f"[EvalPipeline] predictions already exist at {results_csv}; skipping forward_to_csv.")
@@ -287,7 +287,7 @@ class EvalPipeline:
                         device=device,
                         data_dir=self.config["data_dir"],
                         run_name=run_name,
-                        out_path=self.config["out_path"],
+                        out_path=self.config["eval_path"],
                         patient=p,
                         genes=genes,
                         meta_data_dir=self.config["meta_data_dir"],
@@ -295,5 +295,9 @@ class EvalPipeline:
                         image_size=image_size,
                     )
         if self.config.get("lxt"):
-            # Delegate to dedicated LXT plotting function
-            plot_lxt(self.model, self.config, run=self.wandb_run)
+            # Delegate to LXT plotting and save under out_path/<model_name>/lxt
+            cfg_lxt = dict(self.config)
+            lxt_dir = os.path.join(self.config["eval_path"], self.model_name, "lxt")
+            os.makedirs(lxt_dir, exist_ok=True)
+            cfg_lxt["out_path"] = lxt_dir
+            plot_lxt(self.model, cfg_lxt, run=self.wandb_run)

@@ -114,6 +114,9 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
 
     any_logged = False
     last_img = None
+    out_dir = config.get("out_path")
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     # Evaluate all gamma pairs; one grid per pair for clarity
     for conv_gamma, lin_gamma in itertools.product(conv_list, lin_list):
         heatmaps = []
@@ -143,12 +146,17 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
         if not heatmaps:
             continue
         print('heatmaps.shape:', np.array(heatmaps).shape)
-        for heatmap in heatmaps:
+        for i, heatmap in enumerate(heatmaps):
             grid_img = imgify(np.asarray(heatmap)[..., None], vmin=-1, vmax=1)
             last_img = grid_img
             if run is not None:
                 run.log({f"lxt/heatmaps[conv={conv_gamma},lin={lin_gamma}]": wandb.Image(grid_img)}, commit=True)
                 any_logged = True
+            if out_dir:
+                fn = f"lxt_conv={conv_gamma}_lin={lin_gamma}_{i:04d}.png"
+                safe_fn = fn.replace(" ", "_")
+                grid_img.save(os.path.join(out_dir, safe_fn))
+
 
     if last_img is None:
         return None

@@ -38,14 +38,25 @@ def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
 
 
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Merge dataset defaults and ensure output directory exists, persist config."""
+    """Merge dataset defaults and ensure output directory exists, persist config.
+
+    Supports new 'eval_dir'/'eval_path' base. Back-compat: mirrors into 'out_path'.
+    """
     merged = dict(cfg)
     merged.update(get_dataset_cfg(merged))
-    out_root = merged.get("out_path") or merged.get("sweep_dir") or merged.get("model_dir") or "./xai_out"
-    os.makedirs(out_root, exist_ok=True)
-    ensure_free_disk_space(out_root)
+
+    # Prefer explicit eval_path/eval_dir over legacy out_path for evaluation outputs
+    eval_path = merged.get("eval_path") or merged.get("eval_dir") or merged.get("out_path")
+    if not eval_path:
+        eval_path = merged.get("sweep_dir") or merged.get("model_dir") or "./xai_out"
+    merged["eval_path"] = eval_path
+    # Maintain legacy 'out_path' for downstream helpers that expect it
+    merged["out_path"] = eval_path
+
+    os.makedirs(eval_path, exist_ok=True)
+    ensure_free_disk_space(eval_path)
     dump_cfg = {k: v for k, v in merged.items() if not str(k).startswith("_")}
-    with open(os.path.join(out_root, "config"), "w") as handle:
+    with open(os.path.join(eval_path, "config"), "w") as handle:
         yaml.safe_dump(dump_cfg, handle, sort_keys=False, default_flow_style=False, allow_unicode=True)
     return merged
 

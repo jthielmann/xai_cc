@@ -1,4 +1,5 @@
 import torch
+import os
 import wandb
 import torch.nn as nn
 import numpy as np
@@ -34,7 +35,7 @@ def _get_composite_and_layer(encoder):
 from typing import Optional
 
 
-def plot_crp_zennit(model, dataset, run=None, layer_name: Optional[str] = None, max_items: Optional[int] = None):
+def plot_crp_zennit(model, dataset, run=None, layer_name: Optional[str] = None, max_items: Optional[int] = None, out_dir: Optional[str] = None):
     """CRP using zennit-crp CondAttribution on a small dataset subset."""
     model.eval()
     device = next(model.parameters()).device
@@ -44,6 +45,8 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: Optional[str] = None, 
 
     attribution = CondAttribution(model)
     count = 0
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     for i in range(len(dataset)):
         if max_items is not None and count >= max_items:
             break
@@ -62,6 +65,9 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: Optional[str] = None, 
         img = zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
         if run is not None:
             run.log({f"crp/attribution[{i}]": wandb.Image(img)})
+        if out_dir:
+            fn = f"crp_{i:04d}.png"
+            img.save(os.path.join(out_dir, fn))
         count += 1
 
 
@@ -224,6 +230,7 @@ def plot_crp(
     top_k: int = 5,
     abs_norm: bool = True,
     cmap: str = "bwr",
+    out_dir: Optional[str] = None,
 ):
     """
     CRP-like conditional attribution reimplemented with pure PyTorch hooks.
@@ -237,6 +244,8 @@ def plot_crp(
     heatmaps_list, selected_channels_list, targets_list = [], [], []
     all_images = []
 
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     for i in range(len(dataset)):
         # Load one datapoint and prepare input tensor, unsqueeze if dim == 3
         x, label = _prepare_single_input(model, dataset[i])
@@ -257,6 +266,10 @@ def plot_crp(
         selected_channels_list.append(selected_channels[0].detach().cpu())
         targets_list.append(targets_idx.detach().cpu())
         all_images.extend(images)
+        if out_dir:
+            for j, im in enumerate(images):
+                im.save(os.path.join(out_dir, f"crp_custom_{i:04d}_{j:02d}.png"))
+
 
     same_shape = all(h.shape == heatmaps_list[0].shape for h in heatmaps_list)
     heatmaps = torch.stack(heatmaps_list, dim=0) if same_shape else heatmaps_list

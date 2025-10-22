@@ -33,7 +33,7 @@ parameters:
     value: /abs/path/to/your/out/coad_run/best_model.pth
 
   # Output directory
-  out_path:
+  eval_dir: { value: ../evaluation }
     value: xai_out/lrp_few
 
   # XAI toggles

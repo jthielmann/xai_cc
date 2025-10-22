@@ -9,6 +9,8 @@ from script.data_processing.data_loader import get_dataset_from_config
 from script.data_processing.image_transforms import get_transforms
 from torch.utils.data import DataLoader, Subset
 from script.main_utils import prepare_cfg
+import hashlib
+import os
 from script.evaluation.eval_helpers import (
     collect_state_dicts
 )
@@ -19,10 +21,45 @@ class EvalPipeline:
         self.wandb_run = run
         self.model_src = self.config.get("model_config_path")
         self.model = self._load_model()
+        # Derive a model-based folder name and ensure base exists
+        self.model_name = self._derive_model_name()
+        base = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name)
+        os.makedirs(base, exist_ok=True)
 
     def _load_model(self):
         state_dicts = collect_state_dicts(self.config)
         return load_lit_regressor(self.config["model_config"], state_dicts)
+
+    def _derive_model_name(self) -> str:
+        def _rel_model_path(p: str) -> str:
+            s = str(p).replace("\\", "/")
+            if "/models/" in s:
+                s = s.split("/models/", 1)[1]
+            elif s.startswith("../models/"):
+                s = s[len("../models/"):]
+            return s.strip("/")
+
+        parts = []
+        ms = self.config.get("model_state_path")
+        enc = self.config.get("encoder_state_path")
+        head = self.config.get("gene_head_state_path")
+        if ms:
+            parts.append(_rel_model_path(ms))
+        else:
+            if enc:
+                parts.append(_rel_model_path(enc))
+            if head:
+                parts.append(_rel_model_path(head))
+
+        name = os.path.join(*parts) if parts else "eval"
+        MAX_LEN = 160
+        if len(name) <= MAX_LEN:
+            return name
+        tokens = [t for t in name.split("/") if t]
+        tail = "/".join(tokens[-2:]) if len(tokens) >= 2 else tokens[-1]
+        h = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+        short = f"{tail}/__{h}"
+        return short[:MAX_LEN]
 
     def run(self):
         if self.config.get("crp"):
@@ -39,7 +76,9 @@ class EvalPipeline:
             )
             n = min(10, len(ds))
             ds_subset = Subset(ds, list(range(n)))
+            out_dir = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "crp")
+            os.makedirs(out_dir, exist_ok=True)
             if crp_backend == "custom":
-                plot_crp(self.model, ds_subset, run=self.wandb_run)
+                plot_crp(self.model, ds_subset, run=self.wandb_run, out_dir=out_dir)
             else:
-                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=n)
+                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=n, out_dir=out_dir)
