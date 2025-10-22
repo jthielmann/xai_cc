@@ -1,0 +1,25 @@
+project: wmse
+name: wmse_weights
+
+# Generate LDS/WMSE weights (no model inference). Runs script/wsme_main.py
+
+# Dataset selection; sample splits are derived from script/configs/dataset_config.py
+dataset: coad
+meta_data_dir: metadata
+gene_data_filename: gene_log1p.csv
+
+# Output directory for the generated weights CSV (best_smoothings.csv)
+weight_dir: ../weights/wmse/coad
+
+# Genes to process
+genes: [RUBCNL]
+
+# LDS search space and kernel
+kernel_type: gaussian   # one of: gaussian, silverman, triang, laplace
+bin_space: [40, 60, 80, 100]
+ks_space: [7, 9, 11]
+sigma_space: [0.8, 1.0, 1.2, 1.6]
+
+# Optional: debugging switch (propagated to dataset split selection semantics)
+debug: false
+
