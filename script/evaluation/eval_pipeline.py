@@ -82,10 +82,10 @@ class EvalPipeline:
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
                 genes=None,
-                split="val",
+                split="test",
                 debug=debug,
                 transforms=eval_tf,
-                samples=None,
+                samples=self.config.get("test_samples"),
                 only_inputs=True,
                 meta_data_dir=self.config["model_config"]["meta_data_dir"],
                 gene_data_filename=self.config["model_config"]["gene_data_filename"]
@@ -158,10 +158,10 @@ class EvalPipeline:
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
                 genes=None,
-                split="val",
+                split="test",
                 debug=debug,
                 transforms=eval_tf,
-                samples=None,
+                samples=self.config.get("test_samples"),
                 only_inputs=True,
                 meta_data_dir=self.config["model_config"]["meta_data_dir"],
                 gene_data_filename=self.config["model_config"]["gene_data_filename"]
@@ -266,9 +266,8 @@ class EvalPipeline:
                     plt.close()
 
         if self.config.get("forward_to_csv"):
-            patients = sorted([
-                f.name for f in os.scandir(self.config["data_dir"]) if f.is_dir() and not f.name.startswith((".", "_"))
-            ])
+            # Use explicit test_samples; dataset config populates this when absent.
+            patients = list(self.config.get("test_samples", []))
 
             genes = self.config["model_config"]["genes"]
             run_name = self.model_name

@@ -1,3 +1,4 @@
+import os
 import yaml
 from typing import Any, Dict, List
 
@@ -85,14 +86,31 @@ def get_dataset_cfg(cfg: dict) -> Dict[str, Any]:
         )
 
     if has_train and has_val:
-        train_all: List[str] = cfg["train_samples"]
-        val_all:   List[str] = cfg["val_samples"]
+        train_all: List[str] = list(cfg["train_samples"])  # type: ignore[index]
+        val_all:   List[str] = list(cfg["val_samples"])    # type: ignore[index]
     else:  # neither key present – fall back to defaults in DATASETS
-        train_all = ds.pop("train_samples_all")
-        val_all   = ds.pop("val_samples_all")
+        train_all = list(ds.pop("train_samples_all"))
+        val_all   = list(ds.pop("val_samples_all"))
 
     ds["train_samples"] = train_all[:1] if debug else train_all
     ds["val_samples"]   = val_all[:1]   if debug else val_all
+
+    # Derive test samples
+    if "test_samples" in cfg:
+        test_all: List[str] = list(cfg["test_samples"])  # explicit override
+    elif "test_samples_all" in ds:
+        test_all = list(ds.pop("test_samples_all"))
+    else:
+        # Compute as all patient dirs minus train+val
+        data_dir = ds["data_dir"]
+        all_dirs = [
+            f.name for f in os.scandir(data_dir)
+            if f.is_dir() and not f.name.startswith((".", "_"))
+        ]
+        exclude = set(train_all) | set(val_all)
+        test_all = sorted([d for d in all_dirs if d not in exclude])
+
+    ds["test_samples"] = test_all[:1] if debug else test_all
 
     return ds
 

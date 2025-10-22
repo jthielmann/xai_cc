@@ -62,50 +62,22 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
     monkey_patch(vision_transformer, verbose=True)
     monkey_patch_zennit(verbose=True)
 
-    # Build a dataset
+    # Build a dataset from test split, honoring optional test_samples
     eval_tf = get_transforms(config["model_config"], split="eval")
     debug = bool(config.get("debug", False))
 
-    # Prefer explicit list of tile paths if provided
-    tilepaths = None
-    for key in ("lxt_tilepaths", "lxt_tile_paths", "tilepaths", "tile_paths"):
-        if key in config and config[key]:
-            tilepaths = list(config[key])  # type: ignore[assignment]
-            break
-
-    if tilepaths is not None:
-        # Normalize and filter non-existing paths with a gentle warning
-        normalized: List[str] = []
-        missing: List[str] = []
-        for p in tilepaths:
-            sp = os.path.expanduser(str(p))
-            if os.path.exists(sp):
-                normalized.append(sp)
-            else:
-                missing.append(sp)
-        if missing and run is not None:
-            run.log({"lxt/warnings": f"Skipping {len(missing)} missing tiles"}, commit=False)
-        if not normalized:
-            raise ValueError("No valid tile paths found in 'lxt_tilepaths'.")
-
-        df = pd.DataFrame({"tile": normalized})
-        ds = STDataset(df, image_transforms=eval_tf, inputs_only=True, genes=[])
-        loader = DataLoader(ds, batch_size=1, shuffle=False)
-    else:
-        # Fall back to a small sample from the configured validation split
-        ds = get_dataset_from_config(
-            dataset_name=config["model_config"]["dataset"],
-            genes=None,
-            split="val",
-            debug=debug,
-            transforms=eval_tf,
-            samples=None,
-            only_inputs=True,
-            meta_data_dir=config["model_config"].get("meta_data_dir", "/meta_data/"),
-            gene_data_filename=config["model_config"].get("gene_data_filename", "gene_data.csv"),
-        )
-        n = min(10, len(ds))
-        loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
+    ds = get_dataset_from_config(
+        dataset_name=config["model_config"]["dataset"],
+        genes=None,
+        split="test",
+        debug=debug,
+        transforms=eval_tf,
+        samples=config.get("test_samples"),
+        only_inputs=True,
+        meta_data_dir=config["model_config"].get("meta_data_dir", "/meta_data/"),
+        gene_data_filename=config["model_config"].get("gene_data_filename", "gene_data.csv"),
+    )
+    loader = DataLoader(ds, batch_size=1, shuffle=False)
 
     device = next(model.parameters()).device
     model.eval()

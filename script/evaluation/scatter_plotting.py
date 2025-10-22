@@ -42,17 +42,17 @@ def plot_scatter(config, model, wandb_run=None):
     # Resolve device from model parameters
     device = next(model.parameters()).device
 
-    # Load validation dataset with eval transforms, including targets
+    # Load test dataset with eval transforms, including targets
     eval_tf = get_transforms(config, split="eval")
     genes = config.get("genes")
 
     ds = get_dataset_from_config(
         dataset_name=config["dataset"],
         genes=genes,
-        split="val",
+        split="test",
         debug=bool(config.get("debug", False)),
         transforms=eval_tf,
-        samples=None,
+        samples=config.get("test_samples"),
         only_inputs=False,
         max_len=100 if config["debug"] else None
     )
@@ -104,7 +104,7 @@ def plot_scatter(config, model, wandb_run=None):
         loss_g = float(torch.mean((yi - ti) ** 2))
         r_val = float(per_gene_r[gi]) if gi < len(per_gene_r) else float("nan")
 
-        title_parts = ["val", str(gene)]
+        title_parts = ["test", str(gene)]
         if appendix:
             title_parts.append(appendix)
         fig = make_scatter_figure(
