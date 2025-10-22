@@ -109,7 +109,7 @@ def generate_results(
             row_dict["path"] = name
             row_dict["tile"] = os.path.basename(name)
             row_dict["patient"] = patient
-            row = pd.DataFrame(row_dict)
+            row = pd.DataFrame([row_dict])
             row.to_csv(filename, index=False, mode="a", header=False)
 
     for h in handles:
