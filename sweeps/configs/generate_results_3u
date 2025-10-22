@@ -1,0 +1,51 @@
+project: forward_to_csv
+name: icms3up
+xai_pipeline: true
+
+
+run_name: forward_to_csv
+group: eval
+job_type: xai
+tags: [eval]
+debug: true
+log_to_wandb: true
+
+# Model configuration to inherit architecture/dataset details from
+dataset: coad
+meta_data_dir: metadata
+gene_data_filename: gene_log1p.csv
+# Set one of the following to point at trained weights
+model_state_path: coad icms3up uni 3/enc-uni
+encoder_state_path: null
+gene_head_state_path: null
+sae_state_path: null
+
+eval_dir: ../evaluation
+
+lrp: false
+crp: false
+pcx: false
+diff: false
+scatter: false
+forward_to_csv: true
+lxt: false
+
+# 'forward_to_csv'
+
+# XAI backends (choose: zennit|custom)
+lrp_backend: zennit
+crp_backend: zennit
+pcx_backend: zennit
+
+# Optional overrides for specific visualizations
+patient: p007
+
+# LXT gamma parameters (single-run)
+lxt_conv_gamma: 0.25
+lxt_lin_gamma: 0.0
+
+# Optional: provide explicit tiles to visualize with LXT
+# If set, these paths are used instead of sampling from the dataset.
+# lxt_tilepaths:
+#   - /absolute/path/to/tile1.png
+#   - /absolute/path/to/tile2.png
