@@ -45,9 +45,9 @@ parameters:
   encoder_type:
     values: [uni]
   freeze_encoder:
-    value: true
+    values: true
   encoder_finetune_layers:
-    value: [5, 0]
+    values: [5, 0]                # when frozen, unfreeze last n groups; ignored if freeze=false
 
   # Head
   one_linear_out_layer:
