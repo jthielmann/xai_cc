@@ -43,7 +43,16 @@ def get_full_gene_list(cfg: Dict[str, Any]) -> List[str]:
     inter = None
     for i, path in enumerate(files):
         df = pd.read_csv(path, nrows=1)
-        cols = [c for c in df.columns if c != "tile" and not str(c).endswith("_lds_w") and pd.api.types.is_numeric_dtype(df[c])]
+        # Only consider numeric gene columns; never include unnamed/index-like columns
+        cols = []
+        for c in df.columns:
+            s = str(c)
+            if c == "tile" or s.endswith("_lds_w"):
+                continue
+            if s.strip() == "" or s.strip().lower().startswith("unnamed"):
+                continue
+            if pd.api.types.is_numeric_dtype(df[c]):
+                cols.append(c)
         s = set(cols)
         if i == 0:
             order = cols[:]

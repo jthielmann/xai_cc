@@ -18,6 +18,14 @@ import numpy as np
 import pandas as pd
 
 
+def _is_unnamed_column(name: Any) -> bool:
+    try:
+        s = str(name).strip().lower()
+    except Exception:
+        s = str(name)
+    return s.startswith("unnamed") or s == ""
+
+
 def seed_basic(seed=DEFAULT_RANDOM_SEED):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -77,7 +85,7 @@ class STDataset(Dataset):
             for c in self.df.columns:
                 if c == "tile" or c == "patient" or str(c).endswith("_lds_w"):
                     continue
-                if str(c).startswith("Unnamed"):
+                if _is_unnamed_column(c):
                     continue
                 # keep only numeric columns
                 if pd.api.types.is_numeric_dtype(self.df[c]):
@@ -97,6 +105,10 @@ class STDataset(Dataset):
                     candidates = chunks[gene_list_index]
             self.genes = list(candidates)
         else:
+            # Sanitize provided list: drop any accidental Unnamed/blank entries
+            genes = [g for g in genes if not _is_unnamed_column(g)]
+            if not genes:
+                raise ValueError("No valid gene columns after filtering out unnamed/blank entries.")
             missing = [g for g in genes if g not in self.df.columns]
             if missing:
                 raise ValueError(f"Genes missing in DataFrame: {missing}")
@@ -336,6 +348,11 @@ def get_base_dataset(
         raise RuntimeError(f"lds_smoothing_csv is not None ({lds_smoothing_csv}) and genes is None")
     # normalize meta data directory token (support 'meta_data', '/meta_data', 'meta_data/')
     meta_dir = meta_data_dir.strip("/")
+    # Safety: never include unnamed/index columns as genes; sanitize early
+    if genes is not None:
+        genes = [g for g in genes if not _is_unnamed_column(g)]
+        if not genes:
+            raise ValueError("Provided gene list contains only unnamed/blank columns; nothing to use.")
     columns_of_interest = ["tile"] + (genes or []) if genes else None
     dfs = []
 
@@ -347,6 +364,10 @@ def get_base_dataset(
         dfs.append(df)
 
     base_df = pd.concat(dfs, ignore_index=True)
+
+    # Safety (again): ensure genes are sanitized
+    if genes is not None:
+        genes = [g for g in genes if not _is_unnamed_column(g)]
 
     edges_lookup = precomputed_edges or {}
     edges_result: Dict[str, np.ndarray] = dict(edges_lookup) if return_edges else edges_lookup
@@ -365,9 +386,15 @@ def get_base_dataset(
 
         # Collect weight columns first to avoid DataFrame fragmentation from many inserts
         weight_cols: Dict[str, np.ndarray] = {}
+        # Ensure all requested (sanitized) genes exist in the DataFrame and have weights
+        valid_genes = []
         for g in genes:
+            if g not in base_df.columns:
+                raise ValueError(f"Gene column missing from DataFrame: {g}")
             if g not in gene2weights:
                 raise ValueError(f"No weights for {g}")
+            valid_genes.append(g)
+        for g in valid_genes:
             w_vec = gene2weights[g]  # (K,)
             K = len(w_vec)
 
@@ -642,6 +669,12 @@ def get_base_dataset_single_file(
 
     df = pd.read_csv(csv_path, nrows=max_len)
 
+    # Safety: never include unnamed/index-like columns as genes if provided
+    if genes is not None:
+        genes = [g for g in genes if not _is_unnamed_column(g)]
+        if not genes:
+            raise ValueError("Provided gene list contains only unnamed/blank columns; nothing to use.")
+
     # Optional row filtering by split column
     if split is not None:
         if split_col_name not in df.columns:
@@ -673,6 +706,8 @@ def get_base_dataset_single_file(
             for c in df.columns:
                 if c == "tile" or str(c).endswith("_lds_w") or c == "patient":
                     continue
+                if _is_unnamed_column(c):
+                    continue
                 if pd.api.types.is_numeric_dtype(df[c]):
                     candidates.append(c)
             genes = list(candidates)
@@ -691,9 +726,15 @@ def get_base_dataset_single_file(
 
             # Batch-add weight columns to avoid fragmentation
             weight_cols: Dict[str, np.ndarray] = {}
+            # Ensure all requested (sanitized) genes exist and have weights
+            valid_genes = []
             for g in genes:
+                if g not in df.columns:
+                    raise ValueError(f"Gene column missing from DataFrame: {g}")
                 if g not in gene2weights:
                     raise ValueError(f"No weights for {g}")
+                valid_genes.append(g)
+            for g in valid_genes:
                 w_vec = gene2weights[g]
                 K = len(w_vec)
                 vals = df[g].to_numpy()
@@ -849,7 +890,7 @@ def get_label_dataframe(data_dir, samples, meta_data_dir="/meta_data/", max_len=
         # Read the CSV file, excluding the 'tile' column because it is not needed for label smoothing
         st_dataset_patient = pd.read_csv(file_path, nrows=max_len, usecols=lambda col: col != "tile")
         # Drop accidental index columns like 'Unnamed: 0'
-        bad = [c for c in st_dataset_patient.columns if str(c).startswith("Unnamed") or str(c).strip() == ""]
+        bad = [c for c in st_dataset_patient.columns if _is_unnamed_column(c)]
         if bad:
             st_dataset_patient = st_dataset_patient.drop(columns=bad)
         datasets.append(st_dataset_patient)
@@ -888,6 +929,10 @@ def load_best_smoothing(csv_path: str | Path, gene: str) -> Dict[str, Any]:
         raise FileNotFoundError(csv_path)
 
     df = pd.read_csv(csv_path)
+    # Drop any rows with unnamed/blank gene labels to avoid accidental matches
+    if "gene" in df.columns:
+        mask = df["gene"].astype(str).str.strip().str.lower().str.startswith("unnamed")
+        df = df.loc[~mask].copy()
     sub = df[df["gene"] == gene]
     if sub.empty:
         raise KeyError(f"Gene {gene!r} not present in {csv_path}")
@@ -925,6 +970,10 @@ def load_gene_weights(
         raise FileNotFoundError(csv_path)
 
     df = pd.read_csv(csv_path)
+    # Drop any rows with unnamed/blank gene labels to avoid accidental matches
+    if "gene" in df.columns:
+        mask = df["gene"].astype(str).str.strip().str.lower().str.startswith("unnamed")
+        df = df.loc[~mask].copy()
 
     # restrict to requested genes early
     df = df[df["gene"].isin(genes)].copy()
