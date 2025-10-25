@@ -57,18 +57,17 @@ source ~/.bashrc
 # conda activate xai-crp
 
 # Resolve Python on the compute node
-PY_BIN_NODE="$(command -v python3 || command -v python)"
-if [[ -z "$PY_BIN_NODE" ]]; then
+PY_BIN_NODE="\$(command -v python3 || command -v python)"
+if [[ -z "\$PY_BIN_NODE" ]]; then
   echo "Error: Python interpreter not found on compute node PATH." >&2
   exit 127
 fi
 
 srun --ntasks=1 --gpus=1 --cpus-per-gpu=4 \
-     "$PY_BIN_NODE" "${REPO_ROOT}/script/xai_main.py" --config "${cfg_abs}"
+     "\$PY_BIN_NODE" "${REPO_ROOT}/script/xai_main.py" --config "${cfg_abs}"
 EOF
 
 chmod +x "$tmp"
 echo "Submitting XAI job '${name}' with config: ${cfg_abs}"
 sbatch "$tmp"
 rm -f "$tmp"
-

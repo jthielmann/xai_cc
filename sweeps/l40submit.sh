@@ -57,14 +57,14 @@ lit
 script
 
 # Resolve Python on the compute node
-PY_BIN="$(command -v python3 || command -v python)"
-if [[ -z "$PY_BIN" ]]; then
+PY_BIN="\$(command -v python3 || command -v python)"
+if [[ -z "\$PY_BIN" ]]; then
   echo "Error: Python interpreter not found on compute node PATH." >&2
   exit 127
 fi
 
 srun --ntasks=1 --gpus=1 --cpus-per-gpu=4 \\
-     "$PY_BIN" "${REPO_ROOT}/script/main.py" --config "${cfg_abs}"
+     "\$PY_BIN" "${REPO_ROOT}/script/main.py" --config "${cfg_abs}"
 EOF
 
 chmod +x "$tmp"
