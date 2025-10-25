@@ -1,5 +1,5 @@
-project: coad icms2up uni no finetuning
-name: coad icms2up uni no finetuning
+project: coad_icms2up_cmmn_genes
+name: coad_icms2up_cmmn_genes
 method: grid
 metric:
   name: valid_loss

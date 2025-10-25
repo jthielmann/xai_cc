@@ -1,5 +1,5 @@
-project: wmse_coad_test
-name: wmse_coad_test
+project: coad_icms2down_cmmn_genes_wmse
+name: coad_icms2down_cmmn_genes_wmse
 method: grid
 metric:
   name: valid_loss
@@ -7,13 +7,13 @@ metric:
 
 parameters:
   run_name:
-    value: wmse_coad_test
+    value: coad_icms2down_cmmn_genes_wmse
   group:
-    value: wmse_coad_test
+    value: coad_icms2down_cmmn_genes_wmse
   job_type:
     value: train
   tags:
-    value: [wmse_coad_test, wmse]
+    value: [coad_icms2down_cmmn_genes_wmse, wmse]
 
   # Run behavior
   log_to_wandb:
@@ -80,4 +80,3 @@ parameters:
     value: true
   strategy:
     value: "auto"
-
