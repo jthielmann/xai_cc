@@ -1,0 +1,74 @@
+project: coad_all_cmmn_finetuning_on_off
+name: coad_all_cmmn_finetuning_on_off
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  run_name:
+    value: coad_all_cmmn_finetuning_on_off
+  group:
+    value: coad_all_cmmn_finetuning_on_off
+  job_type:
+    value: train
+  tags:
+    value: [coad, finetuning, cmmn]
+  # Run behavior
+  log_to_wandb:
+    value: true
+  debug:
+    value: false
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: true
+
+  # Data / loader
+  dataset:
+    value: coad
+  gene_data_filename:
+    value: gene_log1p.csv
+  image_size:
+    value: 224
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+  meta_data_dir:
+    value: metadata
+
+  split_genes_by:
+    value: 50
+
+  # Encoder
+  encoder_type:
+    values: [uni]
+  freeze_encoder:
+    value: true
+  encoder_finetune_layers:
+    value: [5, 0]
+
+  # Head
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 256
+
+  # Training schedule
+  epochs:
+    value: 20
+  optimizer:
+    value: adamw
+  global_fix_learning_rate:
+    value: 0.01
+
+  # Logging / metrics
+  loss_fn_switch:
+    value: MSE
+
+  # Runtime (optional but handy)
+  precision_auto:
+    value: true
+  strategy:
+    value: "auto"
