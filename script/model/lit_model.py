@@ -373,6 +373,9 @@ class GeneExpressionRegressor(L.LightningModule):
         return loss
 
     def _log_wandb_artifacts(self):
+        # Respect explicit opt-in for artifact logging
+        if not bool(self.config.get("log_model_artifact", False)):
+            return
         # Never log artifacts in debug mode
         if bool(self.config.get("debug")):
             return
@@ -622,6 +625,14 @@ class GeneExpressionRegressor(L.LightningModule):
             return
         y_hat = torch.cat(self.test_y_hats, dim=0).float()
         y_true = torch.cat(self.test_ys, dim=0).float()
+        # Compute and log aggregate test Pearson metrics
+        per_gene_r = compute_per_gene_pearson(y_hat, y_true)
+        r_mean = float(np.nanmean(per_gene_r)) if per_gene_r else float("nan")
+        self.log("test_pearson_mean", r_mean, prog_bar=True)
+        if self.is_online and wandb.run:
+            wandb.run.summary.update({"test_pearson_mean": r_mean})
+            for g, r in zip(self.genes, per_gene_r):
+                wandb.run.summary[f"test_pearson_{g}"] = float(r)
         # Always write test outputs if test is run; does not imply best update here
         self._save_outputs_csv(y_hat, y_true, split="test")
         self.test_y_hats.clear()
@@ -687,7 +698,7 @@ class GeneExpressionRegressor(L.LightningModule):
             except Exception as e:
                 logging.exception("failed to log results into %s: %s", path, e)
 
-        if not is_debug:
+        if not is_debug and bool(self.config.get("log_model_artifact", False)):
             self._log_wandb_artifacts()
 
     # to update after lr tuning

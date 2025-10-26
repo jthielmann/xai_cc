@@ -727,8 +727,20 @@ class TrainerPipeline:
             data_module.setup("fit")
             train_loader = data_module.train_dataloader()
             val_loader = data_module.val_dataloader()
-            if self.config.get("test_samples"):
+            # Determine if a test split is configured (samples or CSV-based)
+            has_test_split = bool(
+                self.config.get("test_samples")
+                or self.config.get("test_csv_path")
+                or self.config.get("single_csv_path")
+            )
+            if has_test_split:
+                # Ensure the test dataset is built before requesting the loader
+                data_module.setup("test")
                 test_loader = data_module.test_dataloader()
+                # Optional: guard against empty test split
+                if hasattr(data_module, "test_dataset") and len(data_module.test_dataset) == 0:
+                    has_test_split = False
+                    test_loader = None
             else:
                 test_loader = None
             # Log batch stats after transforms for sanity (min/max/mean/std)
@@ -740,7 +752,7 @@ class TrainerPipeline:
                     self._log_batch_stats(test_loader, "test")
             _log_dataset_info(self.config, self.out_path,
                              train=train_loader, val=val_loader,
-                             test=test_loader if self.config.get("test_samples") else None)
+                             test=test_loader if has_test_split else None)
             self.config["out_path"] = self.out_path
             model = get_model(self.config)
 
@@ -771,11 +783,14 @@ class TrainerPipeline:
             trainer = self._create_trainer()
             trainer.fit(model, train_loader, val_loader)
 
-            if self.config.get("test_samples"):
-                trainer.test(
-                    model=model,
-                    dataloaders=test_loader
-                )
+            if has_test_split:
+                # Load best checkpoint (by validation) before evaluating on test
+                best = getattr(model, "best_model_path", None) or os.path.join(self.out_path, "best_model.pth")
+                if os.path.exists(best):
+                    state = torch.load(best, map_location="cpu")
+                    model.load_state_dict(state)
+                    model.to(self.device)
+                trainer.test(model=model, datamodule=data_module)
         finally:
             data_module.free_memory()
             self._save_summary("finished")

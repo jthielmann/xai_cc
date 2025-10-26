@@ -39,6 +39,27 @@ class EvalPipeline:
         self.model_name = self._derive_model_name()
         os.makedirs(os.path.join(self.config["eval_path"], self.model_name), exist_ok=True)
 
+        # Enforce: always use the model's genes; never accept 'genes' in eval config.
+        model_cfg = self.config.get("model_config") or {}
+        if "genes" in self.config and self.config["genes"] is not None:
+            raise ValueError(
+                "Eval config must not set 'genes'. The trained model's genes are always used. "
+                "Remove 'genes' from the eval config."
+            )
+        mc_genes = model_cfg.get("genes")
+        if not mc_genes:
+            raise ValueError("Trained model config does not contain 'genes'; cannot proceed with evaluation.")
+        # Set genes from model config
+        self.config["genes"] = list(mc_genes)
+        # Defaults for single-gene cases
+        if not self.config.get("gene") and self.config.get("genes"):
+            self.config["gene"] = str(self.config["genes"][0])
+        # Provide a default patient (first test sample) for cases that need one
+        if not self.config.get("patient"):
+            test_samples = self.config.get("test_samples") or model_cfg.get("test_samples")
+            if isinstance(test_samples, (list, tuple)) and len(test_samples) > 0:
+                self.config["patient"] = str(test_samples[0])
+
     def _load_model(self):
         state_dicts = collect_state_dicts(self.config)
         return load_lit_regressor(self.config["model_config"], state_dicts)

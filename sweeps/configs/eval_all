@@ -22,14 +22,14 @@ sae_state_path: null
 
 eval_dir: ../evaluation
 
-lrp: false
+lrp: true
 crp: false                 # handled via script/crp_main.py (separate entrypoint)
-pcx: false                 # PCX prototypes/clusters (uses 'genes' below)
-diff: false                # single patient+gene spatial triptych
-scatter: false             # per-gene output vs target scatter plots
-forward_to_csv: false      # write predictions CSV per tile under eval_path/<model>/predictions/
-umap: false                # UMAP from a chosen model layer (set 'umap_layer')
-sae: false                 # train SAE on encoder features as an eval case
+pcx: true                  # PCX prototypes/clusters (uses 'genes' below)
+diff: true                 # single patient+gene spatial triptych
+scatter: true              # per-gene output vs target scatter plots
+forward_to_csv: true       # write predictions CSV per tile under eval_path/<model>/predictions/
+umap: true                 # UMAP from a chosen model layer (set 'umap_layer')
+sae: false                 # train SAE on encoder features as an eval case (kept off by default)
 lxt: true                  # LXT heatmaps
 
 # 'lxt', 'lxt_conv_gamma', 'lxt_lin_gamma', 'lxt_conv_gamma_list', 'lxt_lin_gamma_list', 'lxt_tilepaths'
@@ -43,8 +43,7 @@ pcx_backend: zennit
 patient: p007
 gene: GENE_SYMBOL          # used by 'diff' (set to a valid gene for your dataset)
 
-# Genes for PCX/scatter cases. Provide a small list to run these cases; leave empty to skip.
-genes: []
+# Genes come from the trained model; do not set 'genes' here.
 
 # Scatter options
 scatter_max_items: 0       # 0 means use full test set; set small int for a quick preview

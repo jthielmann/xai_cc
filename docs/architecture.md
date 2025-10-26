@@ -160,7 +160,7 @@ Flow (driven by `TrainerPipeline` in `script/train/lit_train.py`):
 
 Outputs (under `out_path`):
 - `config.json`, `latest.pth`, `best_model.pth`, `split_manifest.csv`, parquet spatial results, plots
-- If W&B enabled: run artifacts with model + config
+- Optional: if `log_model_artifact: true` and W&B enabled, logs a model artifact (`best_model.pth` + `config.json`)
 
 ## Self‑Supervised (DINO)
 - Entry: `script/dino_main.py`
