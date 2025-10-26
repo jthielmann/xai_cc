@@ -9,8 +9,6 @@ import matplotlib.pyplot as plt
 #from script.evaluation.crp_plotting import plot_crp, plot_crp_zennit, plot_crp2
 from script.evaluation.lrp_plotting import plot_lrp, plot_lrp_custom
 from script.evaluation.lxt_plotting import plot_lxt
-from script.evaluation.pcx_plotting import plot_pcx
-from script.evaluation.tri_plotting import plot_triptych_from_merge
 from script.evaluation.scatter_plotting import plot_scatter
 from script.evaluation.generate_results import generate_results
 from script.model.model_factory import get_encoder
@@ -118,19 +116,18 @@ class EvalPipeline:
             else:
                 plot_lrp(self.model, loader, run=self.wandb_run)
 
-        if self.config.get("pcx"):
-            pcx_backend = str(self.config.get("pcx_backend", "zennit")).lower()
-            # For now, PCX uses the zennit/CRP-based pipeline in cluster_functions.
-            # The backend flag is accepted for parity and future extension.
-            cfg_pcx = dict(self.config)
-            cfg_pcx["out_path"] = os.path.join(self.config["eval_path"], self.model_name, "pcx")
-            plot_pcx(self.model, cfg_pcx, run=self.wandb_run)
+        # Note: PCX has been moved to the CRP pipeline (script/crp_main.py).
         if self.config.get("diff"):
-            plot_triptych_from_merge(
-                self.config["data_dir"],
+            # Generate spatial triptych directly from the model and dataset — no merge.csv required.
+            out_dir = os.path.join(self.config["eval_path"], self.model_name, "diff")
+            os.makedirs(out_dir, exist_ok=True)
+            from script.evaluation.tri_plotting import plot_triptych_from_model
+            plot_triptych_from_model(
+                self.model,
+                self.config,
                 self.config["patient"],
                 self.config["gene"],
-                os.path.join(self.config["eval_path"], self.model_name, "diff"),
+                out_dir,
                 is_online=bool(self.wandb_run),
                 wandb_run=self.wandb_run,
             )

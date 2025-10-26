@@ -4,10 +4,12 @@ import logging
 log = logging.getLogger(__name__)
 import os
 import wandb
+import torch
 import pandas as pd
 
 from script.evaluation.relevance import get_coords_from_name
-from script.data_processing.data_loader import get_patient_loader
+from script.data_processing.data_loader import get_patient_loader, get_spatial_dataset
+from script.data_processing.image_transforms import get_transforms
 
 def _nanrange(a: np.ndarray) -> tuple[float, float]:
     if a.size == 0:
@@ -70,11 +72,72 @@ def plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=Fals
     log.info("Saved spatial plot: %s", out_file)
 
 
-def plot_triptych_from_merge(data_dir, patient, gene, out_path, is_online=False, wandb_run=None):
-    base = os.path.join(data_dir, patient, "meta_data")
-    df = pd.read_csv(os.path.join(base, "merge.csv"))
-    x = df["x"].to_numpy()
-    y = df["y"].to_numpy()
-    y_label = df["labels"].to_numpy()
-    y_pred = df["output"].to_numpy()
+def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path: str, *, is_online=False, wandb_run=None):
+    """Generate a spatial triptych by running the provided model on tiles and
+    plotting label, prediction, and diff for a single patient and gene.
+
+    This implementation derives data paths from the eval/model config and does
+    not rely on any precomputed 'merge.csv'.
+    """
+    # Resolve dataset paths (prefer eval config, fallback to model_config)
+    data_dir = cfg.get("data_dir") or cfg.get("model_config", {}).get("data_dir")
+    if not data_dir:
+        raise ValueError("Missing 'data_dir' in config; cannot build spatial dataset for triptych.")
+    meta_data_dir = cfg.get("meta_data_dir") or cfg.get("model_config", {}).get("meta_data_dir", "/meta_data/")
+    gene_data_filename = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
+
+    # Build a spatial dataset restricted to the selected patient and gene
+    eval_tf = get_transforms(cfg.get("model_config", {}), split="eval")
+    ds = get_spatial_dataset(
+        data_dir=data_dir,
+        genes=[gene],
+        transforms=eval_tf,
+        samples=[patient],
+        meta_data_dir=meta_data_dir,
+        gene_data_filename=gene_data_filename,
+        return_floats=True,
+    )
+    if len(ds) == 0:
+        raise ValueError(f"No tiles found for patient={patient} under {data_dir}")
+
+    # Map gene name to model output index
+    try:
+        gene_idx = int(model.gene_to_idx[gene])
+    except Exception as e:
+        raise ValueError(f"Gene '{gene}' not found on model (gene_to_idx).") from e
+
+    # Run inference to collect predictions in dataset order
+    device = next(model.parameters()).device
+    model.eval()
+    preds = []
+    labels = []
+    xs = []
+    ys = []
+    with torch.no_grad():
+        for i in range(len(ds)):
+            item = ds[i]
+            # ds returns (img, target, x, y) in return_floats mode
+            img, target, x_val, y_val = item
+            img_t = img.unsqueeze(0).to(device) if hasattr(img, 'unsqueeze') else torch.from_numpy(img).unsqueeze(0).to(device)
+            out = model(img_t)
+            if isinstance(out, (list, tuple)):
+                out = out[0]
+            out_vec = out[0].detach().cpu().flatten().numpy()
+            if gene_idx >= len(out_vec):
+                raise ValueError(
+                    f"Model output size ({len(out_vec)}) smaller than index for gene {gene} ({gene_idx})."
+                )
+            preds.append(float(out_vec[gene_idx]))
+            if isinstance(target, np.ndarray):
+                labels.append(float(target.reshape(-1)[0]))
+            else:
+                labels.append(float(np.array(target).reshape(-1)[0]))
+            xs.append(float(x_val))
+            ys.append(float(y_val))
+
+    x = np.asarray(xs, dtype=np.float32)
+    y = np.asarray(ys, dtype=np.float32)
+    y_label = np.asarray(labels, dtype=np.float32)
+    y_pred = np.asarray(preds, dtype=np.float32)
+
     plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=is_online, wandb_run=wandb_run)

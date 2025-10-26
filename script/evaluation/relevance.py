@@ -19,12 +19,18 @@ def get_img_target_name(loader, device, tile_no):
 
 
 def get_coords_from_name(data_dir, patient, tile_name):
-    base_path = data_dir+patient+"/meta_data/"
-    merge = pd.read_csv(base_path + "merge.csv", index_col=False)
-    line = merge.loc[merge['tile'] == tile_name]
-    x = line['x'].to_list()[0]
-    y = line['y'].to_list()[0]
+    """Look up x,y coordinates for a tile using spatial_data.csv.
 
+    Avoids any dependency on a precomputed 'merge.csv'.
+    """
+    base_path = os.path.join(str(data_dir), str(patient), "meta_data")
+    spatial_path = os.path.join(base_path, "spatial_data.csv")
+    df = pd.read_csv(spatial_path, usecols=["tile", "x", "y"], index_col=False)
+    line = df.loc[df['tile'] == tile_name]
+    if line.empty:
+        raise KeyError(f"Tile {tile_name!r} not found in {spatial_path}")
+    x = float(line['x'].iloc[0])
+    y = float(line['y'].iloc[0])
     return x, y
 
 

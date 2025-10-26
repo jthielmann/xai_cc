@@ -4,6 +4,7 @@ import torch
 from typing import Any, Dict, Optional
 
 from script.evaluation.crp_plotting import plot_crp_zennit, plot_crp
+from script.evaluation.pcx_plotting import plot_pcx
 from script.model.lit_model import load_lit_regressor
 from script.data_processing.data_loader import get_dataset_from_config
 from script.data_processing.image_transforms import get_transforms
@@ -65,19 +66,25 @@ class EvalPipeline:
         if self.config.get("crp"):
             crp_backend = str(self.config.get("crp_backend", "zennit")).lower()
             eval_tf = get_transforms(self.config["model_config"], split="eval")
+            # Use TEST split from the selected dataset; honor configured test_samples
             ds = get_dataset_from_config(
-                dataset_name=self.config["dataset"],
+                dataset_name=self.config["model_config"]["dataset"],
                 genes=None,
-                split="val",
+                split="test",
                 debug=bool(self.config.get("debug", False)),
                 transforms=eval_tf,
-                samples=None,
+                samples=self.config.get("test_samples"),
                 only_inputs=False,
-                meta_data_dir=self.config.get("meta_data_dir", "/meta_data/"),
-                gene_data_filename=self.config.get("gene_data_filename", "gene_data.csv"),
+                meta_data_dir=self.config["model_config"].get("meta_data_dir", "/meta_data/"),
+                gene_data_filename=self.config["model_config"].get("gene_data_filename", "gene_data.csv"),
             )
-            n = min(10, len(ds))
-            ds_subset = Subset(ds, list(range(n)))
+            # Optional truncation via config: crp_max_items; default: use all
+            max_items = int(self.config.get("crp_max_items", 0) or 0)
+            if max_items > 0:
+                n = min(max_items, len(ds))
+                ds_subset = Subset(ds, list(range(n)))
+            else:
+                ds_subset = ds
             out_dir = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "crp")
             os.makedirs(out_dir, exist_ok=True)
             # Require explicit target_layer in config (no default). Allow special value 'encoder'.
@@ -94,3 +101,21 @@ class EvalPipeline:
                 plot_crp(self.model, ds_subset, run=self.wandb_run, out_dir=out_dir, layer_name=target_layer)
             else:
                 plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=n, out_dir=out_dir, layer_name=target_layer)
+
+        if self.config.get("pcx"):
+            # Enforce: always use model genes; eval config must not set 'genes'.
+            model_cfg = self.config.get("model_config") or {}
+            if "genes" in self.config and self.config["genes"] is not None:
+                raise ValueError(
+                    "CRP/PCX config must not set 'genes'. The trained model's genes are always used."
+                )
+            mc_genes = model_cfg.get("genes")
+            if not mc_genes:
+                raise ValueError("Trained model config does not contain 'genes'; cannot run PCX.")
+            cfg_pcx = dict(self.config)
+            # Route outputs under eval_path/<model_name>/pcx
+            cfg_pcx["out_path"] = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "pcx")
+            os.makedirs(cfg_pcx["out_path"], exist_ok=True)
+            # Ensure genes come from model
+            cfg_pcx["genes"] = list(mc_genes)
+            plot_pcx(self.model, cfg_pcx, run=self.wandb_run)

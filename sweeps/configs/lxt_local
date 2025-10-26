@@ -24,7 +24,6 @@ eval_dir: ../evaluation
 
 lrp: false
 crp: false
-pcx: false
 diff: false
 scatter: false
 forward_to_csv: false

@@ -25,7 +25,7 @@ target_layer: encoder
 
 lrp: false
 crp: true
-pcx: false
+pcx: true
 diff: false
 scatter: false
 forward_to_csv: false
@@ -39,7 +39,9 @@ crp_backend: zennit
 pcx_backend: zennit
 
 # Optional overrides for specific visualizations
-patient: p007
+# No per-patient selection: CRP/PCX use the configured test split.
+# Optional: limit number of items via 'crp_max_items'.
+# crp_max_items: 100
 
 # LXT gamma parameters (single-run)
 lxt_conv_gamma: 0.25

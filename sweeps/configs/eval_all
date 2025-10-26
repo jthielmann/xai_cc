@@ -24,7 +24,6 @@ eval_dir: ../evaluation
 
 lrp: true
 crp: false                 # handled via script/crp_main.py (separate entrypoint)
-pcx: true                  # PCX prototypes/clusters (uses 'genes' below)
 diff: true                 # single patient+gene spatial triptych
 scatter: true              # per-gene output vs target scatter plots
 forward_to_csv: true       # write predictions CSV per tile under eval_path/<model>/predictions/
