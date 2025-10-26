@@ -1,0 +1,83 @@
+project: eval
+name: xai minimal example
+xai_pipeline: true
+
+
+run_name: eval
+group: eval
+job_type: xai
+tags: [eval]
+debug: false
+log_to_wandb: true
+
+# Model configuration to inherit architecture/dataset details from
+dataset: coad
+meta_data_dir: metadata
+gene_data_filename: gene_log1p.csv
+# Set one of the following to point at trained weights
+model_state_path: coad icms2up uni 3/enc-uni
+encoder_state_path: null
+gene_head_state_path: null
+sae_state_path: null
+
+eval_dir: ../evaluation
+
+lrp: false
+crp: false                 # handled via script/crp_main.py (separate entrypoint)
+pcx: false                 # PCX prototypes/clusters (uses 'genes' below)
+diff: false                # single patient+gene spatial triptych
+scatter: false             # per-gene output vs target scatter plots
+forward_to_csv: false      # write predictions CSV per tile under eval_path/<model>/predictions/
+umap: false                # UMAP from a chosen model layer (set 'umap_layer')
+sae: false                 # train SAE on encoder features as an eval case
+lxt: true                  # LXT heatmaps
+
+# 'lxt', 'lxt_conv_gamma', 'lxt_lin_gamma', 'lxt_conv_gamma_list', 'lxt_lin_gamma_list', 'lxt_tilepaths'
+
+# XAI backends (choose: zennit|custom)
+lrp_backend: zennit
+crp_backend: zennit
+pcx_backend: zennit
+
+# Optional overrides for specific visualizations
+patient: p007
+gene: GENE_SYMBOL          # used by 'diff' (set to a valid gene for your dataset)
+
+# Genes for PCX/scatter cases. Provide a small list to run these cases; leave empty to skip.
+genes: []
+
+# Scatter options
+scatter_max_items: 0       # 0 means use full test set; set small int for a quick preview
+scatter_batch_size: 32
+
+# UMAP (encoder or a dot-path to a nested module, e.g. 'encoder.blocks.11')
+umap_layer: encoder
+umap_batch_size: 32
+umap_max_samples: 2000     # truncate for speed; omit or set null to use all
+umap_n_components: 2
+umap_sweep_params:
+  n_neighbors: [15]
+  min_dist: [0.1]
+
+# SAE (only used if 'sae: true') — minimal working defaults
+# d_in is inferred automatically from the encoder output
+d_hidden: 512
+k: 8
+allow_negative_topk: false
+topk_by_magnitude: false
+epochs: 5
+batch_size: 64
+lr: 0.001
+
+# SAE UMAP (optional, for SAE pipeline's own UMAP callback)
+umap_generate_image_plots: false
+
+# LXT gamma parameters (single-run)
+lxt_conv_gamma: 0.25
+lxt_lin_gamma: 0.0
+
+# Optional: provide explicit tiles to visualize with LXT
+# If set, these paths are used instead of sampling from the dataset.
+# lxt_tilepaths:
+#   - /absolute/path/to/tile1.png
+#   - /absolute/path/to/tile2.png
