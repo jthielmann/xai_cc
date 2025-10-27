@@ -28,7 +28,8 @@ from main_utils import (
     get_sweep_parameter_names,
     make_run_name_from_config,
     setup_dump_env,
-    prepare_cfg
+    prepare_cfg,
+    compute_genes_id,
 )
 
 
@@ -70,6 +71,25 @@ def _train(cfg: Dict[str, Any]) -> None:
     else:
         if cfg.get("genes") is None:
             cfg["genes"] = get_full_gene_list(cfg)
+        # Tag runs/dirs with a compact chunk id (cNNN) to avoid collisions
+        # Build a minimal dataset cfg to recompute gene chunks deterministically
+        ds_cfg = {
+            "dataset": cfg.get("dataset"),
+            "meta_data_dir": cfg.get("meta_data_dir"),
+            "gene_data_filename": cfg.get("gene_data_filename"),
+            "sample_ids": cfg.get("sample_ids"),
+            "split_genes_by": cfg.get("split_genes_by"),
+            "single_csv_path": cfg.get("single_csv_path"),
+            "train_csv_path": cfg.get("train_csv_path"),
+            "data_dir": cfg.get("data_dir"),
+        }
+        ds_cfg.update(get_dataset_cfg(ds_cfg))
+        chunks = prepare_gene_list(dict(ds_cfg))  # populates ds_cfg["gene_chunks"] internally
+        # Find 1-based index of the selected chunk
+        # If not chunked, prepare_gene_list returns [full_list], so index = 0
+        gene_chunks = ds_cfg.get("gene_chunks") or []
+        idx = next(i for i, ch in enumerate(gene_chunks) if ch == cfg.get("genes"))
+        cfg["genes_id"] = f"c{idx+1:03d}"
         TrainerPipeline(cfg, run=run).run()
     if run: run.finish()
 
@@ -136,6 +156,23 @@ def _sweep_run():
 
     merged["model_dir"] = project_dir
     merged["sweep_dir"] = project_dir
+    # Inject a compact chunk id (cNNN) for directory naming before preparing cfg
+    if merged.get("genes") is not None:
+        ds_cfg = {
+            "dataset": merged.get("dataset"),
+            "meta_data_dir": merged.get("meta_data_dir"),
+            "gene_data_filename": merged.get("gene_data_filename"),
+            "sample_ids": merged.get("sample_ids"),
+            "split_genes_by": merged.get("split_genes_by"),
+            "single_csv_path": merged.get("single_csv_path"),
+            "train_csv_path": merged.get("train_csv_path"),
+            "data_dir": merged.get("data_dir"),
+        }
+        ds_cfg.update(get_dataset_cfg(ds_cfg))
+        chunks = prepare_gene_list(dict(ds_cfg))
+        gene_chunks = ds_cfg.get("gene_chunks") or []
+        idx = next(i for i, ch in enumerate(gene_chunks) if ch == merged.get("genes"))
+        merged["genes_id"] = f"c{idx+1:03d}"
     merged = prepare_cfg(merged)
     run.config.update(merged, allow_val_change=True)
 

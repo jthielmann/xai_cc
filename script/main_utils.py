@@ -3,10 +3,11 @@ import shutil
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, Iterable
+from typing import Dict, Any, Iterable, List
 import os
 import yaml
 from script.configs.dataset_config import get_dataset_cfg
+import hashlib
 
 def setup_dump_env() -> str:
     dd = "../dump"
@@ -140,3 +141,28 @@ def prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     ensure_free_disk_space(out)
     with open(os.path.join(out, "config"), "w") as f: yaml.safe_dump(cfg, f, sort_keys=False, default_flow_style=False, allow_unicode=True)
     return cfg
+
+
+def compute_genes_id(genes: List[str] | Any) -> str:
+    """Compute a short, stable identifier for a gene list.
+
+    - Accepts a list of strings (preferred). If a nested list is passed, it will
+      hash the flattened sequence for stability.
+    - Returns a 10-character hex digest suitable for filenames.
+    - Raises on invalid inputs (do not swallow errors).
+    """
+    if genes is None:
+        raise ValueError("genes is None; cannot compute genes_id")
+    # Flatten if list of lists
+    seq: List[str] = []
+    if isinstance(genes, (list, tuple)):
+        for g in genes:
+            if isinstance(g, (list, tuple)):
+                seq.extend([str(x) for x in g])
+            else:
+                seq.append(str(g))
+    else:
+        # fallback to string form
+        seq = [str(genes)]
+    blob = "\n".join(seq).encode("utf-8")
+    return hashlib.sha1(blob).hexdigest()[:10]
