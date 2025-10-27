@@ -1,0 +1,31 @@
+project: coad_common_hvg_redo
+name: coad_common_hvg_redo
+xai_pipeline: true
+
+parameters:
+  # Logging and run behavior
+  log_to_wandb: { value: false }
+  debug:        { value: false }
+
+  # Dataset (uses COAD defaults from script/configs/dataset_config.py)
+  dataset:             { value: coad }
+  gene_data_filename:  { value: gene_log1p.csv }
+  meta_data_dir:       { value: metadata }
+  image_size:          { value: 224 }
+
+  # Forward predictions to CSV for each model in model_state_path
+  forward_to_csv: { value: true }
+
+  # Where to store evaluation outputs
+  # Each model gets a subfolder under this path
+  eval_path: { value: ../evaluation/coad_hvg_forward }
+
+  # List all model run directories (relative to ../models/) here.
+  # Example placeholders for encoder folders — replace with actual run dirs that contain best_model.pth
+  # For example: coad common hvg redo/enc-dino/<your_run_dir>
+  model_state_path:
+    value:
+      - coad common hvg redo/enc-dinov3_vitb16
+      - coad common hvg redo/enc-dinov3_vitl16
+      - coad common hvg redo/enc-dinov3_vits16
+
