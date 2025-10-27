@@ -22,7 +22,6 @@ parameters:
 
   model_state_path:
     value:
-      - coad common hvg redo/enc-dinov3_vitb16
       - coad common hvg redo/enc-dinov3_vitl16
       - coad common hvg redo/enc-dinov3_vits16
 
