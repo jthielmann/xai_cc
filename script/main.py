@@ -84,11 +84,19 @@ def _train(cfg: Dict[str, Any]) -> None:
             "data_dir": cfg.get("data_dir"),
         }
         ds_cfg.update(get_dataset_cfg(ds_cfg))
-        chunks = prepare_gene_list(dict(ds_cfg))  # populates ds_cfg["gene_chunks"] internally
-        # Find 1-based index of the selected chunk
-        # If not chunked, prepare_gene_list returns [full_list], so index = 0
+        prepare_gene_list(dict(ds_cfg))  # populates ds_cfg["gene_chunks"] internally
+        # Find 1-based index of the selected chunk using set equality to ignore order
         gene_chunks = ds_cfg.get("gene_chunks") or []
-        idx = next(i for i, ch in enumerate(gene_chunks) if ch == cfg.get("genes"))
+        tgt = [str(g) for g in (cfg.get("genes") or [])]
+        found = -1
+        for i, ch in enumerate(gene_chunks):
+            chs = [str(g) for g in ch]
+            if len(chs) == len(tgt) and set(chs) == set(tgt):
+                found = i
+                break
+        if found < 0:
+            raise RuntimeError("Selected genes chunk not found in dataset chunks; ensure dataset, split_genes_by and gene list match.")
+        idx = found
         cfg["genes_id"] = f"c{idx+1:03d}"
         TrainerPipeline(cfg, run=run).run()
     if run: run.finish()
@@ -169,9 +177,18 @@ def _sweep_run():
             "data_dir": merged.get("data_dir"),
         }
         ds_cfg.update(get_dataset_cfg(ds_cfg))
-        chunks = prepare_gene_list(dict(ds_cfg))
+        prepare_gene_list(dict(ds_cfg))
         gene_chunks = ds_cfg.get("gene_chunks") or []
-        idx = next(i for i, ch in enumerate(gene_chunks) if ch == merged.get("genes"))
+        tgt = [str(g) for g in (merged.get("genes") or [])]
+        found = -1
+        for i, ch in enumerate(gene_chunks):
+            chs = [str(g) for g in ch]
+            if len(chs) == len(tgt) and set(chs) == set(tgt):
+                found = i
+                break
+        if found < 0:
+            raise RuntimeError("Selected genes chunk not found in dataset chunks; ensure dataset, split_genes_by and gene list match.")
+        idx = found
         merged["genes_id"] = f"c{idx+1:03d}"
     merged = prepare_cfg(merged)
     run.config.update(merged, allow_val_change=True)
