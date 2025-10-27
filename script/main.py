@@ -84,9 +84,11 @@ def _train(cfg: Dict[str, Any]) -> None:
             "data_dir": cfg.get("data_dir"),
         }
         ds_cfg.update(get_dataset_cfg(ds_cfg))
-        prepare_gene_list(dict(ds_cfg))  # populates ds_cfg["gene_chunks"] internally
+        # Compute canonical gene chunks in an isolated cfg copy
+        _tmp_cfg = dict(ds_cfg)
+        prepare_gene_list(_tmp_cfg)
         # Find 1-based index of the selected chunk using set equality to ignore order
-        gene_chunks = ds_cfg.get("gene_chunks") or []
+        gene_chunks = _tmp_cfg.get("gene_chunks") or []
         tgt = [str(g) for g in (cfg.get("genes") or [])]
         found = -1
         for i, ch in enumerate(gene_chunks):
@@ -177,8 +179,9 @@ def _sweep_run():
             "data_dir": merged.get("data_dir"),
         }
         ds_cfg.update(get_dataset_cfg(ds_cfg))
-        prepare_gene_list(dict(ds_cfg))
-        gene_chunks = ds_cfg.get("gene_chunks") or []
+        _tmp_cfg = dict(ds_cfg)
+        prepare_gene_list(_tmp_cfg)
+        gene_chunks = _tmp_cfg.get("gene_chunks") or []
         tgt = [str(g) for g in (merged.get("genes") or [])]
         found = -1
         for i, ch in enumerate(gene_chunks):
