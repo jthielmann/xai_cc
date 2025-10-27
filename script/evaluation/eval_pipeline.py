@@ -21,6 +21,7 @@ from script.evaluation.eval_helpers import (
     auto_device,
     collect_state_dicts,
 )
+from script.evaluation.tri_plotting import plot_triptych_from_model
 from script.train.lit_train_sae import SAETrainerPipeline
 
 class EvalPipeline:
@@ -122,7 +123,6 @@ class EvalPipeline:
             # Iterate over dataset-configured samples by default to avoid stale/hardcoded patients.
             out_dir = os.path.join(self.config["eval_path"], self.model_name, "diff")
             os.makedirs(out_dir, exist_ok=True)
-            from script.evaluation.tri_plotting import plot_triptych_from_model
 
             # Prefer explicit 'patients' list, else use dataset-configured test_samples.
             # Fall back to a single 'patient' only if no list is available.

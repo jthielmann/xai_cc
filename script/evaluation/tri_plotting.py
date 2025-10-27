@@ -73,13 +73,6 @@ def plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=Fals
 
 
 def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path: str, *, is_online=False, wandb_run=None):
-    """Generate a spatial triptych by running the provided model on tiles and
-    plotting label, prediction, and diff for a single patient and gene.
-
-    This implementation derives data paths from the eval/model config and does
-    not rely on any precomputed 'merge.csv'.
-    """
-    # Resolve dataset paths (prefer eval config, fallback to model_config)
     data_dir = cfg.get("data_dir") or cfg.get("model_config", {}).get("data_dir")
     if not data_dir:
         raise ValueError("Missing 'data_dir' in config; cannot build spatial dataset for triptych.")

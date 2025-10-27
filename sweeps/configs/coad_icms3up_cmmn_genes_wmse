@@ -1,4 +1,4 @@
-project: coad_icms3up_cmmn_genes_wmse
+project: coad_icms3up_cmmn_genes_wmse redo
 name: coad_icms3up_cmmn_genes_wmse
 method: grid
 metric:
