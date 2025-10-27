@@ -8,7 +8,7 @@ import torch
 import pandas as pd
 
 from script.evaluation.relevance import get_coords_from_name
-from script.data_processing.data_loader import get_patient_loader, get_spatial_dataset
+from script.data_processing.data_loader import get_patient_loader, get_dataset
 from script.data_processing.image_transforms import get_transforms
 
 def _nanrange(a: np.ndarray) -> tuple[float, float]:
@@ -86,13 +86,15 @@ def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path
     meta_data_dir = cfg.get("meta_data_dir") or cfg.get("model_config", {}).get("meta_data_dir", "/meta_data/")
     gene_data_filename = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
 
-    # Build a spatial dataset restricted to the selected patient and gene
+    # Build a standard dataset restricted to the selected patient and single gene
+    # Coordinates (x,y) are expected inside the gene CSV for COAD and similar datasets.
     eval_tf = get_transforms(cfg.get("model_config", {}), split="eval")
-    ds = get_spatial_dataset(
+    ds = get_dataset(
         data_dir=data_dir,
         genes=[gene],
         transforms=eval_tf,
         samples=[patient],
+        only_inputs=False,
         meta_data_dir=meta_data_dir,
         gene_data_filename=gene_data_filename,
         return_floats=True,
@@ -100,11 +102,8 @@ def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path
     if len(ds) == 0:
         raise ValueError(f"No tiles found for patient={patient} under {data_dir}")
 
-    # Map gene name to model output index
-    try:
-        gene_idx = int(model.gene_to_idx[gene])
-    except Exception as e:
-        raise ValueError(f"Gene '{gene}' not found on model (gene_to_idx).") from e
+    # Map gene name to model output index (assume present; fail fast if not)
+    gene_idx = int(model.gene_to_idx[gene])
 
     # Run inference to collect predictions in dataset order
     device = next(model.parameters()).device
@@ -116,8 +115,16 @@ def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path
     with torch.no_grad():
         for i in range(len(ds)):
             item = ds[i]
-            # ds returns (img, target, x, y) in return_floats mode
-            img, target, x_val, y_val = item
+            # ds returns (img, target) in return_floats mode for standard datasets
+            if isinstance(item, (list, tuple)):
+                img, target = item[:2]
+            else:
+                img, target = item, None
+            # Coordinates from the underlying DataFrame (populated by get_base_dataset)
+            row = ds.df.iloc[i]
+            if "x" not in row or "y" not in row:
+                raise KeyError("Columns 'x' and 'y' not found in dataset; ensure your gene CSV contains them.")
+            x_val = float(row["x"]) ; y_val = float(row["y"])
             img_t = img.unsqueeze(0).to(device) if hasattr(img, 'unsqueeze') else torch.from_numpy(img).unsqueeze(0).to(device)
             out = model(img_t)
             if isinstance(out, (list, tuple)):
@@ -128,10 +135,14 @@ def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path
                     f"Model output size ({len(out_vec)}) smaller than index for gene {gene} ({gene_idx})."
                 )
             preds.append(float(out_vec[gene_idx]))
-            if isinstance(target, np.ndarray):
-                labels.append(float(target.reshape(-1)[0]))
+            if target is not None:
+                if isinstance(target, np.ndarray):
+                    labels.append(float(target.reshape(-1)[0]))
+                else:
+                    labels.append(float(np.array(target).reshape(-1)[0]))
             else:
-                labels.append(float(np.array(target).reshape(-1)[0]))
+                # Fallback: read label from DataFrame
+                labels.append(float(row[gene]))
             xs.append(float(x_val))
             ys.append(float(y_val))
 

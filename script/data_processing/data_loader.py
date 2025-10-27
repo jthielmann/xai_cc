@@ -353,12 +353,23 @@ def get_base_dataset(
         genes = [g for g in genes if not _is_unnamed_column(g)]
         if not genes:
             raise ValueError("Provided gene list contains only unnamed/blank columns; nothing to use.")
+    # Always try to include spatial coordinates if present ('x','y'), even when specific genes are requested.
+    # We will filter by available columns per-file to avoid read_csv errors.
     columns_of_interest = ["tile"] + (genes or []) if genes else None
     dfs = []
 
     for patient in samples:
         fp = os.path.join(data_dir, patient, meta_dir, gene_data_filename)
-        df = pd.read_csv(fp, usecols=columns_of_interest, nrows=max_len)
+        if columns_of_interest is None:
+            # No explicit gene list: read all columns and let downstream infer gene columns
+            df = pd.read_csv(fp, nrows=max_len)
+        else:
+            # Best bet: request gene columns plus spatial coords 'x' and 'y' directly.
+            wanted = list(columns_of_interest)
+            for extra in ("x", "y"):
+                if extra not in wanted:
+                    wanted.append(extra)
+            df = pd.read_csv(fp, usecols=wanted, nrows=max_len)
         df["tile"] = df["tile"].apply(lambda t: os.path.join(data_dir, patient, "tiles", t))
         df["patient"] = patient
         dfs.append(df)
