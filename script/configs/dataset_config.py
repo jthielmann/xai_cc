@@ -65,19 +65,48 @@ DATASETS: Dict[str, Dict[str, Any]] = {
 }
 
 
+def _read_param(cfg: dict, key: str, default: Any = None) -> Any:
+    """Read a parameter from either top-level or a W&B-style 'parameters' section.
+
+    - If the value is a dict with 'value' or 'values', return the contained value(s).
+    - For 'values' (sweep lists), prefer the first item to provide a single value when
+      a concrete setting is required (e.g., dataset name).
+    """
+    if key in cfg:
+        val = cfg[key]
+    else:
+        params = cfg.get("parameters", {}) or {}
+        if key in params:
+            val = params[key]
+        else:
+            return default
+
+    if isinstance(val, dict):
+        if "value" in val:
+            return val["value"]
+        if "values" in val:
+            v = val["values"]
+            if isinstance(v, (list, tuple)):
+                return v[0] if len(v) > 0 else default
+            return v
+    return val
+
+
 def get_dataset_cfg(cfg: dict) -> Dict[str, Any]:
-    name = cfg["dataset"]
-    if type(name) == dict:
-        name = name.get("value")
-    debug = cfg.get("debug", False)
+    name = _read_param(cfg, "dataset")
+    if name is None:
+        raise KeyError("'dataset' not found. Provide top-level 'dataset' or 'parameters.dataset.value'.")
+    debug = bool(_read_param(cfg, "debug", cfg.get("debug", False)))
 
     if name not in DATASETS:
         raise ValueError(f"Unknown dataset '{name}'")
 
     ds = DATASETS[name].copy()
 
-    has_train = "train_samples" in cfg
-    has_val   = "val_samples"   in cfg
+    train_override = _read_param(cfg, "train_samples")
+    val_override   = _read_param(cfg, "val_samples")
+    has_train = train_override is not None
+    has_val   = val_override   is not None
 
     # If only one of the two keys is given, that’s a mis-configuration.
     if has_train ^ has_val:
@@ -86,8 +115,8 @@ def get_dataset_cfg(cfg: dict) -> Dict[str, Any]:
         )
 
     if has_train and has_val:
-        train_all: List[str] = list(cfg["train_samples"])  # type: ignore[index]
-        val_all:   List[str] = list(cfg["val_samples"])    # type: ignore[index]
+        train_all = list(train_override)  # type: ignore[arg-type]
+        val_all   = list(val_override)    # type: ignore[arg-type]
     else:  # neither key present – fall back to defaults in DATASETS
         train_all = list(ds.pop("train_samples_all"))
         val_all   = list(ds.pop("val_samples_all"))
@@ -96,8 +125,9 @@ def get_dataset_cfg(cfg: dict) -> Dict[str, Any]:
     ds["val_samples"]   = val_all[:1]   if debug else val_all
 
     # Derive test samples
-    if "test_samples" in cfg:
-        test_all: List[str] = list(cfg["test_samples"])  # explicit override
+    test_override = _read_param(cfg, "test_samples")
+    if test_override is not None:
+        test_all = list(test_override)  # explicit override
     elif "test_samples_all" in ds:
         test_all = list(ds.pop("test_samples_all"))
     else:
@@ -122,16 +152,20 @@ def get_dataset_data_dir(name: str) -> str:
 
 
 def get_dataset_cfg_lds(cfg: dict) -> Dict[str, Any]:
-    name = cfg["dataset"].get("value")
-    debug = cfg.get("debug", False)
+    name = _read_param(cfg, "dataset")
+    if name is None:
+        raise KeyError("'dataset' not found. Provide top-level 'dataset' or 'parameters.dataset.value'.")
+    debug = bool(_read_param(cfg, "debug", cfg.get("debug", False)))
 
     if name not in DATASETS:
         raise ValueError(f"Unknown dataset '{name}'")
 
     ds = DATASETS[name].copy()
 
-    has_train = "train_samples" in cfg
-    has_val   = "val_samples"   in cfg
+    train_override = _read_param(cfg, "train_samples")
+    val_override   = _read_param(cfg, "val_samples")
+    has_train = train_override is not None
+    has_val   = val_override   is not None
 
     # If only one of the two keys is given, that’s a mis-configuration.
     if has_train ^ has_val:
@@ -140,8 +174,8 @@ def get_dataset_cfg_lds(cfg: dict) -> Dict[str, Any]:
         )
 
     if has_train and has_val:
-        train_all: List[str] = cfg["train_samples"]
-        val_all:   List[str] = cfg["val_samples"]
+        train_all = list(train_override)  # type: ignore[arg-type]
+        val_all   = list(val_override)    # type: ignore[arg-type]
     else:  # neither key present – fall back to defaults in DATASETS
         train_all = ds.pop("train_samples_all")
         val_all   = ds.pop("val_samples_all")
