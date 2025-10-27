@@ -41,7 +41,7 @@ cat > "$tmp" <<EOF
 #!/bin/bash
 #SBATCH --job-name=${name}
 #SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+#SBATCH --error=logs/%x_%j.out
 #SBATCH --partition=gpu
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:3

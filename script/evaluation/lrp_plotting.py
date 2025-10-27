@@ -7,7 +7,8 @@ import numpy as np
 
 def _imgify_rel(att):
     rel = att.sum(1).cpu()
-    rel = rel / (abs(rel).max() + 1e-12)
+    rel = torch.nan_to_num(rel, nan=0.0, posinf=1.0, neginf=-1.0)
+    rel = rel / (abs(rel).nan_to_num(nan=0.0).max() + 1e-12)
     return zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
 
 

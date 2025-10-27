@@ -178,7 +178,9 @@ def vis_opaque_img_border(data_batch, heatmaps, rf=False, alpha=0.4, vis_th=0.05
         img = data_batch[i]
 
         filtered_heat = gaussian_blur(heatmaps[i].unsqueeze(0), kernel_size=kernel_size)[0]
-        filtered_heat = filtered_heat / (filtered_heat.abs().max())
+        # Avoid 0/0 or NaNs by clamping denominator
+        denom = filtered_heat.abs().max().clamp_min(1e-12)
+        filtered_heat = filtered_heat / denom
         vis_mask = filtered_heat > vis_th
         # imgs.append(imgify(img.detach().cpu()).convert('RGB'))
         # continue

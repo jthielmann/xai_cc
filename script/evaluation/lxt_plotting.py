@@ -111,6 +111,7 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
             comp.remove()
 
             hm = (x * x.grad).sum(1)
+            hm = torch.nan_to_num(hm, nan=0.0, posinf=1.0, neginf=-1.0)
             denom = torch.clamp(hm.abs().amax(dim=(1, 2), keepdim=True), min=1e-12)
             hm = hm / denom
             heatmaps.append(hm[0].detach().cpu())

@@ -59,8 +59,9 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: Optional[str] = None, 
 
         attr = attribution(x, [{"y": [0]}], composite, record_layer=[target_layer])
         rel = attr.relevances[target_layer].sum(1).detach().cpu()
-        # Normalize and render
-        denom = (rel.abs().amax(dim=(1, 2), keepdim=True) + 1e-12)
+        # Sanitize and normalize to avoid NaN/Inf during visualization
+        rel = torch.nan_to_num(rel, nan=0.0, posinf=1.0, neginf=-1.0)
+        denom = torch.nan_to_num(rel.abs(), nan=0.0).amax(dim=(1, 2), keepdim=True).clamp_min(1e-12)
         rel = rel / denom
         img = zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
         if run is not None:
@@ -87,16 +88,23 @@ def _default_layer_name(model: nn.Module, types=(nn.Conv2d, nn.Linear)) -> str:
 
 def _tensor_to_pil(arr: torch.Tensor, cmap_name: str = "bwr", symmetric: bool = True) -> Image.Image:
     a = arr.detach().cpu().numpy()
+    # Replace NaN/Inf to keep downstream conversion stable
+    a = np.nan_to_num(a, nan=0.0, posinf=1.0, neginf=-1.0)
     if symmetric:
-        v = float(max(abs(a.min()), abs(a.max())))
+        # Compute range robustly in presence of NaNs
+        v = float(max(abs(np.nanmin(a)), abs(np.nanmax(a))))
         vmin, vmax = -v, v
     else:
-        vmin, vmax = float(a.min()), float(a.max())
+        vmin, vmax = float(np.nanmin(a)), float(np.nanmax(a))
+    if not np.isfinite(vmin) or not np.isfinite(vmax):
+        vmin, vmax = -1.0, 1.0
     if vmax == vmin:
         vmax = vmin + 1e-12
     norm = np.clip((a - vmin) / (vmax - vmin), 0.0, 1.0)
     rgba = cm.get_cmap(cmap_name)(norm)
-    rgb = (rgba[..., :3] * 255.0).astype(np.uint8)
+    # Guard against NaNs from the colormap by sanitizing before cast
+    rgb = np.nan_to_num(rgba[..., :3], nan=0.0)
+    rgb = (rgb * 255.0).astype(np.uint8)
     return Image.fromarray(rgb)
 
 
@@ -181,8 +189,9 @@ def _finalize_and_render(x: torch.Tensor, abs_norm: bool, cmap: str, run):
     heat = x.grad.detach().sum(dim=1)
     if abs_norm:
         B = heat.shape[0]
-        denom = torch.amax(torch.abs(heat).view(B, -1), dim=1).clamp_min(1e-12).view(B, 1, 1)
-        heat = heat / denom
+        hs = torch.nan_to_num(torch.abs(heat), nan=0.0)
+        denom = torch.amax(hs.view(B, -1), dim=1).clamp_min(1e-12).view(B, 1, 1)
+        heat = torch.nan_to_num(heat, nan=0.0) / denom
     images = [_tensor_to_pil(heat[i], cmap, symmetric=True) for i in range(heat.shape[0])]
     if run is not None:
         run.log({"crp2/attribution": [wandb.Image(img) for img in images]})

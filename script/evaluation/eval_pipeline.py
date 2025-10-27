@@ -118,19 +118,39 @@ class EvalPipeline:
 
         # Note: PCX has been moved to the CRP pipeline (script/crp_main.py).
         if self.config.get("diff"):
-            # Generate spatial triptych directly from the model and dataset — no merge.csv required.
+            # Generate spatial triptychs directly from the model and dataset — no merge.csv required.
+            # Iterate over dataset-configured samples by default to avoid stale/hardcoded patients.
             out_dir = os.path.join(self.config["eval_path"], self.model_name, "diff")
             os.makedirs(out_dir, exist_ok=True)
             from script.evaluation.tri_plotting import plot_triptych_from_model
-            plot_triptych_from_model(
-                self.model,
-                self.config,
-                self.config["patient"],
-                self.config["gene"],
-                out_dir,
-                is_online=bool(self.wandb_run),
-                wandb_run=self.wandb_run,
-            )
+
+            # Prefer explicit 'patients' list, else use dataset-configured test_samples.
+            # Fall back to a single 'patient' only if no list is available.
+            patients_cfg = self.config.get("patients")
+            if isinstance(patients_cfg, (list, tuple)) and len(patients_cfg) > 0:
+                patients = list(patients_cfg)
+            else:
+                patients = list(self.config.get("test_samples", []) or [])
+                if not patients:
+                    p_single = self.config.get("patient")
+                    if p_single:
+                        patients = [str(p_single)]
+
+            # De-duplicate while preserving order
+            seen = set()
+            patients = [p for p in patients if not (p in seen or seen.add(p))]
+
+            gene = self.config["gene"]
+            for p in patients:
+                plot_triptych_from_model(
+                    self.model,
+                    self.config,
+                    p,
+                    gene,
+                    out_dir,
+                    is_online=bool(self.wandb_run),
+                    wandb_run=self.wandb_run,
+                )
 
         if self.config.get("scatter"):
             cfg_scatter = dict(self.config)
