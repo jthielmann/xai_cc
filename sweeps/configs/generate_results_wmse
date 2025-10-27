@@ -1,0 +1,65 @@
+project: forward_to_csv
+name: forward_to_csv_wmse
+xai_pipeline: true
+
+
+run_name: forward_to_csv_wmse
+group: eval
+job_type: xai
+tags: [eval, wmse]
+debug: true
+log_to_wandb: true
+
+# Model configuration to inherit architecture/dataset details from
+dataset: coad
+meta_data_dir: metadata
+gene_data_filename: gene_log1p.csv
+
+# Sweep over multiple trained WMSE models by listing their state folders here.
+# Each entry should be a path relative to '../models' or an absolute path
+# to the model's directory that contains a 'config' file and weights.
+#
+# NOTE: Adjust these folder names to match your WMSE run directories
+# if they differ on disk.
+parameters:
+  model_state_path:
+    values:
+      - coad_icms2up_cmmn_genes_wmse/enc-uni
+      - coad_icms2down_cmmn_genes_wmse/enc-uni
+      - coad_icms3up_cmmn_genes_wmse/enc-uni
+      - coad_icms3down_cmmn_genes_wmse/enc-uni
+
+# If you prefer a single model, set 'model_state_path' instead of 'parameters' above.
+# model_state_path: some/model/run/folder
+encoder_state_path: null
+gene_head_state_path: null
+sae_state_path: null
+
+eval_dir: ../evaluation
+
+lrp: false
+crp: false
+diff: false
+scatter: false
+forward_to_csv: true
+lxt: false
+
+# 'forward_to_csv'
+
+# XAI backends (choose: zennit|custom)
+lrp_backend: zennit
+crp_backend: zennit
+pcx_backend: zennit
+
+# Optional overrides for specific visualizations
+patient: p007
+
+# LXT gamma parameters (single-run)
+lxt_conv_gamma: 0.25
+lxt_lin_gamma: 0.0
+
+# Optional: provide explicit tiles to visualize with LXT
+# If set, these paths are used instead of sampling from the dataset.
+# lxt_tilepaths:
+#   - /absolute/path/to/tile1.png
+#   - /absolute/path/to/tile2.png
