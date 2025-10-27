@@ -137,15 +137,17 @@ class GeneExpressionRegressor(L.LightningModule):
         self.num_training_batches = 0
         self.current_loss = torch.tensor(0.).to(self.device)
         self.best_loss = float("inf")
-        self.is_online = self.config.get('log_to_wandb')
+        # Whether user wants to log; actual logging only occurs if a W&B run exists
+        self.is_online = bool(self.config.get('log_to_wandb'))
 
         self.best_epoch = None
         self.best_r_mean = float("nan")
         self.best_model_path = None
 
-        if self.config.get('generate_scatters', False) and self.is_online:
+        if self.config.get('generate_scatters', False) and self.is_online and wandb.run is not None:
             self.table = wandb.Table(columns=["epoch", "gene", "lr", "bins", "scatter_plot"])
-        if self.is_online:
+        # Avoid calling wandb.watch unless a run is active
+        if self.is_online and wandb.run is not None:
             wandb.watch(self, log=None)
         self.encoder_lr = self.config.get("encoder_lr", 1e-3)  # encoder
         default_head_lr = self.config.get("head_lr", 1e-3)  # heads
