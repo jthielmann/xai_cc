@@ -116,10 +116,18 @@ def _build_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
         f"model_state_path {config.get('model_state_path', 'empty')}\n"
     )
 
-def _setup_model_config(config_name:str):
-    raw_cfg = parse_yaml_config(config_name)
-    config = {k: v for k, v in raw_cfg.items()}
-    return config
+def _setup_model_config(config_path: str) -> Dict[str, Any]:
+    """Load a model config from the exact given path and fail on error.
+
+    No fallbacks or alternative filenames are attempted.
+    """
+    p = _resolve_relative(config_path)
+    if not os.path.exists(p):
+        raise RuntimeError(f"model config path does not exist: {p}")
+    raw_cfg = parse_yaml_config(p)
+    if not isinstance(raw_cfg, dict):
+        raise RuntimeError(f"invalid or empty model config at: {p}")
+    return {k: v for k, v in raw_cfg.items()}
 
 
 def _sanitize_token(s: str) -> str:
@@ -137,7 +145,8 @@ def _run_single(raw_cfg: Dict[str, Any]) -> None:
     if not bool(cfg.get("xai_pipeline", False)):
         raise ValueError("Config must set 'xai_pipeline: true' when using script/eval_main.py")
     _sanity_check_config(cfg)
-    cfg["model_config"] = _setup_model_config("../models/" + cfg["model_state_path"] + "/config")
+    # Build path to the model run's config without blindly prefixing '../models/' again
+    cfg["model_config"] = _setup_model_config(os.path.join(cfg["model_state_path"], "config"))
     setup_dump_env()
 
     run = None
