@@ -274,8 +274,8 @@ def main():
 
     xai_pipeline = (read_config_parameter(raw_cfg, "xai_pipeline"))
     if xai_pipeline:
-        raise RuntimeError("[info] Detected xai_pipeline config, instead run:\n"
-                           "  python script/eval_main.py --config", args.config)
+        raise RuntimeError("[info] Detected xai_pipeline config (manual/auto). Instead run:\n"
+                           f"  python script/eval_main.py --config {args.config}")
 
     setup_dump_env()
 

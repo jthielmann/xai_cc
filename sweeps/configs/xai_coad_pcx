@@ -1,6 +1,6 @@
 project: xai_coad_pcx
 name: XAI • COAD • PCX all
-xai_pipeline: true
+xai_pipeline: manual
 
 parameters:
   run_name:

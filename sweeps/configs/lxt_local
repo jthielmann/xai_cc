@@ -1,6 +1,6 @@
 project: lxt_local
 name: lxt_local
-xai_pipeline: true
+xai_pipeline: manual
 
 
 run_name: eval

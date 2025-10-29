@@ -1,6 +1,6 @@
 project: eval
 name: xai minimal example
-xai_pipeline: true
+xai_pipeline: manual
 
 
 run_name: eval

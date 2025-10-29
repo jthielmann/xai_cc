@@ -1,6 +1,6 @@
 project: coad_common_hvg_redo
 name: coad_common_hvg_redo
-xai_pipeline: true
+xai_pipeline: manual
 
 parameters:
   # Logging and run behavior
@@ -24,4 +24,3 @@ parameters:
     value:
       - coad common hvg redo/enc-dinov3_vitl16
       - coad common hvg redo/enc-dinov3_vits16
-

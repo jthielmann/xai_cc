@@ -13,6 +13,7 @@ import yaml
 import wandb
 
 from script.configs.dataset_config import get_dataset_cfg
+from script.xai_auto_config import build_auto_xai_config
 from script.evaluation.crp_pipeline import EvalPipeline
 from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, \
     read_config_parameter
@@ -42,9 +43,7 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """
     merged = dict(cfg)
     merged.update(get_dataset_cfg(merged))
-    eval_path = merged.get("eval_path") or merged.get("eval_dir") or merged.get("out_path")
-    if not eval_path:
-        eval_path = merged.get("sweep_dir") or merged.get("model_dir") or "./xai_out"
+    eval_path = "../evaluation"
     merged["eval_path"] = eval_path
     merged["out_path"] = eval_path
     os.makedirs(eval_path, exist_ok=True)
@@ -120,8 +119,15 @@ def main() -> None:
     args = parse_args()
     raw_cfg = parse_yaml_config(args.config)
     cfg = _build_cfg(raw_cfg)
-    if not bool(cfg.get("xai_pipeline", False)):
-        raise ValueError("Config must set 'xai_pipeline: true' when using script/eval_main.py")
+    mode = cfg.get("xai_pipeline")
+    if isinstance(mode, str):
+        m = mode.strip().lower()
+        if m == "auto":
+            cfg = build_auto_xai_config(cfg)
+        elif m == "manual":
+            pass
+        else:
+            raise ValueError("invalid xai_pipeline value; expected 'manual' or 'auto'")
     _sanity_check_config(cfg)
     cfg["model_config"] = _setup_model_config("../models/" + cfg["model_state_path"] + "/config")
     setup_dump_env()

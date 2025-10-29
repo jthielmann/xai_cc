@@ -1,6 +1,6 @@
 project: sae 64
 name: sae hello world training
-xai_pipeline: true
+xai_pipeline: manual
 
 
 run_name: sae hello world training

@@ -1,6 +1,6 @@
 project: forward_to_csv
 name: icms3up
-xai_pipeline: true
+xai_pipeline: manual
 
 
 run_name: forward_to_csv

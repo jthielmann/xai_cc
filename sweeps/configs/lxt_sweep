@@ -1,6 +1,6 @@
 project: eval
 name: xai minimal sweep (LXT)
-xai_pipeline: true
+xai_pipeline: manual
 
 
 run_name: xai_lxt_sweep

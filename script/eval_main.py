@@ -13,6 +13,7 @@ import yaml
 import wandb
 
 from script.configs.dataset_config import get_dataset_cfg
+from script.xai_auto_config import build_auto_xai_config
 from script.evaluation.eval_pipeline import EvalPipeline
 from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, \
     read_config_parameter
@@ -142,10 +143,16 @@ def _sanitize_token(s: str) -> str:
 
 def _run_single(raw_cfg: Dict[str, Any]) -> None:
     cfg = _build_cfg(raw_cfg)
-    if not bool(cfg.get("xai_pipeline", False)):
-        raise ValueError("Config must set 'xai_pipeline: true' when using script/eval_main.py")
+    mode = cfg.get("xai_pipeline")
+    if isinstance(mode, str):
+        m = mode.strip().lower()
+        if m == "auto":
+            cfg = build_auto_xai_config(cfg)
+        elif m == "manual":
+            pass
+        else:
+            raise ValueError("invalid xai_pipeline value; expected 'manual' or 'auto'")
     _sanity_check_config(cfg)
-    # Build path to the model run's config without blindly prefixing '../models/' again
     cfg["model_config"] = _setup_model_config(os.path.join(cfg["model_state_path"], "config"))
     setup_dump_env()
 
