@@ -374,40 +374,9 @@ class GeneExpressionRegressor(L.LightningModule):
         self.ys.append(y.detach().float().cpu())
         return loss
 
-    def _log_wandb_artifacts(self):
-        # Respect explicit opt-in for artifact logging
-        if not bool(self.config.get("log_model_artifact", False)):
-            return
-        # Never log artifacts in debug mode
-        if bool(self.config.get("debug")):
-            return
-        if not (self.is_online and wandb.run):
-            return
-        run = wandb.run
-        cfg_path = os.path.join(self.config["out_path"], "config.json")
-        best_path = self.best_model_path or os.path.join(self.config["out_path"], "best_model.pth")
-        if not os.path.exists(best_path):
-            # ensure we have a file (fallback to current state)
-            torch.save(self.state_dict(), best_path)
-
-        art = wandb.Artifact(
-            name=f"model-{run.id}",
-            type="model",
-            metadata={
-                "encoder_type": self.config.get("encoder_type"),
-                "n_genes": len(self.genes),
-                "genes": self.genes,
-                "freeze_encoder": self.config.get("freeze_encoder", False),
-                "loss_fn": self.config.get("loss_fn_switch"),
-                "best_epoch": self.best_epoch,
-                "best_val_metric": self.best_loss,
-            },
-        )
-        art.add_file(best_path, name="best_model.pth")
-        if os.path.exists(cfg_path):
-            art.add_file(cfg_path, name="config.json")
-
-        run.log_artifact(art, aliases=["best", "latest"])
+    # Removed: W&B artifact upload is disabled permanently
+    # Keeping empty stub for compatibility.
+    pass
 
     def _log_weight_stats(self, stats: Optional[dict], *, prefix: str, on_step: bool, on_epoch: bool) -> None:
         if not stats:
@@ -700,8 +669,7 @@ class GeneExpressionRegressor(L.LightningModule):
             except Exception as e:
                 logging.exception("failed to log results into %s: %s", path, e)
 
-        if not is_debug and bool(self.config.get("log_model_artifact", False)):
-            self._log_wandb_artifacts()
+        # Removed: do not upload model artifacts to W&B
 
     # to update after lr tuning
     def update_lr(self, lrs):

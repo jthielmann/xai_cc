@@ -361,6 +361,7 @@ class TrainerPipeline:
                 name=name,
                 experiment=self.wandb_run,
                 save_dir=self.dump_dir,
+                log_model=False,
             )
 
 

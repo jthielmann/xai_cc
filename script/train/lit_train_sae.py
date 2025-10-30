@@ -111,7 +111,7 @@ class SAETrainerPipeline:
 
         logger = None
         if self.config.get("log_to_wandb"):
-            logger = WandbLogger(project=self.config["project"], name=self.config["name"])
+            logger = WandbLogger(project=self.config["project"], name=self.config["name"], log_model=False)
 
         callbacks: list[Callback] = [UMAPCallback(self), WandbMetricCallback(self)]
         

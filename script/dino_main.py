@@ -83,7 +83,7 @@ def _train(cfg: dict, run: wandb.sdk.wandb_run.Run | None = None):
     trainer = L.Trainer(
         devices=1,
         accelerator=accelerator,
-        logger=WandbLogger(project=run.project, experiment=run)
+        logger=WandbLogger(project=run.project, experiment=run, log_model=False)
     )
     model = DINO(cfg)
     model.set_num_training_batches(len(dataloader_train))
@@ -106,11 +106,7 @@ def _train(cfg: dict, run: wandb.sdk.wandb_run.Run | None = None):
     wandb_run_id = run.id
     best_ckpt = getattr(getattr(trainer, "checkpoint_callback", None), "best_model_path", "")
 
-    if best_ckpt and os.path.exists(best_ckpt):
-        artifact = wandb.Artifact("model-best", type="model")
-        artifact.add_file(best_ckpt, name="model.ckpt")
-        run.log_artifact(artifact)
-        run.summary["best_model_artifact"] = artifact.name
+    # Removed: do not upload model artifacts to W&B
 
     out_dir = cfg.get("out_path", ".")
     os.makedirs(out_dir, exist_ok=True)
