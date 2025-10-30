@@ -45,7 +45,7 @@ parameters:
 
   # Encoder
   encoder_type:
-    value: dino
+    values: [dino]
   freeze_encoder:
     value: true
 
