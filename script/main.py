@@ -62,7 +62,6 @@ def _train(cfg: Dict[str, Any]) -> None:
     cfg.setdefault("dump_dir", setup_dump_env())
 
     cfg = prepare_cfg(cfg)
-    cfg = _flatten_params(cfg)
 
     if bool(cfg.get("train_sae", False)):
         # No gene list inference needed — training uses encoder features only
