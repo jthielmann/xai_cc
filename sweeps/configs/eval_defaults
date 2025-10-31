@@ -22,14 +22,10 @@ sae_state_path: null
 
 eval_dir: ../evaluation
 
-lrp: true
-crp: false                 # handled via script/crp_main.py (separate entrypoint)
-diff: true                 # single patient+gene spatial triptych
-scatter: true              # per-gene output vs target scatter plots
-forward_to_csv: true       # write predictions CSV per tile under eval_path/<model>/predictions/
-umap: true                 # UMAP from a chosen model layer (set 'umap_layer')
-sae: false                 # train SAE on encoder features as an eval case (kept off by default)
-lxt: true                  # LXT heatmaps
+## Intentionally omit case toggles here. In `xai_pipeline: auto`,
+## script/xai_auto_config.py decides which cases to enable based on the model.
+## For manual runs, set these explicitly in your config as needed:
+## - lrp, crp, diff, scatter, forward_to_csv, umap, sae, lxt
 
 # 'lxt', 'lxt_conv_gamma', 'lxt_lin_gamma', 'lxt_conv_gamma_list', 'lxt_lin_gamma_list', 'lxt_tilepaths'
 

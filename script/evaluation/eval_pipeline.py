@@ -16,7 +16,12 @@ from script.model.lit_model import load_lit_regressor
 from script.data_processing.data_loader import get_dataset_from_config, get_dataset
 from script.data_processing.image_transforms import get_transforms, get_eval_transforms
 from torch.utils.data import DataLoader, Subset
-from script.main_utils import prepare_cfg
+"""
+Evaluation pipeline for non-CRP cases (LRP, LXT, scatter, UMAP, triptych, forward_to_csv, SAE).
+
+Note: eval_main.py already prepares/merges the config and ensures eval_path. Do NOT call
+prepare_cfg here to avoid double-prep and redundant writes.
+"""
 from script.evaluation.eval_helpers import (
     auto_device,
     collect_state_dicts,
@@ -26,7 +31,8 @@ from script.train.lit_train_sae import SAETrainerPipeline
 
 class EvalPipeline:
     def __init__(self, config, run):
-        self.config = prepare_cfg(config)
+        # Avoid double-prep: eval_main prepares cfg (merges dataset cfg, sets eval_path, writes config)
+        self.config = dict(config)
         self.wandb_run = run
         # Single source of truth for run_name: require it in config
         self.run_name = self.config.get("run_name")
@@ -112,10 +118,13 @@ class EvalPipeline:
             )
             n = min(10, len(ds))
             loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
+            # Prepare a local save dir for LRP outputs regardless of W&B.
+            lrp_dir = os.path.join(self.config["eval_path"], self.model_name, "lrp")
+            os.makedirs(lrp_dir, exist_ok=True)
             if lrp_backend == "custom":
-                plot_lrp_custom(self.model, loader, run=self.wandb_run)
+                plot_lrp_custom(self.model, loader, run=self.wandb_run, save_dir=lrp_dir)
             else:
-                plot_lrp(self.model, loader, run=self.wandb_run)
+                plot_lrp(self.model, loader, run=self.wandb_run, save_dir=lrp_dir)
 
         # Note: PCX has been moved to the CRP pipeline (script/crp_main.py).
         if self.config.get("diff"):

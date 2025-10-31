@@ -117,16 +117,10 @@ def plot_scatter(config, model, wandb_run=None):
 
         # Save locally
         out_dir = config.get("out_path", ".")
-        try:
-            fig.savefig(os.path.join(out_dir, f"scatter_{gene}.png"), dpi=150, bbox_inches="tight")
-        except Exception:
-            pass
+        fig.savefig(os.path.join(out_dir, f"scatter_{gene}.png"), dpi=150, bbox_inches="tight")
 
         # Log to W&B if available
         if wandb_run is not None:
-            try:
-                wandb_run.log({f"scatter/{gene}": wandb.Image(fig)})
-            except Exception:
-                pass
+            wandb_run.log({f"scatter/{gene}": wandb.Image(fig)})
 
         plt.close(fig)

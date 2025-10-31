@@ -1,3 +1,4 @@
+import os
 import torch
 from zennit.attribution import Gradient
 from zennit.composites import EpsilonPlusFlat
@@ -12,10 +13,15 @@ def _imgify_rel(att):
     return zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
 
 
-def plot_lrp(model, data, run):
-    if run is None:
-        raise RuntimeError("W&B run is None. Call wandb.init(...) and pass it in.")
+def plot_lrp(model, data, run=None, save_dir: str | None = None):
+    """Compute LRP attributions and either log to W&B and/or save locally.
 
+    - If a W&B run is provided, log images under "lrp/".
+    - If save_dir is provided, write PNGs there.
+    - At least one of (run, save_dir) must be provided.
+    """
+    if run is None and not save_dir:
+        raise RuntimeError("No output target for LRP: provide a W&B run and/or save_dir.")
     model.eval()
     composite = EpsilonPlusFlat()
 
@@ -24,10 +30,15 @@ def plot_lrp(model, data, run):
             _, grad = attributor(sample)
 
         img = _imgify_rel(grad).convert("RGB")
-        run.log({f"lrp/attribution_{idx}": wandb.Image(img)}, commit=True)
+        if run is not None:
+            run.log({f"lrp/attribution_{idx}": wandb.Image(img)}, commit=True)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            fn = os.path.join(save_dir, f"lrp_{idx:04d}.png")
+            img.save(fn)
 
 
-def plot_lrp_custom(model, data, run=None):
+def plot_lrp_custom(model, data, run=None, save_dir: str | None = None):
     model.eval()
     device = next(model.parameters()).device
     for idx, sample in enumerate(data):
@@ -42,3 +53,7 @@ def plot_lrp_custom(model, data, run=None):
         img = _imgify_rel(grad)
         if run is not None:
             run.log({f"lrp/attribution_custom[{idx}]": wandb.Image(img)})
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            fn = os.path.join(save_dir, f"lrp_custom_{idx:04d}.png")
+            img.convert("RGB").save(fn)
