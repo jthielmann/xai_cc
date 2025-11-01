@@ -45,7 +45,7 @@ class EvalPipeline:
         os.makedirs(os.path.join(self.config["eval_path"], self.model_name), exist_ok=True)
 
         # Enforce: always use the model's genes; never accept 'genes' in eval config.
-        model_cfg = self.config.get("model_config") or {}
+        model_cfg = self.config.get("model_config")
         if "genes" in self.config and self.config["genes"] is not None:
             raise ValueError(
                 "Eval config must not set 'genes'. The trained model's genes are always used. "
@@ -112,11 +112,12 @@ class EvalPipeline:
                 debug=debug,
                 transforms=eval_tf,
                 samples=self.config.get("test_samples"),
+                max_len=self.config.get("max_len") if debug else None,
                 only_inputs=True,
                 meta_data_dir=self.config["model_config"]["meta_data_dir"],
                 gene_data_filename=self.config["model_config"]["gene_data_filename"]
             )
-            n = min(10, len(ds))
+            n = min(int(self.config.get("lrp_max_items", 10)), len(ds))
             loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
             # Prepare a local save dir for LRP outputs regardless of W&B.
             lrp_dir = os.path.join(self.config["eval_path"], self.model_name, "lrp")
@@ -139,7 +140,7 @@ class EvalPipeline:
             if isinstance(patients_cfg, (list, tuple)) and len(patients_cfg) > 0:
                 patients = list(patients_cfg)
             else:
-                patients = list(self.config.get("test_samples", []) or [])
+                patients = list(self.config.get("test_samples", []))
                 if not patients:
                     p_single = self.config.get("patient")
                     if p_single:
@@ -150,6 +151,7 @@ class EvalPipeline:
             patients = [p for p in patients if not (p in seen or seen.add(p))]
 
             gene = self.config["gene"]
+            max_items = int(self.config.get("diff_max_items", 0) or 0)
             for p in patients:
                 plot_triptych_from_model(
                     self.model,
@@ -157,6 +159,7 @@ class EvalPipeline:
                     p,
                     gene,
                     out_dir,
+                    max_items=max_items if max_items > 0 else None,
                     is_online=bool(self.wandb_run),
                     wandb_run=self.wandb_run,
                 )
@@ -209,6 +212,7 @@ class EvalPipeline:
                 debug=debug,
                 transforms=eval_tf,
                 samples=self.config.get("test_samples"),
+                max_len=self.config.get("max_len") if debug else None,
                 only_inputs=True,
                 meta_data_dir=self.config["model_config"]["meta_data_dir"],
                 gene_data_filename=self.config["model_config"]["gene_data_filename"]
@@ -339,6 +343,7 @@ class EvalPipeline:
                         meta_data_dir=self.config["meta_data_dir"],
                         gene_data_filename=self.config["gene_data_filename"],
                         image_size=image_size,
+                        max_len=self.config.get("forward_max_tiles") if bool(self.config.get("debug", False)) else None,
                     )
         if self.config.get("lxt"):
             # Delegate to LXT plotting and save under out_path/<model_name>/lxt

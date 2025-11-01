@@ -73,11 +73,14 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
         debug=debug,
         transforms=eval_tf,
         samples=config.get("test_samples"),
+        max_len=config.get("max_len") if debug else None,
         only_inputs=True,
         meta_data_dir=config["model_config"].get("meta_data_dir", "/meta_data/"),
         gene_data_filename=config["model_config"].get("gene_data_filename", "gene_data.csv"),
     )
-    loader = DataLoader(ds, batch_size=1, shuffle=False)
+    # Limit number of items evaluated to speed up debug runs
+    n_items = min(int(config.get("lxt_max_items", len(ds))), len(ds))
+    loader = DataLoader(Subset(ds, list(range(n_items))), batch_size=1, shuffle=False)
 
     device = next(model.parameters()).device
     model.eval()

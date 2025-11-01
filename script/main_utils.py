@@ -57,7 +57,7 @@ def read_config_parameter(config: dict, parameter: str):
             if "values" in val:
                 return val["values"]
         return val
-    params = config.get("parameters", {}) or {}
+    params = config.get("parameters", {})
     if parameter in params:
         val = params[parameter]
         if isinstance(val, dict):
@@ -71,7 +71,7 @@ def read_config_parameter(config: dict, parameter: str):
 
 def get_sweep_parameter_names(config: dict) -> list[str]:
     names: list[str] = []
-    for name, param in (config.get("parameters", {}) or {}).items():
+    for name, param in (config.get("parameters", {})).items():
         if isinstance(param, dict) and "values" in param:
             names.append(name)
     return names

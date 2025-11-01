@@ -282,11 +282,8 @@ def _plot_triptych_and_log(x, y, y_label, y_pred, patient, gene, out_path, is_on
 def _cuda_supports_bf16() -> bool:
     if not torch.cuda.is_available():
         return False
-    try:
-        # Available in recent PyTorch versions; guards for runtime envs
-        return bool(getattr(torch.cuda, "is_bf16_supported", lambda: False)())
-    except Exception:
-        pass
+    # Available in recent PyTorch versions; guards for runtime envs
+    return bool(getattr(torch.cuda, "is_bf16_supported", lambda: False)())
     try:
         major, _ = torch.cuda.get_device_capability()
         return major >= 8  # Ampere (A100/3090) and newer (Ada 4090+)
@@ -367,35 +364,29 @@ class TrainerPipeline:
 
 
         # Ensure a project root (sweep root) exists for project-specific outputs
-        try:
-            if not self.config.get("sweep_dir"):
-                proj = self.config.get("project", "project")
-                self.config["sweep_dir"] = os.path.join(self.config["model_dir"], proj)
-            os.makedirs(self.config["sweep_dir"], exist_ok=True)
-        except Exception:
-            pass
+        if not self.config.get("sweep_dir"):
+            proj = self.config.get("project", "project")
+            self.config["sweep_dir"] = os.path.join(self.config["model_dir"], proj)
+        os.makedirs(self.config["sweep_dir"], exist_ok=True)
 
         self.device  = _determine_device()
         self.out_path = self._prepare_output_dir()
         # Normalize: capture stats without logging panels to W&B
-        try:
-            stats = resolve_norm(self.config.get("encoder_type", ""))
-            norm_meta = {
-                "mode": "encoder",
-                "encoder_type": self.config.get("encoder_type", ""),
-                "mean": list(stats.mean),
-                "std": list(stats.std),
-            }
-            # expose mean/std in config so results CSV can include them (cfg_normalize_mean/std)
-            self.config["normalize_mean"] = norm_meta["mean"]
-            self.config["normalize_std"] = norm_meta["std"]
-            # still save to run folder for traceability
-            os.makedirs(self.out_path, exist_ok=True)
-            with open(os.path.join(self.out_path, "normalization.json"), "w") as f:
-                json.dump(norm_meta, f, indent=2)
-            # intentionally do NOT log normalize/* to wandb
-        except Exception:
-            pass
+        stats = resolve_norm(self.config.get("encoder_type", ""))
+        norm_meta = {
+            "mode": "encoder",
+            "encoder_type": self.config.get("encoder_type", ""),
+            "mean": list(stats.mean),
+            "std": list(stats.std),
+        }
+        # expose mean/std in config so results CSV can include them (cfg_normalize_mean/std)
+        self.config["normalize_mean"] = norm_meta["mean"]
+        self.config["normalize_std"] = norm_meta["std"]
+        # still save to run folder for traceability
+        os.makedirs(self.out_path, exist_ok=True)
+        with open(os.path.join(self.out_path, "normalization.json"), "w") as f:
+            json.dump(norm_meta, f, indent=2)
+        # intentionally do NOT log normalize/* to wandb
 
     def _run_name_to_dir(self, run_name: str) -> str:
         # Split into key=value parts and strip spaces
@@ -549,30 +540,24 @@ class TrainerPipeline:
         """
         if not loader:
             return
-        try:
-            batch = next(iter(loader))
-            x = batch[0] if isinstance(batch, (list, tuple)) else batch
-            if not torch.is_tensor(x):
-                return
-            x = x.detach().float()
-            shape = tuple(x.shape)
-            gmin = float(x.min())
-            gmax = float(x.max())
-            gmean = float(x.mean())
-            gstd = float(x.std(unbiased=False))
-            log.info(f"[stats] {split}: shape={shape} dtype={x.dtype} min={gmin:.4f} max={gmax:.4f} mean={gmean:.4f} std={gstd:.4f}")
-            if x.dim() == 4:  # (B,C,H,W)
-                ch_mean = x.mean(dim=(0, 2, 3))
-                ch_std  = x.std(dim=(0, 2, 3), unbiased=False)
-                log.info(
-                    f"[stats] {split}: per_channel_mean={[round(float(m),4) for m in ch_mean]} "
-                    f"per_channel_std={[round(float(s),4) for s in ch_std]}"
-                )
-        except Exception as e:
-            try:
-                log.debug(f"[stats] Unable to log {split} batch stats: {e}")
-            except Exception:
-                pass
+        batch = next(iter(loader))
+        x = batch[0] if isinstance(batch, (list, tuple)) else batch
+        if not torch.is_tensor(x):
+            raise TypeError("Expected tensor batch for stats logging")
+        x = x.detach().float()
+        shape = tuple(x.shape)
+        gmin = float(x.min())
+        gmax = float(x.max())
+        gmean = float(x.mean())
+        gstd = float(x.std(unbiased=False))
+        log.info(f"[stats] {split}: shape={shape} dtype={x.dtype} min={gmin:.4f} max={gmax:.4f} mean={gmean:.4f} std={gstd:.4f}")
+        if x.dim() == 4:  # (B,C,H,W)
+            ch_mean = x.mean(dim=(0, 2, 3))
+            ch_std  = x.std(dim=(0, 2, 3), unbiased=False)
+            log.info(
+                f"[stats] {split}: per_channel_mean={[round(float(m),4) for m in ch_mean]} "
+                f"per_channel_std={[round(float(s),4) for s in ch_std]}"
+            )
 
     def _generate_spatial_plots(self, model):
         # Build a spatial dataset (no dataloader: we want per-row tile paths)

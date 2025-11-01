@@ -23,6 +23,7 @@ def generate_results(
     make_hists=False,
     wandb_run=None,
     image_size: int = 224,
+    max_len: int | None = None,
 ):
     if patient is None:
         raise ValueError("Please provide a `patient` (string).")
@@ -59,6 +60,7 @@ def generate_results(
         genes=genes,
         transforms=eval_tf,
         samples=[patient],
+        max_len=max_len,
         only_inputs=False,
         meta_data_dir=meta_data_dir,
         gene_data_filename=gene_data_filename,

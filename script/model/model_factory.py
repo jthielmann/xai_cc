@@ -212,11 +212,11 @@ def _imagenet_parts(resize_size: int = 224):
 def _build_pipeline(base_pre: Sequence[Callable], norm: Callable,
                     extra: Optional[Iterable[Callable]] = None,
                     place: str = "pre_norm") -> v2.Compose:
-    extra = list(extra or [])
+    extra_list = [] if extra is None else list(extra)
     if place == "pre_norm":
-        steps = [*base_pre, *extra, norm]
+        steps = [*base_pre, *extra_list, norm]
     elif place == "post_norm":
-        steps = [*base_pre, norm, *extra]
+        steps = [*base_pre, norm, *extra_list]
     else:
         raise ValueError(f"Unknown place='{place}' (use 'pre_norm' or 'post_norm').")
     return v2.Compose(steps)

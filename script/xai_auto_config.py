@@ -31,7 +31,7 @@ def build_auto_xai_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
             p = os.path.join(model_path, name)
             if os.path.exists(p):
                 try:
-                    model_config = parse_yaml_config(p) or {}
+                    model_config = parse_yaml_config(p)
                 except Exception:
                     model_config = {}
                 break

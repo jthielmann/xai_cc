@@ -72,7 +72,7 @@ def plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=Fals
     log.info("Saved spatial plot: %s", out_file)
 
 
-def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path: str, *, is_online=False, wandb_run=None):
+def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path: str, *, max_items: int | None = None, is_online=False, wandb_run=None):
     data_dir = cfg.get("data_dir") or cfg.get("model_config", {}).get("data_dir")
     if not data_dir:
         raise ValueError("Missing 'data_dir' in config; cannot build spatial dataset for triptych.")
@@ -87,6 +87,7 @@ def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path
         genes=[gene],
         transforms=eval_tf,
         samples=[patient],
+        max_len=max_items if (max_items is not None and max_items > 0) else None,
         only_inputs=False,
         meta_data_dir=meta_data_dir,
         gene_data_filename=gene_data_filename,
@@ -106,7 +107,8 @@ def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path
     xs = []
     ys = []
     with torch.no_grad():
-        for i in range(len(ds)):
+        limit = min(len(ds), int(max_items)) if (max_items is not None and max_items > 0) else len(ds)
+        for i in range(limit):
             item = ds[i]
             # ds returns (img, target) in return_floats mode for standard datasets
             if isinstance(item, (list, tuple)):

@@ -18,29 +18,26 @@ def _read_top_level_keys(path: str) -> dict:
     and stops scanning once a top-level 'parameters:' block starts.
     """
     keys = {}
-    try:
-        with open(path, "r") as f:
-            for raw in f:
-                line = raw.rstrip("\n")
-                if not line or line.lstrip().startswith("#"):
-                    continue
-                # stop at top-level parameters block
-                if line.startswith("parameters:"):
-                    break
-                # only consider top-level (no leading spaces)
-                if line[0].isspace():
-                    continue
-                m = re.match(r"^(\w+)\s*:\s*(.*)$", line)
-                if not m:
-                    continue
-                k, v = m.group(1), m.group(2)
-                v = v.strip().strip('"\'')
-                if k in ("project") and k not in keys:
-                    keys[k] = v
-                if "project" in keys:
-                    break
-    except Exception:
-        pass
+    with open(path, "r") as f:
+        for raw in f:
+            line = raw.rstrip("\n")
+            if not line or line.lstrip().startswith("#"):
+                continue
+            # stop at top-level parameters block
+            if line.startswith("parameters:"):
+                break
+            # only consider top-level (no leading spaces)
+            if line[0].isspace():
+                continue
+            m = re.match(r"^(\w+)\s*:\s*(.*)$", line)
+            if not m:
+                continue
+            k, v = m.group(1), m.group(2)
+            v = v.strip().strip('"\'')
+            if k in ("project") and k not in keys:
+                keys[k] = v
+            if "project" in keys:
+                break
     return keys
 
 

@@ -355,7 +355,7 @@ def get_base_dataset(
             raise ValueError("Provided gene list contains only unnamed/blank columns; nothing to use.")
     # Always try to include spatial coordinates if present ('x','y'), even when specific genes are requested.
     # We will filter by available columns per-file to avoid read_csv errors.
-    columns_of_interest = ["tile"] + (genes or []) if genes else None
+    columns_of_interest = ["tile"] + genes if genes else None
     dfs = []
 
     for patient in samples:
@@ -380,7 +380,7 @@ def get_base_dataset(
     if genes is not None:
         genes = [g for g in genes if not _is_unnamed_column(g)]
 
-    edges_lookup = precomputed_edges or {}
+    edges_lookup = precomputed_edges
     edges_result: Dict[str, np.ndarray] = dict(edges_lookup) if return_edges else edges_lookup
 
     if lds_smoothing_csv is not None:
@@ -542,7 +542,7 @@ def get_dataset(
         df, edges = base_result
     else:
         df = base_result
-        edges = precomputed_bin_edges or {}
+        edges = precomputed_bin_edges
 
     # create the PyTorch-compatible dataset
     ds = STDataset(
@@ -706,7 +706,7 @@ def get_base_dataset_single_file(
     if "patient" not in df.columns:
         df["patient"] = "all"
 
-    edges_lookup = precomputed_edges or {}
+    edges_lookup = precomputed_edges
     edges_result: Dict[str, np.ndarray] = dict(edges_lookup) if return_edges else edges_lookup
 
     # Optionally attach LDS weights
@@ -833,7 +833,7 @@ def get_dataset_single_file(
         df, edges = base_result
     else:
         df = base_result
-        edges = precomputed_bin_edges or {}
+        edges = precomputed_bin_edges
 
     ds = STDataset(
         df,

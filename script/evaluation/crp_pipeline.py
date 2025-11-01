@@ -104,7 +104,7 @@ class EvalPipeline:
 
         if self.config.get("pcx"):
             # Enforce: always use model genes; eval config must not set 'genes'.
-            model_cfg = self.config.get("model_config") or {}
+            model_cfg = self.config.get("model_config")
             if "genes" in self.config and self.config["genes"] is not None:
                 raise ValueError(
                     "CRP/PCX config must not set 'genes'. The trained model's genes are always used."

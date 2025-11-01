@@ -84,7 +84,7 @@ def _train(cfg: Dict[str, Any]) -> None:
                     "Config 'genes' must be a flat list of gene names when using split_genes_by; "
                     "got a list of lists. Provide a flat list and use 'gene_list_index' to select a chunk."
                 )
-            tgt = [str(g) for g in (genes or [])]
+            tgt = [str(g) for g in genes]
             chunks = [tgt[i:i+k] for i in range(0, len(tgt), k)]
             # Select chunk via 1-based gene_list_index if provided, else first chunk
             idx = int(cfg.get("gene_list_index", 1)) - 1
@@ -93,7 +93,7 @@ def _train(cfg: Dict[str, Any]) -> None:
             cfg["genes_id"] = f"c{idx+1:03d}"
         else:
             # No chunking requested; derive a stable id from the provided list
-            cfg["genes_id"] = compute_genes_id(cfg.get("genes") or [])
+            cfg["genes_id"] = compute_genes_id(cfg.get("genes"))
         TrainerPipeline(cfg, run=run).run()
     if run: run.finish()
 
@@ -126,7 +126,7 @@ def _flatten_base_fixed(cfg: Dict[str, Any]) -> Dict[str, Any]:
             out[k] = v
 
     # Fixed values inside the 'parameters' section (ignore sweep search specs)
-    params = cfg.get("parameters") or {}
+    params = cfg.get("parameters")
     if isinstance(params, dict):
         for pk, pv in params.items():
             if isinstance(pv, dict) and "value" in pv and not ("values" in pv or "distribution" in pv):
@@ -199,7 +199,7 @@ def _flatten_params(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 def _build_sweep_config(raw_cfg: Dict[str, Any], config_basename: Optional[str] = None) -> Dict[str, Any]:
     """Build a W&B sweep spec from a raw config with a 'parameters' section."""
-    params_dict = (raw_cfg.get("parameters", {}) or {}) if isinstance(raw_cfg, dict) else {}
+    params_dict = (raw_cfg.get("parameters", {})) if isinstance(raw_cfg, dict) else {}
     hyper_params = _extract_hyperparams(params_dict)
 
     # Add config name so each run can load the base config for fixed parameters
@@ -268,7 +268,7 @@ def main():
         sweep_id_file = os.path.join(sweep_id_dir, "sweep_id.txt")
         os.environ["WANDB_RUN_GROUP"] = str(read_config_parameter(raw_cfg, "group"))
         os.environ["WANDB_JOB_TYPE"] = str(read_config_parameter(raw_cfg, "job_type"))
-        tags = read_config_parameter(raw_cfg, "tags") or []
+        tags = read_config_parameter(raw_cfg, "tags")
         os.environ["WANDB_TAGS"] = ",".join(map(str, tags))
         if os.path.exists(sweep_id_file):
             with open(sweep_id_file, "r") as f: sweep_id = f.read().strip()

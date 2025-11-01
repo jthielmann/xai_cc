@@ -102,7 +102,7 @@ def prepare_gene_list(cfg: Dict[str, Any]) -> List[List[str]]:
 
 
 def get_active_chunk_idx(cfg: Dict[str, Any], chunk: Optional[List[str]] = None) -> int:
-    chunks = cfg.get("gene_chunks") or []
+    chunks = cfg.get("gene_chunks")
     if not chunks:
         return 0
     if chunk is None:

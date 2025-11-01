@@ -246,7 +246,7 @@ class GeneExpressionRegressor(L.LightningModule):
     def _unfreeze_last_n_groups(self, count: int, exclude: Optional[Iterable[str]] = None) -> list[str]:
         if count <= 0:
             return []
-        exclude_set = set(exclude or [])
+        exclude_set = set(exclude)
         selected: list[str] = []
         for group in reversed(self._encoder_param_group_order):
             if group in exclude_set:
@@ -269,14 +269,10 @@ class GeneExpressionRegressor(L.LightningModule):
         super().train(mode)
         if getattr(self, "encoder_is_fully_frozen", False):
             # keep encoder/BNS in eval to prevent running-stat drift
-            try:
-                self.encoder.eval()
-                for m in self.encoder.modules():
-                    if isinstance(m, nn.modules.batchnorm._BatchNorm):
-                        m.eval()
-            except Exception:
-                # best-effort; don't crash training if encoder lacks BN
-                pass
+            self.encoder.eval()
+            for m in self.encoder.modules():
+                if isinstance(m, nn.modules.batchnorm._BatchNorm):
+                    m.eval()
         return self
 
 

@@ -45,10 +45,7 @@ class DINO(L.LightningModule):
         self.student_backbone = Dinov3Model.from_pretrained(model_id)
         # Enable gradient checkpointing to save VRAM
         if self.grad_checkpointing and hasattr(self.student_backbone, "gradient_checkpointing_enable"):
-            try:
-                self.student_backbone.gradient_checkpointing_enable()
-            except Exception:
-                pass
+            self.student_backbone.gradient_checkpointing_enable()
         self.teacher_backbone = copy.deepcopy(self.student_backbone)
         deactivate_requires_grad(self.teacher_backbone)
 

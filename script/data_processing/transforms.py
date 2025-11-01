@@ -15,14 +15,10 @@ from script.data_processing.custom_transforms import Occlude
 
 
 def _assert_single_normalize(seq) -> None:
-    """Best-effort guard: ensure exactly one Normalize op in a composed pipeline."""
-    try:
-        ops = getattr(seq, "transforms", None) or []
-        n = sum(1 for t in ops if isinstance(t, T.Normalize))
-        assert n == 1, f"Expected exactly one Normalize, found {n}"
-    except Exception:
-        # Non-fatal: only guard in common cases
-        pass
+    """Ensure exactly one Normalize op in a composed pipeline."""
+    ops = getattr(seq, "transforms", None)
+    n = sum(1 for t in ops if isinstance(t, T.Normalize))
+    assert n == 1, f"Expected exactly one Normalize, found {n}"
 
 # Assumes your Option-A version:
 # get_encoder_transforms(encoder_type, resize_size=224, extra=None, place="pre_norm")
@@ -121,4 +117,3 @@ def build_transforms(cfg: Dict) -> Dict[str, T.Compose]:
         _assert_single_normalize(eval_tf)
 
     return {"train": train_tf, "eval": eval_tf}
-

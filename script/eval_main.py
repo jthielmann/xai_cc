@@ -26,10 +26,7 @@ def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
         return path
     bases = []
     if source_path:
-        try:
-            bases.append(os.path.dirname(os.path.abspath(source_path)))
-        except Exception:
-            pass
+        bases.append(os.path.dirname(os.path.abspath(source_path)))
     bases.append(os.getcwd())
     for base in bases:
         candidate = os.path.normpath(os.path.join(base, path))
@@ -42,14 +39,21 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """Merge dataset defaults and ensure output directory exists, persist config.
 
     Supports new 'eval_dir'/'eval_path' base. Back-compat: mirrors into 'out_path'.
+    In debug mode, route outputs to '<base>/debug'.
     """
     merged = dict(cfg)
     merged.update(get_dataset_cfg(merged))
 
-    # Prefer explicit eval_path/eval_dir over legacy out_path for evaluation outputs
-    eval_path = merged.get("eval_path") or merged.get("eval_dir") or merged.get("out_path")
-    if not eval_path:
-        eval_path = merged.get("sweep_dir") or merged.get("model_dir") or "./xai_out"
+    # Determine base evaluation directory
+    base = (
+        merged.get("eval_path")
+        or merged.get("eval_dir")
+        or merged.get("out_path")
+        or merged.get("sweep_dir")
+        or merged.get("model_dir")
+        or "./xai_out"
+    )
+    eval_path = os.path.join(base, "debug") if bool(merged.get("debug", False)) else base
     merged["eval_path"] = eval_path
     # Maintain legacy 'out_path' for downstream helpers that expect it
     merged["out_path"] = eval_path
@@ -154,6 +158,17 @@ def _run_single(raw_cfg: Dict[str, Any]) -> None:
             raise ValueError("invalid xai_pipeline value; expected 'manual' or 'auto'")
     _sanity_check_config(cfg)
     cfg["model_config"] = _setup_model_config(os.path.join(cfg["model_state_path"], "config"))
+    # If debug, set concrete caps to reduce compute (keep W&B logging unchanged)
+    if bool(cfg.get("debug", False)):
+        cfg = dict(cfg)
+        cfg["max_len"] = 100              # cap rows per patient file
+        cfg["lrp_max_items"] = 4          # few attribution samples
+        cfg["lxt_max_items"] = 8          # few heatmaps
+        cfg["umap_max_samples"] = 400     # limit UMAP points
+        cfg["umap_batch_size"] = 16       # smaller eval batches
+        cfg["scatter_max_items"] = 100    # few points for scatter
+        cfg["forward_max_tiles"] = 1000   # cap tiles forwarded
+        cfg["diff_max_items"] = 200       # cap tiles in triptychs
     setup_dump_env()
 
     run = None

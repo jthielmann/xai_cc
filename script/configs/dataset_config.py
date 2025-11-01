@@ -75,7 +75,7 @@ def _read_param(cfg: dict, key: str, default: Any = None) -> Any:
     if key in cfg:
         val = cfg[key]
     else:
-        params = cfg.get("parameters", {}) or {}
+        params = cfg.get("parameters", {})
         if key in params:
             val = params[key]
         else:

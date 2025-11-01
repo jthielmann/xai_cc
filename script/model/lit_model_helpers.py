@@ -118,24 +118,15 @@ def sanitize_for_json(value: Any) -> Any:
     try:
         if isinstance(value, (str, int, float, bool)) or value is None:
             return value
-        try:
-            import numpy as _np
-            if isinstance(value, _np.generic):
-                return value.item()
-            if isinstance(value, _np.ndarray):
-                return value.tolist()
-        except Exception:
-            pass
-        try:
-            import torch as _torch
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if 'torch' in globals():
+            import torch as _torch  # ensure name exists locally
             if isinstance(value, _torch.Tensor):
                 return value.detach().cpu().tolist()
-        except Exception:
-            pass
-        try:
-            return json.dumps(value, ensure_ascii=False)
-        except Exception:
-            return str(value)
+        return json.dumps(value, ensure_ascii=False)
     except Exception:
         return str(value)
 

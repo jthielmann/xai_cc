@@ -54,7 +54,7 @@ def plot_scatter(config, model, wandb_run=None):
         transforms=eval_tf,
         samples=config.get("test_samples"),
         only_inputs=False,
-        max_len=100 if config["debug"] else None
+        max_len=(int(config.get("max_len")) if bool(config.get("debug", False)) and config.get("max_len") is not None else None)
     )
 
     # Optional truncation for speed

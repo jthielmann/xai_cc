@@ -45,7 +45,7 @@ class WandbMetricCallback(Callback):
         run = getattr(self.pipeline, "wandb_run", None)
         if run is None:
             return
-        metrics = trainer.callback_metrics or {}
+        metrics = trainer.callback_metrics
         payload = {"epoch": trainer.current_epoch}
         # Cosine similarity
         # Reasoning: metrics can be tensors on CUDA, CPU, or metric wrapper types.

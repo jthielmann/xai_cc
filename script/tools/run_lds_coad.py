@@ -103,10 +103,7 @@ def main() -> None:
 
     lds.main()
     if cleanup:
-        try:
-            Path(cfg_path_with_genes).unlink(missing_ok=True)
-        except Exception:
-            pass
+        Path(cfg_path_with_genes).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
