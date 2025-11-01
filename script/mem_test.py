@@ -58,7 +58,8 @@ def main():
         if test_samples:
             patients += test_samples
         data_dir = cfg["data_dir"]
-        gene_data_filename = cfg["gene_data_filename"]
+        # Directly resolve metadata CSV using eval override with model_config fallback
+        gene_data_filename = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
         fp = os.path.join(data_dir, patients[0], meta_data_dir.lstrip("/"), gene_data_filename)
         df = pd.read_csv(fp, nrows=1)
         candidates = [c for c in df.columns if

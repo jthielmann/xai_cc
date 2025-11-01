@@ -48,6 +48,10 @@ def plot_scatter(config, model, wandb_run=None):
     eval_tf = get_transforms(base_cfg, split="eval")
     genes = config.get("genes")
 
+    # Directly resolve metadata CSV using eval override with model_config fallback
+    cfg = config
+    meta_dir = cfg.get("meta_data_dir") or base_cfg.get("meta_data_dir", "/meta_data/")
+    gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
     ds = get_dataset_from_config(
         dataset_name=config["dataset"],
         genes=genes,
@@ -56,7 +60,9 @@ def plot_scatter(config, model, wandb_run=None):
         transforms=eval_tf,
         samples=config.get("test_samples"),
         only_inputs=False,
-        max_len=(int(config.get("max_len")) if bool(config.get("debug", False)) and config.get("max_len") is not None else None)
+        max_len=(int(config.get("max_len")) if bool(config.get("debug", False)) and config.get("max_len") is not None else None),
+        meta_data_dir=meta_dir,
+        gene_data_filename=gene_csv,
     )
 
     # Optional truncation for speed

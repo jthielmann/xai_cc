@@ -116,13 +116,15 @@ def export_split_embeddings(
         tfm = get_eval_transforms(image_size=image_size)
 
         # Build dataset yielding (img, y, patient, tile_path)
+        # Directly resolve metadata CSV using eval override with model_config fallback
+        gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
         ds = get_dataset(
             data_dir=cfg["data_dir"],
             genes=None,
             transforms=tfm,
             samples=cfg.get(f"{split}_samples"),
             only_inputs=False,
-            gene_data_filename=cfg.get("gene_data_filename"),
+            gene_data_filename=gene_csv,
             meta_data_dir=cfg.get("meta_data_dir"),
             return_floats=False,
             return_edges=False,
@@ -210,4 +212,3 @@ def export_split_embeddings(
                 print(
                     f"[embeddings] wrote split={split} epoch={epoch} batch={b_idx} → {out_path}"
                 )
-

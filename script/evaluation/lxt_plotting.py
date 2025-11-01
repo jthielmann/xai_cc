@@ -66,6 +66,10 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
     eval_tf = get_transforms(config["model_config"], split="eval")
     debug = bool(config.get("debug", False))
 
+    # Directly resolve metadata CSV using eval override with model_config fallback
+    cfg = config
+    meta_dir = cfg.get("meta_data_dir") or cfg["model_config"].get("meta_data_dir", "/meta_data/")
+    gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
     ds = get_dataset_from_config(
         dataset_name=config["model_config"]["dataset"],
         genes=None,
@@ -75,8 +79,8 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
         samples=config.get("test_samples"),
         max_len=config.get("max_len") if debug else None,
         only_inputs=True,
-        meta_data_dir=config["model_config"].get("meta_data_dir", "/meta_data/"),
-        gene_data_filename=config["model_config"].get("gene_data_filename", "gene_data.csv"),
+        meta_data_dir=meta_dir,
+        gene_data_filename=gene_csv,
     )
     # Limit number of items evaluated to speed up debug runs
     n_items = min(int(config.get("lxt_max_items", len(ds))), len(ds))

@@ -67,6 +67,10 @@ class EvalPipeline:
             crp_backend = str(self.config.get("crp_backend", "zennit")).lower()
             eval_tf = get_transforms(self.config["model_config"], split="eval")
             # Use TEST split from the selected dataset; honor configured test_samples
+            # Directly resolve metadata CSV using eval override with model_config fallback
+            cfg = self.config
+            meta_dir = cfg.get("meta_data_dir") or cfg["model_config"].get("meta_data_dir", "/meta_data/")
+            gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
                 genes=None,
@@ -75,8 +79,8 @@ class EvalPipeline:
                 transforms=eval_tf,
                 samples=self.config.get("test_samples"),
                 only_inputs=False,
-                meta_data_dir=self.config["model_config"].get("meta_data_dir", "/meta_data/"),
-                gene_data_filename=self.config["model_config"].get("gene_data_filename", "gene_data.csv"),
+                meta_data_dir=meta_dir,
+                gene_data_filename=gene_csv,
             )
             # Optional truncation via config: crp_max_items; default: use all
             max_items = int(self.config.get("crp_max_items", 0) or 0)

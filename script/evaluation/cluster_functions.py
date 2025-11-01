@@ -284,6 +284,9 @@ def cluster_explanations_genes_loop(cfg, model, data_dir, out_path, genes, targe
         print("clustering started for gene", gene)
         print("loading dataset")
 
+        # Prefer explicit eval overrides for metadata layout; fall back to model_config
+        meta_dir = cfg.get("meta_data_dir") or cfg.get("model_config", {}).get("meta_data_dir", "/meta_data/")
+        gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
         dataset = get_dataset(
             data_dir,
             genes=[gene],
@@ -291,7 +294,9 @@ def cluster_explanations_genes_loop(cfg, model, data_dir, out_path, genes, targe
             transforms=get_transforms(cfg),
             max_len=None,
             only_inputs=False,
-            return_floats=True
+            meta_data_dir=meta_dir,
+            gene_data_filename=gene_csv,
+            return_floats=True,
         )
         print("dataset loaded")
 

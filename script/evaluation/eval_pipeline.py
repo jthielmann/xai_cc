@@ -113,6 +113,10 @@ class EvalPipeline:
             lrp_backend = str(self.config.get("lrp_backend", "zennit")).lower()
             eval_tf = get_transforms(self.config["model_config"], split="eval")
             debug = bool(self.config.get("debug", False))
+            # Directly resolve metadata CSV using eval override with model_config fallback
+            cfg = self.config
+            meta_dir = cfg.get("meta_data_dir") or cfg["model_config"].get("meta_data_dir", "/meta_data/")
+            gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
                 genes=None,
@@ -122,8 +126,8 @@ class EvalPipeline:
                 samples=self.config.get("test_samples"),
                 max_len=self.config.get("max_len") if debug else None,
                 only_inputs=True,
-                meta_data_dir=self.config["model_config"]["meta_data_dir"],
-                gene_data_filename=self.config["model_config"]["gene_data_filename"]
+                meta_data_dir=meta_dir,
+                gene_data_filename=gene_csv,
             )
             n = min(int(self.config.get("lrp_max_items", 10)), len(ds))
             loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
@@ -213,6 +217,10 @@ class EvalPipeline:
             # Build eval loader (inputs only)
             eval_tf = get_transforms(self.config["model_config"], split="eval")
             debug = bool(self.config.get("debug", False))
+            # Directly resolve metadata CSV using eval override with model_config fallback
+            cfg = self.config
+            meta_dir = cfg.get("meta_data_dir") or cfg["model_config"].get("meta_data_dir", "/meta_data/")
+            gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
                 genes=None,
@@ -222,8 +230,8 @@ class EvalPipeline:
                 samples=self.config.get("test_samples"),
                 max_len=self.config.get("max_len") if debug else None,
                 only_inputs=True,
-                meta_data_dir=self.config["model_config"]["meta_data_dir"],
-                gene_data_filename=self.config["model_config"]["gene_data_filename"]
+                meta_data_dir=meta_dir,
+                gene_data_filename=gene_csv,
             )
             bs = int(self.config.get("umap_batch_size", 32))
             loader = DataLoader(ds, batch_size=bs, shuffle=False)
@@ -339,6 +347,9 @@ class EvalPipeline:
                 print(f"[EvalPipeline] predictions already exist at {results_csv}; skipping forward_to_csv.")
             else:
                 device = auto_device(self.model)
+                # Directly resolve metadata CSV using eval override with model_config fallback
+                cfg = self.config
+                gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
                 for p in patients:
                     _ = generate_results(
                         model=self.model,
@@ -349,7 +360,7 @@ class EvalPipeline:
                         patient=p,
                         genes=genes,
                         meta_data_dir=self.config["meta_data_dir"],
-                        gene_data_filename=self.config["gene_data_filename"],
+                        gene_data_filename=gene_csv,
                         image_size=image_size,
                         max_len=self.config.get("forward_max_tiles") if bool(self.config.get("debug", False)) else None,
                         forward_batch_size=int(self.config.get("forward_batch_size", 32)),
