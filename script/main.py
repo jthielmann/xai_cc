@@ -96,6 +96,21 @@ def _train(cfg: Dict[str, Any]) -> None:
                 found = i
                 break
         if found < 0:
+            # Debug prints to help diagnose mismatch between requested genes and available chunks
+            try:
+                print("[debug] Requested genes length:", len(tgt))
+                print("[debug] Requested genes (showing up to 100):", tgt[:100])
+                if len(tgt) > 100:
+                    print("[debug] ... (truncated)")
+                print("[debug] Available gene_chunks count:", len(gene_chunks))
+                print("[debug] gene_chunks sizes:", [len(c) for c in gene_chunks])
+                for i, ch in enumerate(gene_chunks):
+                    chs = [str(g) for g in ch]
+                    print(f"[debug] gene_chunks[{i}] sample (up to 20):", chs[:20])
+                    if len(chs) > 20:
+                        print("[debug] ... (truncated)")
+            except Exception as e:
+                print("[debug] Failed to print gene debug info:", repr(e))
             raise RuntimeError("Selected genes chunk not found in dataset chunks; ensure dataset, split_genes_by and gene list match.")
         idx = found
         cfg["genes_id"] = f"c{idx+1:03d}"
@@ -189,6 +204,21 @@ def _sweep_run():
                 found = i
                 break
         if found < 0:
+            # Debug prints to help diagnose mismatch between requested genes and available chunks (sweep path)
+            try:
+                print("[debug] Requested genes length:", len(tgt))
+                print("[debug] Requested genes (showing up to 100):", tgt[:100])
+                if len(tgt) > 100:
+                    print("[debug] ... (truncated)")
+                print("[debug] Available gene_chunks count:", len(gene_chunks))
+                print("[debug] gene_chunks sizes:", [len(c) for c in gene_chunks])
+                for i, ch in enumerate(gene_chunks):
+                    chs = [str(g) for g in ch]
+                    print(f"[debug] gene_chunks[{i}] sample (up to 20):", chs[:20])
+                    if len(chs) > 20:
+                        print("[debug] ... (truncated)")
+            except Exception as e:
+                print("[debug] Failed to print gene debug info:", repr(e))
             raise RuntimeError("Selected genes chunk not found in dataset chunks; ensure dataset, split_genes_by and gene list match.")
         idx = found
         merged["genes_id"] = f"c{idx+1:03d}"
