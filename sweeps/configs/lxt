@@ -38,10 +38,6 @@ lrp_backend: zennit
 crp_backend: zennit
 pcx_backend: zennit
 
-# Optional overrides for specific visualizations
-patient: p007
-gene: GENE_SYMBOL          # used by 'diff' (set to a valid gene for your dataset)
-
 # Genes come from the trained model; do not set 'genes' here.
 
 # Scatter options
@@ -73,9 +69,3 @@ umap_generate_image_plots: false
 # LXT gamma parameters (single-run)
 lxt_conv_gamma: 0.25
 lxt_lin_gamma: 0.0
-
-# Optional: provide explicit tiles to visualize with LXT
-# If set, these paths are used instead of sampling from the dataset.
-# lxt_tilepaths:
-#   - /absolute/path/to/tile1.png
-#   - /absolute/path/to/tile2.png
