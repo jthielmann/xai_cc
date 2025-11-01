@@ -24,6 +24,8 @@ def generate_results(
     wandb_run=None,
     image_size: int = 224,
     max_len: int | None = None,
+    forward_batch_size: int = 32,
+    forward_num_workers: int = 0,
 ):
     if patient is None:
         raise ValueError("Please provide a `patient` (string).")
@@ -66,56 +68,58 @@ def generate_results(
         gene_data_filename=gene_data_filename,
         return_patient_and_tilepath=True
     )
+    # Batched DataLoader; no fallbacks
+    from torch.utils.data import DataLoader
+    pin = isinstance(device, torch.device) and device.type == "cuda"
+    loader = DataLoader(
+        ds,
+        batch_size=int(forward_batch_size),
+        shuffle=False,
+        num_workers=int(forward_num_workers),
+        pin_memory=pin,
+    )
 
-    outputs_by_gene = {g: None for g in genes}
-    handles = []
+    if not hasattr(model, "gene_to_idx") or not isinstance(model.gene_to_idx, dict):
+        raise RuntimeError("Model must expose 'gene_to_idx' mapping for batched inference.")
+    try:
+        gene_indices = [int(model.gene_to_idx[g]) for g in genes]
+    except Exception as e:
+        raise RuntimeError(f"Requested genes are not present in model mapping: {genes}") from e
 
-    def make_hook(gene_name):
-        def hook(_module, _inp, out):
-            outputs_by_gene[gene_name] = out
-        return hook
-
-    for g in genes:
-        handles.append(getattr(model, g).register_forward_hook(make_hook(g)))
-
-    i, j = 0, len(ds)
-    results = []
+    processed = 0
+    total = len(ds)
     with torch.no_grad():
-        for images, labels, patient, name in ds:
-            if i % 10 == 0:
-                print(i, "/", j)
-            i += 1
+        for images, labels, patients_b, names_b in loader:
+            images = images.to(device).float()
+            y_hat = model(images)
+            # Align and move to CPU for writing
+            y_hat = y_hat[:, gene_indices].detach().cpu().float()
+            y_true = torch.as_tensor(labels).detach().cpu().float()
+            if y_true.dim() == 1:
+                y_true = y_true.unsqueeze(1)
 
-            for k in outputs_by_gene:
-                outputs_by_gene[k] = None
+            rows = []
+            B = int(y_hat.size(0))
+            for bi in range(B):
+                row = {}
+                yh = y_hat[bi].tolist()
+                yt = y_true[bi].tolist()
+                for gi, g in enumerate(genes):
+                    row[f"label_{g}"] = float(yt[gi])
+                    row[f"pred_{g}"] = float(yh[gi])
+                path = names_b[bi]
+                pat = patients_b[bi]
+                row["path"] = path
+                row["tile"] = os.path.basename(path)
+                row["patient"] = pat
+                rows.append(row)
 
-            images = images.unsqueeze(0).to(device).float()
+            if rows:
+                pd.DataFrame(rows).to_csv(filename, index=False, mode="a", header=False)
 
-            _ = model(images)
-
-            missing = [g for g, v in outputs_by_gene.items() if v is None]
-            if missing:
-                raise RuntimeError(f"Missing outputs for genes: {missing}")
-
-            lbl_list = labels.reshape(-1).cpu().tolist()
-            out_list = [
-                float(outputs_by_gene[g].reshape(-1)[0].cpu().item())
-                for g in genes
-            ]
-            results.append(out_list)
-            row_dict = {}
-            for idx, g in enumerate(genes):
-                row_dict[f"label_{g}"] = lbl_list[idx]
-                row_dict[f"pred_{g}"] = out_list[idx]
-
-            row_dict["path"] = name
-            row_dict["tile"] = os.path.basename(name)
-            row_dict["patient"] = patient
-            row = pd.DataFrame([row_dict])
-            row.to_csv(filename, index=False, mode="a", header=False)
-
-    for h in handles:
-        h.remove()
+            processed += B
+            # Print frequent progress; first print happens after first batch
+            print(f"{processed} / {total}")
 
     print(f"[generate_results] Saved results to: {filename}")
 

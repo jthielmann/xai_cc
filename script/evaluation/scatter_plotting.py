@@ -43,7 +43,9 @@ def plot_scatter(config, model, wandb_run=None):
     device = next(model.parameters()).device
 
     # Load test dataset with eval transforms, including targets
-    eval_tf = get_transforms(config, split="eval")
+    # Prefer the trained model's config for encoder-dependent transforms
+    base_cfg = config.get("model_config", config)
+    eval_tf = get_transforms(base_cfg, split="eval")
     genes = config.get("genes")
 
     ds = get_dataset_from_config(

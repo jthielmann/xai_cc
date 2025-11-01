@@ -352,6 +352,8 @@ class EvalPipeline:
                         gene_data_filename=self.config["gene_data_filename"],
                         image_size=image_size,
                         max_len=self.config.get("forward_max_tiles") if bool(self.config.get("debug", False)) else None,
+                        forward_batch_size=int(self.config.get("forward_batch_size", 32)),
+                        forward_num_workers=int(self.config.get("forward_num_workers", 0)),
                     )
         if self.config.get("lxt"):
             # Delegate to LXT plotting and save under out_path/<model_name>/lxt
