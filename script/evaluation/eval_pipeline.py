@@ -40,6 +40,14 @@ class EvalPipeline:
             raise ValueError("Config must provide 'run_name' (single source of truth).")
         self.model_src = self.config.get("model_config_path")
         self.model = self._load_model()
+        # Force evaluation on an accelerator; require GPU availability
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            raise RuntimeError("No GPU backend available (CUDA/MPS). Please run on a GPU machine.")
+        self.model = self.model.to(device)
         # Derive a folder name from provided state paths (preferred over run_name)
         self.model_name = self._derive_model_name()
         os.makedirs(os.path.join(self.config["eval_path"], self.model_name), exist_ok=True)

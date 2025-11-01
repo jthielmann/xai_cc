@@ -105,22 +105,35 @@ def infer_encoder_out_dim(
         device: Optional[torch.device] = None,
 ) -> int:
     """
-    Infer the feature dimension produced by the encoder for a single image.
+    Infer the feature dimension produced by the encoder.
 
-    Handles common cases:
-    - (B, C) → C
-    - (B, C, H, W) → C*H*W
-    - (B, T, D) → D (ViT tokens; expect pooling in forward)
-    - ModelOutput with last_hidden_state → use that
-    - tuple/list → take first tensor
+    Uses GPU acceleration (CUDA or MPS). If no GPU backend is available,
+    raises to avoid very slow CPU forwards on giant encoders.
     """
-    was_training = encoder.training
-    encoder.eval()
-    if device is None:
+    # Fast-path: many backbones expose feature dims directly
+    for attr in ("embed_dim", "num_features"):
         try:
-            device = next(encoder.parameters()).device
-        except StopIteration:
-            device = torch.device("cpu")
+            val = getattr(encoder, attr)
+            if isinstance(val, (int, float)):
+                return int(val)
+        except Exception:
+            pass
+
+    # Select accelerator device
+    if device is None:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            raise RuntimeError(
+                "GPU required to infer encoder_out_dim (no CUDA/MPS available). Use a GPU runtime."
+            )
+
+    # Move encoder to device if needed and run minimal dummy forward
+    was_training = encoder.training
+    encoder = encoder.to(device)
+    encoder.eval()
     dummy = torch.zeros(1, *input_size, device=device)
     with torch.no_grad():
         out = encoder(dummy)
@@ -134,7 +147,6 @@ def infer_encoder_out_dim(
     if out.ndim == 2:
         feat_dim = out.size(1)
     elif out.ndim == 3:
-        # ViT tokens (B, T, D) → use embedding dim
         feat_dim = out.size(-1)
     elif out.ndim == 4:
         feat_dim = int(torch.flatten(out, 1).size(1))
