@@ -68,52 +68,32 @@ def _train(cfg: Dict[str, Any]) -> None:
         print("SAETrainerPipeline debug")
         SAETrainerPipeline(cfg, run=run).run()
     else:
+        # Use provided genes if available; otherwise infer from dataset
         if cfg.get("genes") is None:
             cfg["genes"] = get_full_gene_list(cfg)
-        # Tag runs/dirs with a compact chunk id (cNNN) to avoid collisions
-        # Build a minimal dataset cfg to recompute gene chunks deterministically
-        ds_cfg = {
-            "dataset": cfg.get("dataset"),
-            "meta_data_dir": cfg.get("meta_data_dir"),
-            "gene_data_filename": cfg.get("gene_data_filename"),
-            "sample_ids": cfg.get("sample_ids"),
-            "split_genes_by": cfg.get("split_genes_by"),
-            "single_csv_path": cfg.get("single_csv_path"),
-            "train_csv_path": cfg.get("train_csv_path"),
-            "data_dir": cfg.get("data_dir"),
-        }
-        ds_cfg.update(get_dataset_cfg(ds_cfg))
-        # Compute canonical gene chunks in an isolated cfg copy
-        _tmp_cfg = dict(ds_cfg)
-        prepare_gene_list(_tmp_cfg)
-        # Find 1-based index of the selected chunk using set equality to ignore order
-        gene_chunks = _tmp_cfg.get("gene_chunks") or []
-        tgt = [str(g) for g in (cfg.get("genes") or [])]
-        found = -1
-        for i, ch in enumerate(gene_chunks):
-            chs = [str(g) for g in ch]
-            if len(chs) == len(tgt) and set(chs) == set(tgt):
-                found = i
-                break
-        if found < 0:
-            # Debug prints to help diagnose mismatch between requested genes and available chunks
-            try:
-                print("[debug] Requested genes length:", len(tgt))
-                print("[debug] Requested genes (showing up to 100):", tgt[:100])
-                if len(tgt) > 100:
-                    print("[debug] ... (truncated)")
-                print("[debug] Available gene_chunks count:", len(gene_chunks))
-                print("[debug] gene_chunks sizes:", [len(c) for c in gene_chunks])
-                for i, ch in enumerate(gene_chunks):
-                    chs = [str(g) for g in ch]
-                    print(f"[debug] gene_chunks[{i}] sample (up to 20):", chs[:20])
-                    if len(chs) > 20:
-                        print("[debug] ... (truncated)")
-            except Exception as e:
-                print("[debug] Failed to print gene debug info:", repr(e))
-            raise RuntimeError("Selected genes chunk not found in dataset chunks; ensure dataset, split_genes_by and gene list match.")
-        idx = found
-        cfg["genes_id"] = f"c{idx+1:03d}"
+        # If split_genes_by is set, split the provided list into chunks and pick an index
+        split_k = cfg.get("split_genes_by")
+        genes = cfg.get("genes")
+        if split_k:
+            k = int(split_k)
+            if k <= 0:
+                raise ValueError("split_genes_by must be a positive integer.")
+            # Do not accept nested lists silently; require a flat list of genes
+            if isinstance(genes, list) and genes and isinstance(genes[0], list):
+                raise ValueError(
+                    "Config 'genes' must be a flat list of gene names when using split_genes_by; "
+                    "got a list of lists. Provide a flat list and use 'gene_list_index' to select a chunk."
+                )
+            tgt = [str(g) for g in (genes or [])]
+            chunks = [tgt[i:i+k] for i in range(0, len(tgt), k)]
+            # Select chunk via 1-based gene_list_index if provided, else first chunk
+            idx = int(cfg.get("gene_list_index", 1)) - 1
+            idx = max(0, min(idx, len(chunks) - 1)) if chunks else 0
+            cfg["genes"] = chunks[idx] if chunks else []
+            cfg["genes_id"] = f"c{idx+1:03d}"
+        else:
+            # No chunking requested; derive a stable id from the provided list
+            cfg["genes_id"] = compute_genes_id(cfg.get("genes") or [])
         TrainerPipeline(cfg, run=run).run()
     if run: run.finish()
 
@@ -180,48 +160,12 @@ def _sweep_run():
 
     merged["model_dir"] = project_dir
     merged["sweep_dir"] = project_dir
-    # Inject a compact chunk id (cNNN) for directory naming before preparing cfg
+    # Tag runs/dirs with an identifier derived from the selected genes
     if merged.get("genes") is not None:
-        ds_cfg = {
-            "dataset": merged.get("dataset"),
-            "meta_data_dir": merged.get("meta_data_dir"),
-            "gene_data_filename": merged.get("gene_data_filename"),
-            "sample_ids": merged.get("sample_ids"),
-            "split_genes_by": merged.get("split_genes_by"),
-            "single_csv_path": merged.get("single_csv_path"),
-            "train_csv_path": merged.get("train_csv_path"),
-            "data_dir": merged.get("data_dir"),
-        }
-        ds_cfg.update(get_dataset_cfg(ds_cfg))
-        _tmp_cfg = dict(ds_cfg)
-        prepare_gene_list(_tmp_cfg)
-        gene_chunks = _tmp_cfg.get("gene_chunks") or []
-        tgt = [str(g) for g in (merged.get("genes") or [])]
-        found = -1
-        for i, ch in enumerate(gene_chunks):
-            chs = [str(g) for g in ch]
-            if len(chs) == len(tgt) and set(chs) == set(tgt):
-                found = i
-                break
-        if found < 0:
-            # Debug prints to help diagnose mismatch between requested genes and available chunks (sweep path)
-            try:
-                print("[debug] Requested genes length:", len(tgt))
-                print("[debug] Requested genes (showing up to 100):", tgt[:100])
-                if len(tgt) > 100:
-                    print("[debug] ... (truncated)")
-                print("[debug] Available gene_chunks count:", len(gene_chunks))
-                print("[debug] gene_chunks sizes:", [len(c) for c in gene_chunks])
-                for i, ch in enumerate(gene_chunks):
-                    chs = [str(g) for g in ch]
-                    print(f"[debug] gene_chunks[{i}] sample (up to 20):", chs[:20])
-                    if len(chs) > 20:
-                        print("[debug] ... (truncated)")
-            except Exception as e:
-                print("[debug] Failed to print gene debug info:", repr(e))
-            raise RuntimeError("Selected genes chunk not found in dataset chunks; ensure dataset, split_genes_by and gene list match.")
-        idx = found
-        merged["genes_id"] = f"c{idx+1:03d}"
+        try:
+            merged["genes_id"] = compute_genes_id(merged.get("genes"))
+        except Exception:
+            merged["genes_id"] = "genes"
     merged = prepare_cfg(merged)
     run.config.update(merged, allow_val_change=True)
 

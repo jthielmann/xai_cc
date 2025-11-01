@@ -68,17 +68,34 @@ def get_full_gene_list(cfg: Dict[str, Any]) -> List[str]:
     return genes
 
 def prepare_gene_list(cfg: Dict[str, Any]) -> List[List[str]]:
-    genes = get_full_gene_list(cfg)
+    """Prepare gene chunks for downstream usage.
+
+    Behavior:
+    - If cfg contains an explicit flat list of genes (cfg["genes"] as list[str]), use it as the base list.
+    - Otherwise, infer the full gene list from the dataset via get_full_gene_list(cfg).
+    - If split_genes_by is set, split the base list into contiguous chunks of size k.
+      Store both cfg["genes"] (chunks) and cfg["gene_chunks"].
+    - If split_genes_by is not set, keep the base list and wrap it in a single chunk.
+    """
+    base_genes = None
+    g = cfg.get("genes")
+    if isinstance(g, list) and (len(g) == 0 or not isinstance(g[0], list)):
+        # Provided a flat list of genes: trust and use as base
+        base_genes = [str(x) for x in g if str(x).strip() != ""]
+    else:
+        # Infer from dataset
+        base_genes = get_full_gene_list(cfg)
+
     if cfg.get("split_genes_by"):
         k = int(cfg["split_genes_by"])
         if k <= 0:
             raise ValueError("split_genes_by must be a positive integer.")
-        chunks = [genes[i:i+k] for i in range(0, len(genes), k)]
+        chunks = [base_genes[i:i+k] for i in range(0, len(base_genes), k)]
         cfg["genes"] = chunks
         cfg["gene_chunks"] = chunks
     else:
-        cfg["genes"] = genes
-        cfg["gene_chunks"] = [genes]
+        cfg["genes"] = base_genes
+        cfg["gene_chunks"] = [base_genes]
 
     cfg["n_gene_chunks"] = len(cfg["gene_chunks"])
     return cfg["genes"]
