@@ -13,6 +13,7 @@ from script.evaluation.scatter_plotting import plot_scatter
 from script.evaluation.generate_results import generate_results
 from script.model.model_factory import get_encoder
 from script.model.lit_model import load_lit_regressor
+from script.model.encoder_detection import detect_encoder_family
 from script.data_processing.data_loader import get_dataset_from_config, get_dataset
 from script.data_processing.image_transforms import get_transforms, get_eval_transforms
 from torch.utils.data import DataLoader, Subset
@@ -51,6 +52,16 @@ class EvalPipeline:
         # Derive a folder name from provided state paths (preferred over run_name)
         self.model_name = self._derive_model_name()
         os.makedirs(os.path.join(self.config["eval_path"], self.model_name), exist_ok=True)
+
+        # Auto-enable XAI cases based on the actual encoder family when in auto mode
+        # Do not disable anything explicitly set by the user.
+        if str(self.config.get("xai_pipeline", "manual")).strip().lower() == "auto":
+            enc = getattr(self.model, "encoder", self.model)
+            fam = detect_encoder_family(enc)
+            if fam == "vit" and not bool(self.config.get("lxt", False)):
+                self.config["lxt"] = True
+            if fam == "resnet" and not bool(self.config.get("lrp", False)):
+                self.config["lrp"] = True
 
         # Enforce: always use the model's genes; never accept 'genes' in eval config.
         model_cfg = self.config.get("model_config")
@@ -134,6 +145,7 @@ class EvalPipeline:
             # Prepare a local save dir for LRP outputs regardless of W&B.
             lrp_dir = os.path.join(self.config["eval_path"], self.model_name, "lrp")
             os.makedirs(lrp_dir, exist_ok=True)
+            print(f"[Eval] Starting LRP (backend={lrp_backend}) on {n} items -> {lrp_dir}")
             if lrp_backend == "custom":
                 plot_lrp_custom(self.model, loader, run=self.wandb_run, save_dir=lrp_dir)
             else:
@@ -165,6 +177,7 @@ class EvalPipeline:
             gene = self.config["gene"]
             max_items = int(self.config.get("diff_max_items", 0) or 0)
             for p in patients:
+                print(f"[Eval] Starting diff triptych for patient={p}, gene={gene} -> {out_dir}")
                 plot_triptych_from_model(
                     self.model,
                     self.config,
@@ -179,6 +192,7 @@ class EvalPipeline:
         if self.config.get("scatter"):
             cfg_scatter = dict(self.config)
             cfg_scatter["out_path"] = os.path.join(self.config["eval_path"], self.model_name, "scatter")
+            print(f"[Eval] Starting scatter plots -> {cfg_scatter['out_path']}")
             plot_scatter(
                 cfg_scatter,
                 self.model,
@@ -203,6 +217,7 @@ class EvalPipeline:
             cfg_sae["out_path"] = sae_dir
             cfg_sae["model_dir"] = sae_dir  # keep checkpoints enabled
             # Pass the already-loaded encoder; do not wire post-train attachment here
+            print(f"[Eval] Starting SAE training (eval mode) -> {sae_dir}")
             SAETrainerPipeline(cfg_sae, run=self.wandb_run, encoder=self.model.encoder).run()
 
         if self.config.get("umap"):
@@ -238,6 +253,7 @@ class EvalPipeline:
 
             device = auto_device(self.model)
             self.model.eval()
+            print(f"[Eval] Starting UMAP for layer='{layer}' -> {umap_dir}")
 
             def _as_2d(t: torch.Tensor) -> torch.Tensor:
                 if isinstance(t, (list, tuple)) and len(t) > 0:
@@ -317,6 +333,7 @@ class EvalPipeline:
 
             for nn_ in n_neighbors_list:
                 for md in min_dist_list:
+                    print(f"[Eval]   UMAP fit (n_neighbors={nn_}, min_dist={md})")
                     umap = UMAP(n_components=n_components, n_neighbors=int(nn_), min_dist=float(md), random_state=42, n_jobs=1)
                     emb = umap.fit_transform(X)
                     plt.figure(figsize=(12, 9))
@@ -351,6 +368,7 @@ class EvalPipeline:
                 cfg = self.config
                 gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
                 for p in patients:
+                    print(f"[Eval] Starting forward_to_csv for patient={p} -> {results_dir}")
                     _ = generate_results(
                         model=self.model,
                         device=device,
@@ -372,4 +390,5 @@ class EvalPipeline:
             lxt_dir = os.path.join(self.config["eval_path"], self.model_name, "lxt")
             os.makedirs(lxt_dir, exist_ok=True)
             cfg_lxt["out_path"] = lxt_dir
+            print(f"[Eval] Starting LXT plots -> {lxt_dir}")
             plot_lxt(self.model, cfg_lxt, run=self.wandb_run)
