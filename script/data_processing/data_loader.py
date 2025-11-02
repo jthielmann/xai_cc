@@ -380,7 +380,7 @@ def get_base_dataset(
     if genes is not None:
         genes = [g for g in genes if not _is_unnamed_column(g)]
 
-    edges_lookup = precomputed_edges
+    edges_lookup = {} if precomputed_edges is None else precomputed_edges
     edges_result: Dict[str, np.ndarray] = dict(edges_lookup) if return_edges else edges_lookup
 
     if lds_smoothing_csv is not None:
@@ -706,7 +706,7 @@ def get_base_dataset_single_file(
     if "patient" not in df.columns:
         df["patient"] = "all"
 
-    edges_lookup = precomputed_edges
+    edges_lookup = {} if precomputed_edges is None else precomputed_edges
     edges_result: Dict[str, np.ndarray] = dict(edges_lookup) if return_edges else edges_lookup
 
     # Optionally attach LDS weights
