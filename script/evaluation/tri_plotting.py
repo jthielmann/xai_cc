@@ -65,6 +65,13 @@ def plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=Fals
             f"spatial/{gene}/{patient}/diff":       wandb.Image(singles["diff"]),
             f"spatial/{gene}/{patient}/triptych":   wandb.Image(fig),
         })
+        # Also log a per-case table row with summary metrics
+        mae = float(np.mean(np.abs(y_pred - y_label)))
+        rmse = float(np.sqrt(np.mean((y_pred - y_label) ** 2)))
+        n = int(len(y_label))
+        table = wandb.Table(columns=["patient", "gene", "n_tiles", "mae", "rmse", "triptych"])
+        table.add_data(str(patient), str(gene), n, mae, rmse, wandb.Image(fig))
+        wandb_run.log({"diff/table": table})
         for f in singles.values():
             plt.close(f)
 

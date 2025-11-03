@@ -36,23 +36,11 @@ def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
 
 
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Merge dataset defaults and ensure output directory exists, persist config.
-
-    Supports new 'eval_dir'/'eval_path' base. Back-compat: mirrors into 'out_path'.
-    In debug mode, route outputs to '<base>/debug'.
-    """
     merged = dict(cfg)
     merged.update(get_dataset_cfg(merged))
 
     # Determine base evaluation directory
-    base = (
-        merged.get("eval_path")
-        or merged.get("eval_dir")
-        or merged.get("out_path")
-        or merged.get("sweep_dir")
-        or merged.get("model_dir")
-        or "./xai_out"
-    )
+    base = "../evaluation"
     eval_path = os.path.join(base, "debug") if bool(merged.get("debug", False)) else base
     merged["eval_path"] = eval_path
     # Maintain legacy 'out_path' for downstream helpers that expect it
@@ -239,9 +227,17 @@ def main() -> None:
         if not run_dirs:
             raise RuntimeError(f"No model run subdirectories with config+best_model.pth under: {base_dir}")
         base_run_name = raw_cfg.get("run_name") or "eval"
+        models_root = os.path.dirname(os.path.abspath(base_dir))
+        out_base = "../evaluation"
+        tgt_base = os.path.join(out_base, "debug") if bool(raw_cfg.get("debug", False)) else out_base
         for rd in run_dirs:
+            rel_model = os.path.relpath(rd, models_root)
+            tgt = os.path.join(tgt_base, rel_model)
+            if os.path.exists(tgt):
+                continue
             per_cfg = dict(raw_cfg)
             per_cfg["model_state_path"] = rd
+            per_cfg["out_path"] = out_base
             rel = os.path.relpath(rd, base_dir)
             token = _sanitize_token(rel)
             per_cfg["run_name"] = f"{base_run_name}__{token}"[:128]

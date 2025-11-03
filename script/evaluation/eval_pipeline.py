@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from umap import UMAP
 import matplotlib.pyplot as plt
+import wandb
 
 #from script.evaluation.crp_plotting import plot_crp, plot_crp_zennit, plot_crp2
 from script.evaluation.lrp_plotting import plot_lrp, plot_lrp_custom
@@ -136,7 +137,7 @@ class EvalPipeline:
                 transforms=eval_tf,
                 samples=self.config.get("test_samples"),
                 max_len=self.config.get("max_len") if debug else None,
-                only_inputs=True,
+                only_inputs=False,
                 meta_data_dir=meta_dir,
                 gene_data_filename=gene_csv,
             )
@@ -331,6 +332,7 @@ class EvalPipeline:
             min_dist_list = sweep.get("min_dist", [0.1])
             n_components = int(self.config.get("umap_n_components", 2))
 
+            umap_table_rows = []
             for nn_ in n_neighbors_list:
                 for md in min_dist_list:
                     print(f"[Eval]   UMAP fit (n_neighbors={nn_}, min_dist={md})")
@@ -346,8 +348,25 @@ class EvalPipeline:
                     plt.legend(markerscale=2, fontsize=8, bbox_to_anchor=(1.05, 1), loc='upper left')
                     plt.tight_layout(rect=[0, 0, 0.85, 1])
                     fn = f"umap_layer={layer.replace('.', '_')}_nn={nn_}_md={md}.png"
-                    plt.savefig(os.path.join(umap_dir, fn), dpi=200)
+                    out_path = os.path.join(umap_dir, fn)
+                    plt.savefig(out_path, dpi=200)
+                    # Add to W&B table if online
+                    if self.wandb_run is not None:
+                        umap_table_rows.append({
+                            "layer": layer,
+                            "n_neighbors": int(nn_),
+                            "min_dist": float(md),
+                            "figure": wandb.Image(plt.gcf()),
+                            "file": out_path,
+                        })
                     plt.close()
+            # Log UMAP table once
+            if self.wandb_run is not None and umap_table_rows:
+                cols = ["layer", "n_neighbors", "min_dist", "figure", "file"]
+                table = wandb.Table(columns=cols)
+                for r in umap_table_rows:
+                    table.add_data(r["layer"], r["n_neighbors"], r["min_dist"], r["figure"], r["file"])
+                self.wandb_run.log({"umap/table": table})
 
         if self.config.get("forward_to_csv"):
             # Use explicit test_samples; dataset config populates this when absent.

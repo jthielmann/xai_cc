@@ -104,20 +104,12 @@ def infer_encoder_out_dim(
         input_size: Tuple[int, int, int] = (3, 224, 224),
         device: Optional[torch.device] = None,
 ) -> int:
-    """
-    Infer the feature dimension produced by the encoder.
-
-    Uses GPU acceleration (CUDA or MPS). If no GPU backend is available,
-    raises to avoid very slow CPU forwards on giant encoders.
-    """
     # Fast-path: many backbones expose feature dims directly
     for attr in ("embed_dim", "num_features"):
-        try:
-            val = getattr(encoder, attr)
-            if isinstance(val, (int, float)):
-                return int(val)
-        except Exception:
-            pass
+        val = getattr(encoder, attr, None)
+        if isinstance(val, (int, float)):
+            return int(val)
+
 
     # Select accelerator device
     if device is None:

@@ -105,6 +105,7 @@ def plot_scatter(config, model, wandb_run=None):
     os.makedirs(config.get("out_path", "."), exist_ok=True)
 
     # One figure per gene
+    table_rows = []
     gene_names = list(genes) if genes is not None else [str(i) for i in range(y_hat.shape[1])]
     for gi, gene in enumerate(gene_names):
         yi = y_hat[:, gi]
@@ -129,6 +130,21 @@ def plot_scatter(config, model, wandb_run=None):
 
         # Log to W&B if available
         if wandb_run is not None:
-            wandb_run.log({f"scatter/{gene}": wandb.Image(fig)})
+            img = wandb.Image(fig)
+            wandb_run.log({f"scatter/{gene}": img})
+            table_rows.append({
+                "gene": str(gene),
+                "loss": loss_g,
+                "pearson_r": r_val,
+                "figure": img,
+            })
 
         plt.close(fig)
+
+    # Per-case table at the end
+    if wandb_run is not None and table_rows:
+        cols = ["gene", "loss", "pearson_r", "figure"]
+        table = wandb.Table(columns=cols)
+        for r in table_rows:
+            table.add_data(r["gene"], r["loss"], r["pearson_r"], r["figure"])
+        wandb_run.log({"scatter/table": table})

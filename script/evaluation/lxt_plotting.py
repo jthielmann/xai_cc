@@ -78,7 +78,7 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
         transforms=eval_tf,
         samples=config.get("test_samples"),
         max_len=config.get("max_len") if debug else None,
-        only_inputs=True,
+        only_inputs=False,
         meta_data_dir=meta_dir,
         gene_data_filename=gene_csv,
     )
@@ -97,9 +97,9 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
     # Evaluate all gamma pairs; one grid per pair for clarity
+    table_rows = []
     for conv_gamma, lin_gamma in itertools.product(conv_list, lin_list):
-        heatmaps = []
-        for batch in loader:
+        for i, batch in enumerate(loader):
             x = batch if not isinstance(batch, (tuple, list)) else batch[0]
             x = x.to(device)
             x = x.detach().requires_grad_(True)
@@ -121,22 +121,43 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
             hm = torch.nan_to_num(hm, nan=0.0, posinf=1.0, neginf=-1.0)
             denom = torch.clamp(hm.abs().amax(dim=(1, 2), keepdim=True), min=1e-12)
             hm = hm / denom
-            heatmaps.append(hm[0].detach().cpu())
-
-        if not heatmaps:
-            continue
-        print('heatmaps.shape:', np.array(heatmaps).shape)
-        for i, heatmap in enumerate(heatmaps):
+            heatmap = hm[0].detach().cpu()
             grid_img = imgify(np.asarray(heatmap)[..., None], vmin=-1, vmax=1)
             last_img = grid_img
             if run is not None:
                 run.log({f"lxt/heatmaps[conv={conv_gamma},lin={lin_gamma}]": wandb.Image(grid_img)}, commit=True)
+                # Accumulate per-sample rows for a W&B table
+                patient = None
+                tile = None
+                if isinstance(batch, (tuple, list)) and len(batch) >= 4:
+                    patient, tile = batch[2], batch[3]
+                    if isinstance(patient, (list, tuple)) and len(patient) > 0:
+                        patient = patient[0]
+                    if isinstance(tile, (list, tuple)) and len(tile) > 0:
+                        tile = tile[0]
+                tile_name = os.path.basename(tile) if isinstance(tile, str) else ""
+                table_rows.append({
+                    "idx": i,
+                    "patient": patient or "",
+                    "tile": tile_name,
+                    "conv_gamma": float(conv_gamma),
+                    "lin_gamma": float(lin_gamma),
+                    "heatmap": wandb.Image(grid_img),
+                })
                 any_logged = True
             if out_dir:
                 fn = f"lxt_conv={conv_gamma}_lin={lin_gamma}_{i:04d}.png"
                 safe_fn = fn.replace(" ", "_")
                 grid_img.save(os.path.join(out_dir, safe_fn))
 
+
+    # Log a per-case W&B table at the end
+    if run is not None and table_rows:
+        cols = ["idx", "patient", "tile", "conv_gamma", "lin_gamma", "heatmap"]
+        table = wandb.Table(columns=cols)
+        for r in table_rows:
+            table.add_data(r["idx"], r["patient"], r["tile"], r["conv_gamma"], r["lin_gamma"], r["heatmap"])
+        run.log({"lxt/table": table})
 
     if last_img is None:
         return None
