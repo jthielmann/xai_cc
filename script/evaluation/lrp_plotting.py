@@ -23,11 +23,12 @@ def plot_lrp(model, data, run=None, save_dir: str | None = None):
     if run is None and not save_dir:
         raise RuntimeError("No output target for LRP: provide a W&B run and/or save_dir.")
     model.eval()
+    device = next(model.parameters()).device
     composite = EpsilonPlusFlat()
 
     for idx, sample in enumerate(data):
         with Gradient(model, composite) as attributor:
-            _, grad = attributor(sample)
+            _, grad = attributor(sample.to(device))
 
         img = _imgify_rel(grad).convert("RGB")
         if run is not None:

@@ -158,6 +158,8 @@ def _run_single(raw_cfg: Dict[str, Any]) -> None:
             raise ValueError("invalid xai_pipeline value; expected 'manual' or 'auto'")
     _sanity_check_config(cfg)
     cfg["model_config"] = _setup_model_config(os.path.join(cfg["model_state_path"], "config"))
+    # Always allow gradients through the encoder during evaluation/XAI
+    cfg["model_config"]["freeze_encoder"] = False
     # If debug, set concrete caps to reduce compute (keep W&B logging unchanged)
     if bool(cfg.get("debug", False)):
         cfg = dict(cfg)
