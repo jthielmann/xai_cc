@@ -363,11 +363,15 @@ class TrainerPipeline:
 
 
 
-        # Ensure a project root (sweep root) exists for project-specific outputs
-        if not self.config.get("sweep_dir"):
-            proj = self.config.get("project", "project")
-            self.config["sweep_dir"] = os.path.join(self.config["model_dir"], proj)
-        os.makedirs(self.config["sweep_dir"], exist_ok=True)
+        # Canonical project root: ../models/<project>
+        project = self.config.get("project")
+        if not project:
+            raise ValueError("Config must set 'project'")
+        project_root = os.path.join("..", "models", str(project))
+        os.makedirs(project_root, exist_ok=True)
+        # Mirror for back-compat; do not use these to derive paths elsewhere
+        self.config["model_dir"] = project_root
+        self.config["sweep_dir"] = project_root
 
         self.device  = _determine_device()
         self.out_path = self._prepare_output_dir()
@@ -410,10 +414,19 @@ class TrainerPipeline:
         return dir_name
 
     def _prepare_output_dir(self) -> str:
-        self.config["model_dir"] = "../models"
-        base = self.config["model_dir"]
-        subdir = self._run_name_to_dir(self.wandb_run.name)
-        out_path = os.path.join(base, subdir)
+        # Canonical base: ../models/<project>
+        project = self.config.get("project")
+        if not project:
+            raise ValueError("Config must set 'project'")
+        base_dir = os.path.join("..", "models", str(project))
+
+        # Only add a sweep subdir when running a sweep
+        subdir = "" if not self.is_sweep else self._run_name_to_dir(self.wandb_run.name)
+
+        # Avoid chaining when equal or empty
+        base_leaf = os.path.basename(os.path.normpath(base_dir))
+        out_path = base_dir if (not subdir or subdir == base_leaf) else os.path.join(base_dir, subdir)
+
         os.makedirs(out_path, exist_ok=True)
         log.info(
             "train_samples=%s, val_samples=%s, saving model to %s",
