@@ -1,5 +1,5 @@
-project: eval all test
-name: eval all test
+project: eval all
+name: eval all
 xai_pipeline: auto
 
 
@@ -7,7 +7,7 @@ run_name: eval
 group: eval
 job_type: eval
 tags: [eval]
-debug: true
+debug: false
 log_to_wandb: true
 
 # When true, treat model_state_path as a base project directory and

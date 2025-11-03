@@ -5,6 +5,8 @@ from zennit.composites import EpsilonPlusFlat
 import zennit.image as zimage
 import wandb
 import numpy as np
+from PIL import Image
+from torchvision.utils import make_grid
 
 def _imgify_rel(att):
     rel = att.sum(1).cpu()
@@ -30,13 +32,20 @@ def plot_lrp(model, data, run=None, save_dir: str | None = None):
         with Gradient(model, composite) as attributor:
             _, grad = attributor(sample.to(device))
 
-        img = _imgify_rel(grad).convert("RGB")
+        # Build a side-by-side panel: input (left) + attribution (right)
+        img_attr = _imgify_rel(grad).convert("RGB")
+        grid = make_grid(sample, nrow=1, normalize=True).cpu()
+        img_in = Image.fromarray((grid.permute(1, 2, 0).numpy() * 255).astype(np.uint8))
+        panel = Image.new("RGB", (img_in.width + img_attr.width, img_in.height))
+        panel.paste(img_in, (0, 0))
+        panel.paste(img_attr, (img_in.width, 0))
+
         if run is not None:
-            run.log({f"lrp/attribution_{idx}": wandb.Image(img)}, commit=True)
+            run.log({f"lrp/attribution_{idx}": wandb.Image(panel)}, commit=True)
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
             fn = os.path.join(save_dir, f"lrp_{idx:04d}.png")
-            img.save(fn)
+            panel.save(fn)
 
 
 def plot_lrp_custom(model, data, run=None, save_dir: str | None = None):
