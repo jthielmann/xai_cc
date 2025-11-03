@@ -7,7 +7,7 @@ sys.path.insert(0, '..')
 # Make numba avoid OpenMP/TBB to prevent clashes with PyTorch/MKL on HPC
 os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 import yaml
 import wandb
@@ -198,9 +198,53 @@ def _run_single(raw_cfg: Dict[str, Any]) -> None:
         run.finish()
 
 
+def _find_model_run_dirs(base_dir: str) -> List[str]:
+    """Return subdirectories under base_dir that look like model runs.
+
+    A valid run dir must contain a file named 'config' and 'best_model.pth'.
+    Raises if the base_dir does not exist or is not a directory.
+    Returns absolute paths sorted by name for stable iteration.
+    """
+    if not os.path.isdir(base_dir):
+        raise FileNotFoundError(f"Base directory not found or not a directory: {base_dir}")
+    entries = [os.path.join(base_dir, d) for d in os.listdir(base_dir)]
+    out: List[str] = []
+    for p in entries:
+        if not os.path.isdir(p):
+            continue
+        cfg = os.path.join(p, "config")
+        wts = os.path.join(p, "best_model.pth")
+        if os.path.exists(cfg) and os.path.exists(wts):
+            out.append(os.path.abspath(p))
+    out.sort()
+    return out
+
+
 def main() -> None:
     args = parse_args()
     raw_cfg = parse_yaml_config(args.config)
+
+    # Project-scope eval: when 'is_sweep' is true, treat model_state_path as a base
+    # directory and run eval for each subdir that looks like a model run.
+    if bool(raw_cfg.get("is_sweep", False)):
+        base_val = read_config_parameter(raw_cfg, "model_state_path")
+        if not base_val or not isinstance(base_val, str):
+            raise ValueError("is_sweep=true requires 'model_state_path' to be a directory path")
+        base_dir = _verify_path(base_val, "../models")
+        if not os.path.isdir(base_dir):
+            raise RuntimeError(f"is_sweep=true but model_state_path is not a directory: {base_dir}")
+        run_dirs = _find_model_run_dirs(base_dir)
+        if not run_dirs:
+            raise RuntimeError(f"No model run subdirectories with config+best_model.pth under: {base_dir}")
+        base_run_name = raw_cfg.get("run_name") or "eval"
+        for rd in run_dirs:
+            per_cfg = dict(raw_cfg)
+            per_cfg["model_state_path"] = rd
+            rel = os.path.relpath(rd, base_dir)
+            token = _sanitize_token(rel)
+            per_cfg["run_name"] = f"{base_run_name}__{token}"[:128]
+            _run_single(per_cfg)
+        return
 
     # Detect sweep-style lists for model_state_path and expand into multiple runs.
     ms_param = read_config_parameter(raw_cfg, "model_state_path")
