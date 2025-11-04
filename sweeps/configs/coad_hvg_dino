@@ -1,5 +1,5 @@
-project: coad_hvg_dino
-name: coad_hvg_dino
+project: coad_hvg_dino2
+name: coad_hvg_dino2
 method: grid
 metric:
   name: valid_loss
@@ -7,13 +7,13 @@ metric:
 
 parameters:
   run_name:
-    value: coad_hvg_dino
+    value: coad_hvg_dino2
   group:
-    value: coad_hvg_dino
+    value: coad_hvg_dino2
   job_type:
     value: train
   tags:
-    value: [coad_hvg_dino, dino]
+    value: [coad_hvg_dino2, dino]
 
   # Run behavior
   log_to_wandb:
