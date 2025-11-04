@@ -36,6 +36,16 @@ def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
     return os.path.normpath(os.path.join(bases[0], path)) if bases else path
 
 
+def _sanitize_token(s: str) -> str:
+    return (
+        str(s)
+        .replace("\\", "/")
+        .rstrip("/")
+        .replace("/", "__")
+        .replace(" ", "_")
+    )[:128]
+
+
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """Merge dataset defaults and ensure output directory exists, persist config.
 
@@ -43,7 +53,10 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """
     merged = dict(cfg)
     merged.update(get_dataset_cfg(merged))
-    eval_path = "../evaluation"
+    enc = merged.get("encoder_type") or (merged.get("model_config") or {}).get("encoder_type")
+    if not isinstance(enc, str) or not enc.strip():
+        raise ValueError("encoder_type missing; required to build eval output path")
+    eval_path = os.path.join("../evaluation", _sanitize_token(enc))
     merged["eval_path"] = eval_path
     merged["out_path"] = eval_path
     os.makedirs(eval_path, exist_ok=True)

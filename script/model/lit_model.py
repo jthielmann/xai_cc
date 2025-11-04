@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import sys
 import warnings
 from contextlib import nullcontext
 from io import BytesIO
@@ -22,20 +21,14 @@ from script.model.lit_model_helpers import (
     append_row_with_schema,
     build_results_row,
     build_scatter_appendix,
-    bytes2gb,
     compute_per_gene_pearson,
-    estimate_per_sample_activations,
-    measure_peak_train_step,
     select_per_gene_values,
 )
 from script.evaluation.scatter_plotting import make_scatter_figure
 from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss
 from script.model.model_factory import get_encoder, infer_encoder_out_dim
 
-import logging
 log = logging.getLogger(__name__)
-
-sys.path.insert(0, '..')
 
 def load_lit_regressor(config, state_dicts: Dict[str, Any]):
     model = get_model(config)
@@ -114,8 +107,7 @@ class GeneExpressionRegressor(L.LightningModule):
         if not self.gene_to_idx == {g: i for i, g in enumerate(self.genes)}:
             raise RuntimeError("Gene/index mapping drifted!")
 
-        for g in self.genes:
-            setattr(self, f"{g}_lr", default_lr)
+        # per-gene LRs configured below
         loss_switch = str(self.config["loss_fn_switch"]).lower()
         if loss_switch == "mse":
             self.loss_fn = nn.MSELoss()
@@ -370,9 +362,7 @@ class GeneExpressionRegressor(L.LightningModule):
         self.ys.append(y.detach().float().cpu())
         return loss
 
-    # Removed: W&B artifact upload is disabled permanently
-    # Keeping empty stub for compatibility.
-    pass
+    # Removed: W&B artifact upload is disabled; no artifacts uploaded
 
     def _log_weight_stats(self, stats: Optional[dict], *, prefix: str, on_step: bool, on_epoch: bool) -> None:
         if not stats:
@@ -451,8 +441,11 @@ class GeneExpressionRegressor(L.LightningModule):
         return False
 
     def _save_outputs_csv(self, y_pred: torch.Tensor, y_true: torch.Tensor, split: str) -> None:
-        best_path = self.best_model_path or os.path.join(self.config.get("out_path", "."), "best_model.pth")
-        base_dir = os.path.dirname(best_path) if best_path else self.config.get("out_path", ".")
+        out_path = self.config.get("out_path")
+        if not isinstance(out_path, str) or not out_path.strip():
+            raise ValueError("config['out_path'] missing or empty")
+        best_path = self.best_model_path or os.path.join(out_path, "best_model.pth")
+        base_dir = os.path.dirname(best_path) if best_path else out_path
         os.makedirs(base_dir, exist_ok=True)
 
         yp = torch.as_tensor(y_pred).detach().cpu().float().numpy()
@@ -465,11 +458,8 @@ class GeneExpressionRegressor(L.LightningModule):
         df = pd.DataFrame(data)
 
         out_csv = os.path.join(base_dir, f"best_{split}_outputs.csv")
-        try:
-            df.to_csv(out_csv, index=False)
-            log.info("Saved %s outputs next to best model: %s", split, out_csv)
-        except Exception as e:
-            log.exception("Failed to save %s outputs CSV to %s: %s", split, out_csv, e)
+        df.to_csv(out_csv, index=False)
+        log.info("Saved %s outputs next to best model: %s", split, out_csv)
 
     def _log_scatter_to_wandb(self, fig, gene: str, epoch: int) -> None:
         if not (self.is_online and getattr(self, "table", None) is not None):
@@ -616,7 +606,7 @@ class GeneExpressionRegressor(L.LightningModule):
             self.log(f"{g}_w_norm", w_norm, on_epoch=True, prog_bar=False)
 
         if not self.config.get('debug'):
-            torch.save(self.state_dict(), self.config["out_path"] + "/latest.pth")
+            torch.save(self.state_dict(), os.path.join(self.config["out_path"], "latest.pth"))
 
     def on_train_end(self):
         is_debug = bool(self.config.get("debug"))
@@ -658,12 +648,9 @@ class GeneExpressionRegressor(L.LightningModule):
         row = build_results_row(self.config, self.genes, metrics, per_gene_values, tuned_lrs)
 
         for path in csv_paths:
-            try:
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                append_row_with_schema(path, row)
-                logging.info("logged results into %s", path)
-            except Exception as e:
-                logging.exception("failed to log results into %s: %s", path, e)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            append_row_with_schema(path, row)
+            logging.info("logged results into %s", path)
 
         # Removed: do not upload model artifacts to W&B
 

@@ -39,8 +39,12 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     merged = dict(cfg)
     merged.update(get_dataset_cfg(merged))
 
-    # Determine base evaluation directory
-    base = "../evaluation"
+    # Determine base evaluation directory with encoder_type subfolder
+    enc = merged.get("encoder_type") or (merged.get("model_config") or {}).get("encoder_type")
+    if not isinstance(enc, str) or not enc.strip():
+        raise ValueError("encoder_type missing; required to build eval output path")
+    enc_token = _sanitize_token(enc)
+    base = os.path.join("../evaluation", enc_token)
     eval_path = os.path.join(base, "debug") if bool(merged.get("debug", False)) else base
     merged["eval_path"] = eval_path
     # Maintain legacy 'out_path' for downstream helpers that expect it
@@ -228,9 +232,20 @@ def main() -> None:
             raise RuntimeError(f"No model run subdirectories with config+best_model.pth under: {base_dir}")
         base_run_name = raw_cfg.get("run_name") or "eval"
         models_root = os.path.dirname(os.path.abspath(base_dir))
-        out_base = "../evaluation"
-        tgt_base = os.path.join(out_base, "debug") if bool(raw_cfg.get("debug", False)) else out_base
+        # Insert encoder_type into evaluation output base for per-run skip checks
+        # Read encoder_type from each run's stored model config
+        debug_flag = bool(raw_cfg.get("debug", False))
+        # out_base is computed per-run below since it depends on encoder_type
         for rd in run_dirs:
+            model_cfg_path = os.path.join(rd, "config")
+            if not os.path.exists(model_cfg_path):
+                raise RuntimeError(f"missing model config for run dir: {rd}")
+            mc = parse_yaml_config(model_cfg_path) or {}
+            enc = mc.get("encoder_type")
+            if not isinstance(enc, str) or not enc.strip():
+                raise ValueError(f"encoder_type missing in model config: {model_cfg_path}")
+            out_base = os.path.join("../evaluation", _sanitize_token(enc))
+            tgt_base = os.path.join(out_base, "debug") if debug_flag else out_base
             rel_model = os.path.relpath(rd, models_root)
             tgt = os.path.join(tgt_base, rel_model)
             if os.path.exists(tgt):
@@ -238,6 +253,7 @@ def main() -> None:
             per_cfg = dict(raw_cfg)
             per_cfg["model_state_path"] = rd
             per_cfg["out_path"] = out_base
+            per_cfg["encoder_type"] = enc
             rel = os.path.relpath(rd, base_dir)
             token = _sanitize_token(rel)
             per_cfg["run_name"] = f"{base_run_name}__{token}"[:128]

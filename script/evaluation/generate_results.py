@@ -131,7 +131,9 @@ def generate_results(
 
 
 def log_patient_hist_from_csv(results_csv: str, data_dir: str, run_name, patients: List[str], genes: List[str], wandb_run):
-    hist_dir = f"../evaluation/{run_name}/hists/"
+    # Place hists next to predictions under the same eval base
+    base_dir = os.path.dirname(os.path.dirname(results_csv))
+    hist_dir = os.path.join(base_dir, "hists")
     os.makedirs(hist_dir, exist_ok=True)
     for patient in patients:
 
