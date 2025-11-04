@@ -1,0 +1,15 @@
+dataset: coad
+meta_data_dir: meta_data
+gene_data_filename: gene_data.csv
+
+encoder_type: dino
+image_size: 224   # 224 matches encoder input
+batch_size: 32    # 32 balances throughput/memory on common GPUs
+num_workers: 2    # 2 works on shared filesystems
+drop_cls_token: true
+embedding_epochs: 1
+
+log_to_wandb: false
+project: embeddings test
+group: embeddings
+run_name: embeddings test

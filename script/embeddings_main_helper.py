@@ -23,7 +23,7 @@ def resolve_device() -> torch.device:
         return torch.device("cuda")
     if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
         return torch.device("mps")
-    return torch.device("cpu")
+    raise RuntimeError("accelerator required: cuda or mps")  # why: enforce fast export on accelerators only
 
 
 def prepare_embeddings_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -112,12 +112,17 @@ def export_split_embeddings(
     bs = int(cfg.get("batch_size"))
     nw = int(cfg.get("num_workers", 2))
 
+    # enforce current shard policy
+    granularity = str(cfg.get("embeddings_save_granularity", "batch"))
+    if granularity != "batch":
+        raise NotImplementedError("embeddings_save_granularity != 'batch' not supported")  # why: keep IO/mem predictable
+
     for epoch in range(int(epochs)):
         tfm = get_eval_transforms(image_size=image_size)
 
         # Build dataset yielding (img, y, patient, tile_path)
-        # Directly resolve metadata CSV using eval override with model_config fallback
-        gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
+        # require explicit metadata sources from config
+        gene_csv = cfg["gene_data_filename"]
         ds = get_dataset(
             data_dir=cfg["data_dir"],
             genes=None,
