@@ -53,17 +53,44 @@ def _temp_cwd(path: str | os.PathLike):
         os.chdir(old)
 
 def _validate_config_and_shapes(cfg, model, loader):
-    # 1. Gene count matches model output
+    # run a single forward preferably on GPU, then restore model device
+    # why: big encoders are slow on CPU; still let Lightning own final placement
+
+    # select check device
+    if torch.cuda.is_available():
+        check_device = torch.device("cuda")
+    elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        check_device = torch.device("mps")
+    else:
+        check_device = next(model.parameters()).device
+
+    # capture original device to restore after probing
+    orig_device = next(model.parameters()).device
+
     dummy_batch = next(iter(loader))
-    x, y = dummy_batch[:2]   # first two items are usually (img, expr)
+    x, y = dummy_batch[:2]
+
+    # forward on preferred device
+    model.to(check_device)
+    x = x.to(check_device, non_blocking=True) if torch.is_tensor(x) else x
     y_hat = model(x)
-    if y_hat.shape[1] != len(cfg["genes"]):
-        raise ValueError(f"Model outputs {y_hat.shape[1]} genes, "
+    y_hat_shape = tuple(y_hat.shape)
+
+    # restore model and clear device memory to hand control to Lightning
+    model.to(orig_device)
+    del x, y_hat, dummy_batch
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    # 1. Gene count matches model output
+    if y_hat_shape[1] != len(cfg["genes"]):
+        raise ValueError(f"Model outputs {y_hat_shape[1]} genes, "
                          f"but config['genes'] has {len(cfg['genes'])}")
 
     # 2. Shapes align
-    if y_hat.shape != y.shape:
-        raise ValueError(f"Output shape {y_hat.shape} != target shape {y.shape}")
+    if y_hat_shape != tuple(y.shape):
+        raise ValueError(f"Output shape {y_hat_shape} != target shape {tuple(y.shape)}")
 
     # 3. Splits disjoint
     all_sets = [set(cfg.get(k, [])) for k in ("train_samples","val_samples","test_samples")]

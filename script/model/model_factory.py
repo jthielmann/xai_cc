@@ -111,6 +111,9 @@ def infer_encoder_out_dim(
             return int(val)
 
 
+    # keep pre-trainer checks on CPU by restoring encoder device after probing
+    # why: avoid accidental GPU placement before Lightning handles devices
+
     # Select accelerator device
     if device is None:
         if torch.cuda.is_available():
@@ -121,6 +124,12 @@ def infer_encoder_out_dim(
             raise RuntimeError(
                 "GPU required to infer encoder_out_dim (no CUDA/MPS available). Use a GPU runtime."
             )
+
+    # Capture original device to restore after probing
+    p0 = next(encoder.parameters(), None)
+    if p0 is None:
+        raise RuntimeError("Encoder has no parameters; cannot determine original device")
+    orig_device = p0.device
 
     # Move encoder to device if needed and run minimal dummy forward
     was_training = encoder.training
@@ -145,6 +154,8 @@ def infer_encoder_out_dim(
     else:
         feat_dim = int(torch.flatten(out, 1).size(1))
 
+    # Restore original device and training mode
+    encoder.to(orig_device)
     if was_training:
         encoder.train()
     return int(feat_dim)
