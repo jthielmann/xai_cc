@@ -8,6 +8,7 @@ os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
 from typing import Any, Dict
 
 import wandb
+import torch.nn as nn
 
 from script.configs.dataset_config import get_dataset_cfg
 from script.main_utils import (
@@ -123,6 +124,17 @@ def main() -> None:
     bundled = load_state_dict_from_path(best_path)
     state_dicts = normalize_state_dicts(bundled)
     model = load_lit_regressor(cfg["model_config"], state_dicts)
+
+    # force full encoder freeze regardless of config
+    cfg["model_config"]["freeze_encoder"] = True
+    cfg["model_config"]["encoder_finetune_layers"] = 0
+    cfg["model_config"]["encoder_finetune_layer_names"] = []
+    for p in model.encoder.parameters():
+        p.requires_grad = False
+    model.encoder.eval()
+    for m in model.encoder.modules():
+        if isinstance(m, nn.modules.batchnorm._BatchNorm):
+            m.eval()
 
     cfg_sae = dict(cfg)
     cfg_sae["train_sae"] = True
