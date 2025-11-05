@@ -7,6 +7,8 @@ os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("MPLBACKEND", "Agg")
+# Required for deterministic CuBLAS ops on CUDA >= 10.2 when Lightning sets deterministic=True
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 import numpy as np
 import torch
 from umap import UMAP

@@ -153,6 +153,7 @@ Flow (driven by `TrainerPipeline` in `script/train/lit_train.py`):
    - CUDA with bf16 support → `precision="bf16-mixed"`
    - Other CUDA → `precision=16` (fp16 mixed)
    - Non‑GPU → `precision=32`
+   - Determinism: `deterministic=True` in `Trainer`; CUDA uses cuBLAS workspace preset `":4096:8"` via `CUBLAS_WORKSPACE_CONFIG` set in `script/main.py`. Use `":16:8"` only if memory is tight.
 6) Tuning: Optional LR finder (`Tuner.lr_find`) per component; freeze‑encoder supported
 7) Training: Lightning `Trainer.fit`; metrics/logs to W&B (optional)
 8) Validation: Per‑gene Pearson r, dataset‑level metrics; best/last checkpoints persisted
