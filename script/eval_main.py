@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 from random import random
 
@@ -222,12 +223,14 @@ def main() -> None:
     # directory and run eval for each subdir that looks like a model run.
     if bool(raw_cfg.get("is_sweep", False)):
         base_val = read_config_parameter(raw_cfg, "model_state_path")
-        if not base_val or not isinstance(base_val, str):
+        if not base_val or not isinstance(base_val, (str, list)):
             raise ValueError("is_sweep=true requires 'model_state_path' to be a directory path")
-        base_dir = _verify_path(base_val, "../models")
+        base_dir = _verify_path(base_val if isinstance(base_val, str) else base_val[0], "../models")
         if not os.path.isdir(base_dir):
             raise RuntimeError(f"is_sweep=true but model_state_path is not a directory: {base_dir}")
-        run_dirs = _find_model_run_dirs(base_dir)
+        bases = base_val if isinstance(base_val, list) else [base_val]
+        run_dirs = [rd for b in bases
+                    for rd in _find_model_run_dirs(_verify_path(b, "../models"))]
         if not run_dirs:
             raise RuntimeError(f"No model run subdirectories with config+best_model.pth under: {base_dir}")
         base_run_name = raw_cfg.get("run_name") or "eval"
@@ -248,16 +251,33 @@ def main() -> None:
             tgt_base = os.path.join(out_base, "debug") if debug_flag else out_base
             rel_model = os.path.relpath(rd, models_root)
             tgt = os.path.join(tgt_base, rel_model)
-            if os.path.exists(tgt):
-                continue
-            per_cfg = dict(raw_cfg)
-            per_cfg["model_state_path"] = rd
-            per_cfg["out_path"] = out_base
-            per_cfg["encoder_type"] = enc
-            rel = os.path.relpath(rd, base_dir)
-            token = _sanitize_token(rel)
-            per_cfg["run_name"] = f"{base_run_name}__{token}"[:128]
-            _run_single(per_cfg)
+            enc_l = enc.lower()
+            cases = ["scatter", "diff", "forward_to_csv", "umap"]
+            if "vit" in enc_l:
+                cases.append("lxt")
+            if "resnet" in enc_l:
+                cases.append("lrp")
+            for k in cases:
+                sub = "predictions" if k == "forward_to_csv" else k
+                case_dir = os.path.join(tgt, sub)
+                if os.path.exists(case_dir):
+                    if bool(raw_cfg.get("clear_all", False)):
+                        shutil.rmtree(case_dir)
+                    else:
+                        continue
+                per_cfg = dict(raw_cfg)
+                per_cfg["xai_pipeline"] = "manual"
+                for kk in ("lrp", "lxt", "scatter", "diff", "sae", "umap", "forward_to_csv"):
+                    per_cfg[kk] = (kk == k)
+                if k == "umap" and not per_cfg.get("umap_layer"):
+                    # default to encoder makes sense as that is right now the primary target
+                    per_cfg["umap_layer"] = "encoder"
+                per_cfg["model_state_path"] = rd
+                per_cfg["out_path"] = out_base
+                per_cfg["encoder_type"] = enc
+                token = _sanitize_token(rel_model)
+                per_cfg["run_name"] = f"{base_run_name}__{token}__{k}"[:128]
+                _run_single(per_cfg)
         return
 
     # Detect sweep-style lists for model_state_path and expand into multiple runs.

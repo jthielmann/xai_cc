@@ -29,7 +29,6 @@ from script.evaluation.eval_helpers import (
     collect_state_dicts,
 )
 from script.evaluation.tri_plotting import plot_triptych_from_model
-from script.train.lit_train_sae import SAETrainerPipeline
 
 class EvalPipeline:
     def __init__(self, config, run):
@@ -199,27 +198,6 @@ class EvalPipeline:
                 self.model,
                 wandb_run=self.wandb_run
             )
-
-        if self.config.get("sae"):
-            # Train SAE as an evaluation case, mirroring other case patterns.
-            # Route outputs under out_path/run_name/train_sae and avoid nested W&B runs.
-            cfg_sae = dict(self.config)
-            # Ensure encoder_type is available to the SAE trainer; fallback to model_config.
-            if "encoder_type" not in cfg_sae and isinstance(self.config.get("model_config"), dict):
-                enc_type = self.config["model_config"].get("encoder_type")
-                if enc_type:
-                    cfg_sae["encoder_type"] = enc_type
-            # Use only inputs in datamodule and prevent nested W&B init inside the trainer.
-            cfg_sae["train_sae"] = True
-            cfg_sae["log_to_wandb"] = False
-            # Case-specific output directory for SAE; follow case pattern (use out_path)
-            sae_dir = os.path.join(self.config["eval_path"], self.model_name, "sae")
-            os.makedirs(sae_dir, exist_ok=True)
-            cfg_sae["out_path"] = sae_dir
-            cfg_sae["model_dir"] = sae_dir  # keep checkpoints enabled
-            # Pass the already-loaded encoder; do not wire post-train attachment here
-            print(f"[Eval] Starting SAE training (eval mode) -> {sae_dir}")
-            SAETrainerPipeline(cfg_sae, run=self.wandb_run, encoder=self.model.encoder).run()
 
         if self.config.get("umap"):
             # Generate UMAP visualizations from a specified model layer
