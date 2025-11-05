@@ -1,5 +1,5 @@
-project: coad_hvg_dino2
-name: coad_hvg_dino2
+project: coad_hvg_dino3
+name: coad_hvg_dino3
 method: grid
 metric:
   name: valid_loss
@@ -7,9 +7,9 @@ metric:
 
 parameters:
   run_name:
-    value: coad_hvg_dino2
+    value: coad_hvg_dino3
   group:
-    value: coad_hvg_dino2
+    value: coad_hvg_dino3
   job_type:
     value: train
   tags:
