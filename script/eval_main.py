@@ -16,6 +16,7 @@ import wandb
 from script.configs.dataset_config import get_dataset_cfg
 from script.xai_auto_config import build_auto_xai_config
 from script.evaluation.eval_pipeline import EvalPipeline
+from script.evaluation.gather_results import gather_forward_metrics
 from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, \
     read_config_parameter
 
@@ -239,6 +240,7 @@ def main() -> None:
         # Read encoder_type from each run's stored model config
         debug_flag = bool(raw_cfg.get("debug", False))
         # out_base is computed per-run below since it depends on encoder_type
+        bases_to_aggregate = set()
         for rd in run_dirs:
             model_cfg_path = os.path.join(rd, "config")
             if not os.path.exists(model_cfg_path):
@@ -248,6 +250,7 @@ def main() -> None:
             if not isinstance(enc, str) or not enc.strip():
                 raise ValueError(f"encoder_type missing in model config: {model_cfg_path}")
             out_base = os.path.join("../evaluation", _sanitize_token(enc))
+            bases_to_aggregate.add(out_base)
             tgt_base = os.path.join(out_base, "debug") if debug_flag else out_base
             rel_model = os.path.relpath(rd, models_root)
             tgt = os.path.join(tgt_base, rel_model)
@@ -278,6 +281,8 @@ def main() -> None:
                 token = _sanitize_token(rel_model)
                 per_cfg["run_name"] = f"{base_run_name}__{token}__{k}"[:128]
                 _run_single(per_cfg)
+        for b in sorted(bases_to_aggregate):
+            gather_forward_metrics(b)
         return
 
     # Detect sweep-style lists for model_state_path and expand into multiple runs.

@@ -56,7 +56,9 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     enc = merged.get("encoder_type") or (merged.get("model_config") or {}).get("encoder_type")
     if not isinstance(enc, str) or not enc.strip():
         raise ValueError("encoder_type missing; required to build eval output path")
-    eval_path = os.path.join("../evaluation", _sanitize_token(enc))
+    base = os.path.join("../evaluation", _sanitize_token(enc))
+    # mirror eval_main: place under /debug when debug=true to avoid mixing with full runs
+    eval_path = os.path.join(base, "debug") if bool(merged.get("debug", False)) else base
     merged["eval_path"] = eval_path
     merged["out_path"] = eval_path
     os.makedirs(eval_path, exist_ok=True)
