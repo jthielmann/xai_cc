@@ -1,10 +1,12 @@
 gene_sets:
-  icms2up: [TRIB3, SCARB1, NSDHL, TIMM17B, ASCL2, CDK4, TOMM34, MYC, SOX4, YTHDF1, GNPDA1, PRSS23, SLC5A6, CDC25B, EDN1, PGRMC1, RAE1, TRAP1, SCAND1, UTP14A, AURKA, CSNK2A2, RPIA, CCDC85B, NCOA3, LAGE3, BLCAP, HSD17B10, TXNDC9, TSPAN6, RRS1, TPD52L2, UBE2C, VAPB, TPX2, DNAJC15]
+  hvg: [TRIB3, MYC, SOX4, AURKA, UBE2C, TPX2, SCARB1, NSDHL]
 
 log_to_wandb: true
 project: xai
-run_name: boxplots_demo
+run_name: boxplots_hvg_dino
 group: boxplots
 job_type: analysis
-tags: [boxplot, pearson]
+tags: [boxplot, pearson, hvg, dino]
 skip_non_finite: true
+include_encoders: [dino]
+include_projects: [coad common hvg redo]
