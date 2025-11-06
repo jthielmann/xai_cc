@@ -90,10 +90,17 @@ def _collect_values_by_encoder(df: pd.DataFrame, genes: List[str]) -> Dict[str, 
         per_cols: List[np.ndarray] = []
         for c in cols:
             v = pd.to_numeric(gdf[c], errors="coerce").to_numpy()
-            if not np.all(np.isfinite(v)):
-                bad = np.where(~np.isfinite(v))[0][:5].tolist()
+            bad_mask = ~np.isfinite(v)
+            bad_count = int(bad_mask.sum())
+            if bad_count:
+                idx = np.where(bad_mask)[0]
+                examples = idx[:5].tolist()
+                try:
+                    runs = gdf["run_name"].astype(str).iloc[idx[:5]].tolist()
+                except Exception:
+                    runs = []
                 raise RuntimeError(
-                    f"non-finite pearson values for {c} in encoder {enc}; row idx examples: {bad}"
+                    f"non-finite pearson for {c} in encoder {enc}: {bad_count}/{len(v)} bad; idx: {examples}; runs: {runs}"
                 )
             per_cols.append(v.astype(float))
         if not per_cols:
