@@ -7,3 +7,4 @@ run_name: boxplots_demo
 group: boxplots
 job_type: analysis
 tags: [boxplot, pearson]
+skip_non_finite: true

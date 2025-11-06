@@ -80,7 +80,7 @@ def _apply_filters(
     return out
 
 
-def _collect_values_by_encoder(df: pd.DataFrame, genes: List[str]) -> Dict[str, List[float]]:
+def _collect_values_by_encoder(df: pd.DataFrame, genes: List[str], skip_non_finite: bool) -> Dict[str, List[float]]:
     cols = [f"pearson_{g}" for g in genes]
     missing = [c for c in cols if c not in df.columns]
     if missing:
@@ -93,18 +93,23 @@ def _collect_values_by_encoder(df: pd.DataFrame, genes: List[str]) -> Dict[str, 
             bad_mask = ~np.isfinite(v)
             bad_count = int(bad_mask.sum())
             if bad_count:
-                idx = np.where(bad_mask)[0]
-                examples = idx[:5].tolist()
-                try:
-                    runs = gdf["run_name"].astype(str).iloc[idx[:5]].tolist()
-                except Exception:
-                    runs = []
-                raise RuntimeError(
-                    f"non-finite pearson for {c} in encoder {enc}: {bad_count}/{len(v)} bad; idx: {examples}; runs: {runs}"
-                )
-            per_cols.append(v.astype(float))
+                if not skip_non_finite:
+                    idx = np.where(bad_mask)[0]
+                    examples = idx[:5].tolist()
+                    try:
+                        runs = gdf["run_name"].astype(str).iloc[idx[:5]].tolist()
+                    except Exception:
+                        runs = []
+                    raise RuntimeError(
+                        f"non-finite pearson for {c} in encoder {enc}: {bad_count}/{len(v)} bad; idx: {examples}; runs: {runs}"
+                    )
+                v = v[np.isfinite(v)]
+            if v.size > 0:
+                per_cols.append(v.astype(float))
         if not per_cols:
-            continue
+            if skip_non_finite:
+                continue
+            raise RuntimeError(f"no values collected for encoder {enc}; check filters and genes")
         flat = np.concatenate(per_cols, axis=0)
         values[str(enc)] = flat.tolist()
     if not values:
@@ -200,8 +205,9 @@ def main() -> None:
     )
 
     saved_paths: List[str] = []
+    skip_non_finite = bool(raw_cfg.get("skip_non_finite", False))
     for set_name, genes in gene_sets.items():
-        vals = _collect_values_by_encoder(df, genes)
+        vals = _collect_values_by_encoder(df, genes, skip_non_finite)
         title = f"Pearson by encoder — {set_name}"
         fname = _sanitize_token(set_name)
         out_base = os.path.join(OUT_DIR, fname)
