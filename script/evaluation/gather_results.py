@@ -82,7 +82,12 @@ def _collect_genes(df: pd.DataFrame) -> List[str]:
             g = col[len("label_"):]
             pcol = f"pred_{g}"
             if pcol in df.columns:
-                genes.append(g)
+                gs = str(g).strip()
+                if not gs:
+                    continue
+                if gs.lower().startswith("unnamed"):
+                    continue
+                genes.append(gs)
     if not genes:
         raise RuntimeError("no label_/pred_ gene columns detected in results.csv")
     return genes

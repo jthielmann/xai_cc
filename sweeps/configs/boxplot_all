@@ -1,0 +1,17 @@
+gene_sets: all
+
+log_to_wandb: true
+project: xai
+run_name: boxplots_all
+group: boxplots
+job_type: analysis
+tags: [boxplot, violin]
+
+skip_non_finite: true
+include_encoders: [uni, resnet, dino]
+include_projects: [hvg, cmmn, icms2up, icms2down, icms3up, icms3down]
+
+scan_root: .
+plot_box: true
+plot_violin: true
+

@@ -73,8 +73,18 @@ class EvalPipeline:
         mc_genes = model_cfg.get("genes")
         if not mc_genes:
             raise ValueError("Trained model config does not contain 'genes'; cannot proceed with evaluation.")
-        # Set genes from model config
-        self.config["genes"] = list(mc_genes)
+        # Set genes from model config (exclude empty/unnamed)
+        valid_genes = []
+        for g in mc_genes:
+            gs = str(g).strip()
+            if not gs:
+                continue
+            if gs.lower().startswith("unnamed"):
+                continue
+            valid_genes.append(gs)
+        if not valid_genes:
+            raise ValueError("No valid genes after excluding empty/unnamed entries.")
+        self.config["genes"] = valid_genes
         # Defaults for single-gene cases
         if not self.config.get("gene") and self.config.get("genes"):
             self.config["gene"] = str(self.config["genes"][0])
