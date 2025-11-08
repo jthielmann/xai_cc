@@ -26,7 +26,7 @@ from script.model.lit_model_helpers import (
 )
 from script.evaluation.scatter_plotting import make_scatter_figure
 from script.model.loss_functions import MultiGeneWeightedMSE, PearsonCorrLoss
-from script.model.model_factory import get_encoder, infer_encoder_out_dim
+from script.model.model_factory import get_encoder, infer_encoder_out_dim, normalize_encoder_out
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +78,8 @@ class GeneExpressionRegressor(L.LightningModule):
         self.encoder_unfrozen_groups: list[str] = []
         self.encoder_is_fully_frozen: bool = False
         self._apply_encoder_freeze_policy()
-        out_dim_encoder = infer_encoder_out_dim(self.encoder)
+        img_sz = int(self.config.get("image_size", 224))
+        out_dim_encoder = infer_encoder_out_dim(self.encoder, input_size=(3, img_sz, img_sz))
         for gene in self.config['genes']:
             relu_type = nn.LeakyReLU if self.config.get('use_leaky_relu') else nn.ReLU
             relu_instance = relu_type()
@@ -310,10 +311,8 @@ class GeneExpressionRegressor(L.LightningModule):
             z = z[0]
         if hasattr(z, "last_hidden_state"):
             z = z.last_hidden_state
-        if z.ndim == 4:
-            z = torch.flatten(z, 1)
-        elif z.ndim == 3:
-            z = z.mean(dim=1)
+        vit_pooling = str(self.config.get("vit_token_pooling", "mean_patch"))
+        z = normalize_encoder_out(z, vit_pooling=vit_pooling)
         if z.ndim != 2:
             raise RuntimeError(f"Normalized encoder output must be 2D, got {tuple(z.shape)}")
         if self.sae:

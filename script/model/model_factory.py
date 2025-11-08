@@ -145,20 +145,35 @@ def infer_encoder_out_dim(
     if hasattr(out, "last_hidden_state"):
         out = out.last_hidden_state
 
-    if out.ndim == 2:
-        feat_dim = out.size(1)
-    elif out.ndim == 3:
-        feat_dim = out.size(-1)
-    elif out.ndim == 4:
-        feat_dim = int(torch.flatten(out, 1).size(1))
-    else:
-        feat_dim = int(torch.flatten(out, 1).size(1))
+    out = normalize_encoder_out(out)
+    if out.ndim != 2:
+        raise RuntimeError(f"normalized encoder output must be 2D, got {tuple(out.shape)}")
+    feat_dim = int(out.size(1))
 
     # Restore original device and training mode
     encoder.to(orig_device)
     if was_training:
         encoder.train()
     return int(feat_dim)
+
+
+def normalize_encoder_out(z: torch.Tensor, *, vit_pooling: str = "mean_patch") -> torch.Tensor:
+    if z.ndim == 4:
+        return z.mean(dim=(2, 3))
+    if z.ndim == 3:
+        mode = str(vit_pooling)
+        if mode == "mean_patch":
+            if z.size(1) <= 1:
+                raise ValueError(f"mean_patch requires CLS+patches; got tokens={z.size(1)}")
+            return z[:, 1:, :].mean(dim=1)
+        if mode == "mean_all":
+            return z.mean(dim=1)
+        if mode == "cls":
+            return z[:, 0, :]
+        raise ValueError(f"unknown vit_pooling={vit_pooling!r}")
+    if z.ndim == 2:
+        return z
+    raise RuntimeError(f"Unsupported encoder output shape {tuple(z.shape)}")
 
 
 def build_model(**kwargs):
@@ -245,7 +260,9 @@ def get_encoder_transforms(encoder_type: str,
     `extra`: optional iterable of v2 transforms to insert (default before Normalize).
     Typical occlusion/erasing goes BEFORE Normalize and AFTER ToDtype.
     """
-    t = (encoder_type or "").lower()
+    if not isinstance(encoder_type, str) or not encoder_type.strip():
+        raise ValueError(f"invalid encoder_type: {encoder_type!r}")
+    t = encoder_type.lower()
 
     # All listed encoders here use ImageNet mean/std
     if t == "dino" or t.startswith("resnet") or t.startswith("dinov3") \
