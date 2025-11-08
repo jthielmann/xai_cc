@@ -101,6 +101,21 @@ def main() -> None:
 
     run, raw_cfg = _maybe_init_wandb_and_update_cfg(raw_cfg)
 
+    group_by = str(raw_cfg.get("group_by", "encoder_type")).strip().lower()
+    if group_by not in {"encoder_type", "encoder_type+loss", "project", "project+encoder_type"}:
+        raise ValueError(f"unsupported group_by: {group_by}")
+    group_col = "__group__"
+    if group_by == "encoder_type":
+        df[group_col] = df["encoder_type"].astype(str)
+    elif group_by == "encoder_type+loss":
+        if "loss_name" not in df.columns:
+            raise RuntimeError("loss_name column missing in metrics; re-run aggregation")
+        df[group_col] = df[["encoder_type", "loss_name"]].astype(str).agg(lambda r: f"{r[0]} ({r[1]})", axis=1)
+    elif group_by == "project":
+        df[group_col] = df["project"].astype(str)
+    elif group_by == "project+encoder_type":
+        df[group_col] = df[["project", "encoder_type"]].astype(str).agg(lambda r: f"{r[0]}::{r[1]}", axis=1)
+
     saved_paths = _plot_all_sets(
         df=df,
         gene_sets=gene_sets,
@@ -109,6 +124,7 @@ def main() -> None:
         skip_non_finite=bool(raw_cfg.get("skip_non_finite", False)),
         run=run,
         out_dir=OUT_DIR,
+        group_key=group_col,
     )
 
     if run is not None:

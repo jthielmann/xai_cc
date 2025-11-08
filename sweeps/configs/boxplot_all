@@ -14,4 +14,4 @@ include_projects: [hvg, cmmn, icms2up, icms2down, icms3up, icms3down]
 scan_root: .
 plot_box: true
 plot_violin: true
-
+group_by: encoder_type+loss

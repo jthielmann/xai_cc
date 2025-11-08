@@ -72,14 +72,16 @@ def _apply_filters(
 
 
 def _collect_values_by_encoder(
-    df: pd.DataFrame, genes: List[str], skip_non_finite: bool
+    df: pd.DataFrame, genes: List[str], skip_non_finite: bool, group_key: str = "encoder_type"
 ) -> Dict[str, List[float]]:
     cols = [f"pearson_{g}" for g in genes]
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise RuntimeError(f"missing pearson columns for genes: {missing}")
+    if group_key not in df.columns:
+        raise RuntimeError(f"group_key column missing: {group_key}")
     values: Dict[str, List[float]] = {}
-    for enc, gdf in df.groupby("encoder_type"):
+    for enc, gdf in df.groupby(group_key):
         per_cols: List[np.ndarray] = []
         for c in cols:
             v = pd.to_numeric(gdf[c], errors="coerce").to_numpy()
@@ -235,10 +237,11 @@ def _plot_all_sets(
     skip_non_finite: bool,
     run,
     out_dir: str,
+    group_key: str = "encoder_type",
 ) -> List[str]:
     saved_paths: List[str] = []
     for set_name, genes in gene_sets.items():
-        vals = _collect_values_by_encoder(df, genes, skip_non_finite)
+        vals = _collect_values_by_encoder(df, genes, skip_non_finite, group_key=group_key)
         title = f"Pearson by encoder — {set_name}"
         fname = _sanitize_token(set_name)
         if plot_box:

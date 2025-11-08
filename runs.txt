@@ -1,0 +1,48 @@
+file | N | split_by | runs | note
+-----+---+---------+------+-----
+coad_cmmn_genes_uni | 1000 | 50 | 20 | genes defaulted to 1000
+coad_icms2down_cmmn_genes_dinov3_convnext_base | 25 | 50 | 1 | 
+coad_icms2down_cmmn_genes_dinov3_convnext_large | 25 | 50 | 1 | 
+coad_icms2down_cmmn_genes_dinov3_vitb16 | 25 | 50 | 1 | 
+coad_icms2down_cmmn_genes_dinov3_vitl16 | 25 | 50 | 1 | 
+coad_icms2down_cmmn_genes_dinov3_vits16 | 25 | 50 | 1 | 
+coad_icms2up_cmmn_genes_dinov3_convnext_base | 36 | 50 | 1 | 
+coad_icms2up_cmmn_genes_dinov3_convnext_large | 36 | 50 | 1 | 
+coad_icms2up_cmmn_genes_dinov3_vitb16 | 36 | 50 | 1 | 
+coad_icms2up_cmmn_genes_dinov3_vitl16 | 36 | 50 | 1 | 
+coad_icms2up_cmmn_genes_dinov3_vits16 | 36 | 50 | 1 | 
+coad_icms3down_cmmn_genes_dinov3_convnext_base | 8 | 50 | 1 | 
+coad_icms3down_cmmn_genes_dinov3_convnext_large | 8 | 50 | 1 | 
+coad_icms3down_cmmn_genes_dinov3_vitb16 | 8 | 50 | 1 | 
+coad_icms3down_cmmn_genes_dinov3_vitl16 | 8 | 50 | 1 | 
+coad_icms3down_cmmn_genes_dinov3_vits16 | 8 | 50 | 1 | 
+coad_icms3up_cmmn_genes_dinov3_convnext_base | 6 | 50 | 1 | 
+coad_icms3up_cmmn_genes_dinov3_convnext_large | 6 | 50 | 1 | 
+coad_icms3up_cmmn_genes_dinov3_vitb16 | 6 | 50 | 1 | 
+coad_icms3up_cmmn_genes_dinov3_vitl16 | 6 | 50 | 1 | 
+coad_icms3up_cmmn_genes_dinov3_vits16 | 6 | 50 | 1 | 
+
+TOTAL runs: 40
+
+Submit commands:
+sweeps/l40submit.sh sweeps/to_train/coad_icms2down_cmmn_genes_dinov3_convnext_base
+sweeps/l40submit.sh sweeps/to_train/coad_icms2down_cmmn_genes_dinov3_convnext_large
+sweeps/l40submit.sh sweeps/to_train/coad_icms2down_cmmn_genes_dinov3_vitb16
+sweeps/l40submit.sh sweeps/to_train/coad_icms2down_cmmn_genes_dinov3_vitl16
+sweeps/l40submit.sh sweeps/to_train/coad_icms2down_cmmn_genes_dinov3_vits16
+sweeps/l40submit.sh sweeps/to_train/coad_icms2up_cmmn_genes_dinov3_convnext_base
+sweeps/l40submit.sh sweeps/to_train/coad_icms2up_cmmn_genes_dinov3_convnext_large
+sweeps/l40submit.sh sweeps/to_train/coad_icms2up_cmmn_genes_dinov3_vitb16
+sweeps/l40submit.sh sweeps/to_train/coad_icms2up_cmmn_genes_dinov3_vitl16
+sweeps/l40submit.sh sweeps/to_train/coad_icms2up_cmmn_genes_dinov3_vits16
+sweeps/l40submit.sh sweeps/to_train/coad_icms3down_cmmn_genes_dinov3_convnext_base
+sweeps/l40submit.sh sweeps/to_train/coad_icms3down_cmmn_genes_dinov3_convnext_large
+sweeps/l40submit.sh sweeps/to_train/coad_icms3down_cmmn_genes_dinov3_vitb16
+sweeps/l40submit.sh sweeps/to_train/coad_icms3down_cmmn_genes_dinov3_vitl16
+sweeps/l40submit.sh sweeps/to_train/coad_icms3down_cmmn_genes_dinov3_vits16
+sweeps/l40submit.sh sweeps/to_train/coad_icms3up_cmmn_genes_dinov3_convnext_base
+sweeps/l40submit.sh sweeps/to_train/coad_icms3up_cmmn_genes_dinov3_convnext_large
+sweeps/l40submit.sh sweeps/to_train/coad_icms3up_cmmn_genes_dinov3_vitb16
+sweeps/l40submit.sh sweeps/to_train/coad_icms3up_cmmn_genes_dinov3_vitl16
+sweeps/l40submit.sh sweeps/to_train/coad_icms3up_cmmn_genes_dinov3_vits16
+sweeps/a40submit.sh sweeps/to_train/coad_cmmn_genes_uni

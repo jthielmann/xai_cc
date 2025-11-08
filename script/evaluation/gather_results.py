@@ -167,6 +167,7 @@ def gather_forward_metrics(eval_root: str, output_csv: str | None = None) -> str
         if not isinstance(enc, str) or not enc.strip():
             raise RuntimeError("encoder_type missing in model config")
         train_metric = _infer_training_metric({"model_config": mc})
+        loss_name = str(mc.get("loss_fn_switch", "")).strip().lower() or "unknown"
         train_vals = mse_vals if train_metric == "mse" else pearson_vals
         project = mc.get("project")
         if not isinstance(project, str) or not project.strip():
@@ -182,6 +183,7 @@ def gather_forward_metrics(eval_root: str, output_csv: str | None = None) -> str
             "run_dir": rel_run_dir,
             "run_name": run_name,
             "metric_name": train_metric,
+            "loss_name": loss_name,
             "pearson_mean": _weighted_mean(pearson_vals, counts),
             "mse_mean": _weighted_mean(mse_vals, counts),
             f"{train_metric}_mean": _weighted_mean(train_vals, counts),
