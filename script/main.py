@@ -99,17 +99,18 @@ def _train(cfg: Dict[str, Any]) -> None:
         TrainerPipeline(cfg, run=run).run()
     if run: run.finish()
 
-# Locate the config by name or path
+ # Locate the config by name or path
 def _resolve_config_path(name: str) -> str:
-
     if os.path.isfile(name):
         return name
     # search common config roots
-    root = "../sweeps/configs"
-    cand = os.path.join(root, name)
-    if os.path.isfile(cand):
-        return cand
-    raise FileNotFoundError(f"Could not resolve config_name '{name}' to a file path")
+    roots = ["../sweeps/configs", "../sweeps/to_train"]
+    for root in roots:
+        cand = os.path.join(root, name)
+        if os.path.isfile(cand):
+            return cand
+    cwd = os.getcwd()
+    raise FileNotFoundError(f"Could not resolve config_name '{name}' from cwd={cwd!r}; searched: {roots}")
 
 def _flatten_base_fixed(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -144,7 +145,8 @@ def _sweep_run():
     if not config_name:
         raise RuntimeError("Sweep run missing 'config_name' in parameters")
 
-    base_config = parse_yaml_config("../sweeps/configs/" + run_config["config_name"])
+    base_config_path = _resolve_config_path(run_config["config_name"])
+    base_config = parse_yaml_config(base_config_path)
     parameter_names = get_sweep_parameter_names(base_config)
     auto_name = make_run_name_from_config(run_config, parameter_names)
     run.name = auto_name
