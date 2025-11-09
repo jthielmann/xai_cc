@@ -99,10 +99,17 @@ def get_encoder(encoder_type: str) -> nn.Module:
     raise ValueError(f"Unknown encoder {encoder_type}")
 
 
+def _extract_features(encoder: nn.Module, x: torch.Tensor) -> torch.Tensor:
+    if hasattr(encoder, "forward_features"):
+        return encoder.forward_features(x)
+    return encoder(x)
+
+
 def infer_encoder_out_dim(
-        encoder: nn.Module,
-        input_size: Tuple[int, int, int] = (3, 224, 224),
-        device: Optional[torch.device] = None,
+    encoder: nn.Module,
+    input_size: Tuple[int, int, int] = (3, 224, 224),
+    device: Optional[torch.device] = None,
+    vit_pooling: str = "mean_patch",
 ) -> int:
     # Fast-path: many backbones expose feature dims directly
     for attr in ("embed_dim", "num_features"):
@@ -137,7 +144,7 @@ def infer_encoder_out_dim(
     encoder.eval()
     dummy = torch.zeros(1, *input_size, device=device)
     with torch.no_grad():
-        out = encoder(dummy)
+        out = _extract_features(encoder, dummy)
 
     # Unwrap common containers
     if isinstance(out, (list, tuple)) and len(out) > 0:
@@ -145,7 +152,7 @@ def infer_encoder_out_dim(
     if hasattr(out, "last_hidden_state"):
         out = out.last_hidden_state
 
-    out = normalize_encoder_out(out)
+    out = normalize_encoder_out(out, vit_pooling=vit_pooling)
     if out.ndim != 2:
         raise RuntimeError(f"normalized encoder output must be 2D, got {tuple(out.shape)}")
     feat_dim = int(out.size(1))
