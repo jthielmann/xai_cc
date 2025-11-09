@@ -1,0 +1,9 @@
+is_sweep: true
+model_state_path: "hvg"
+run_name: "crp"
+log_to_wandb: false
+debug: false
+crp: true
+pcx: false
+target_layer: "encoder"
+

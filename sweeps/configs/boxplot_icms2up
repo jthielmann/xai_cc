@@ -1,0 +1,7 @@
+log_to_wandb: false
+debug: false
+plot_box: true
+plot_violin: true
+gene_sets: "all"
+model_state_path: "icms2up"
+

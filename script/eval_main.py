@@ -57,7 +57,12 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("model_config.genes missing; required to build gene_set path")
     gs_token = _sanitize_token(compute_genes_id(genes))
     base_root = "../evaluation/debug" if bool(merged.get("debug", False)) else "../evaluation"
-    base = os.path.join(base_root, gs_token, enc_token)
+    label = merged.get("eval_label")
+    if isinstance(label, str) and label.strip():
+        label = _sanitize_token(label)
+    else:
+        label = None
+    base = os.path.join(base_root, label, gs_token, enc_token) if label else os.path.join(base_root, gs_token, enc_token)
     eval_path = base
     merged["eval_path"] = eval_path
     # Maintain legacy 'out_path' for downstream helpers that expect it
@@ -233,9 +238,15 @@ def main() -> None:
         if not os.path.isdir(base_dir):
             raise RuntimeError(f"is_sweep=true but model_state_path is not a directory: {base_dir}")
         bases = base_val if isinstance(base_val, list) else [base_val]
-        run_dirs = [rd for b in bases
-                    for rd in _find_model_run_dirs(_verify_path(b, "../models"))]
-        if not run_dirs:
+        pairs: List[tuple[str, str]] = []
+        for b in bases:
+            rd_base = _verify_path(b, "../models")
+            rds = _find_model_run_dirs(rd_base)
+            if not rds:
+                continue
+            label = str(b)
+            pairs.extend((rd, label) for rd in rds)
+        if not pairs:
             raise RuntimeError(f"No model run subdirectories with config+best_model.pth under: {base_dir}")
         base_run_name = raw_cfg.get("run_name") or "eval"
         models_root = os.path.dirname(os.path.abspath(base_dir))
@@ -244,7 +255,7 @@ def main() -> None:
         debug_flag = bool(raw_cfg.get("debug", False))
         # out_base is computed per-run below since it depends on encoder_type
         bases_to_aggregate = set()
-        for rd in run_dirs:
+        for rd, label in pairs:
             model_cfg_path = os.path.join(rd, "config")
             if not os.path.exists(model_cfg_path):
                 raise RuntimeError(f"missing model config for run dir: {rd}")
@@ -257,11 +268,11 @@ def main() -> None:
                 raise ValueError(f"model_config.genes missing in {model_cfg_path}")
             gs_token = _sanitize_token(compute_genes_id(genes))
             base_root = "../evaluation/debug" if debug_flag else "../evaluation"
-            out_base = os.path.join(base_root, gs_token, _sanitize_token(enc))
+            label_tok = _sanitize_token(label)
+            out_base = os.path.join(base_root, label_tok, gs_token, _sanitize_token(enc))
             bases_to_aggregate.add(out_base)
-            tgt_base = out_base
             rel_model = os.path.relpath(rd, models_root)
-            tgt = os.path.join(tgt_base, rel_model)
+            tgt = os.path.join(out_base, rel_model)
             enc_l = enc.lower()
             cases = ["scatter", "diff", "forward_to_csv", "umap"]
             if "vit" in enc_l:
@@ -284,7 +295,7 @@ def main() -> None:
                     # default to encoder makes sense as that is right now the primary target
                     per_cfg["umap_layer"] = "encoder"
                 per_cfg["model_state_path"] = rd
-                per_cfg["out_path"] = out_base
+                per_cfg["eval_label"] = label_tok
                 per_cfg["encoder_type"] = enc
                 token = _sanitize_token(rel_model)
                 per_cfg["run_name"] = f"{base_run_name}__{token}__{k}"[:128]

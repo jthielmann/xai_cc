@@ -16,7 +16,7 @@ from script.configs.dataset_config import get_dataset_cfg
 from script.xai_auto_config import build_auto_xai_config
 from script.evaluation.crp_pipeline import EvalPipeline
 from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, \
-    read_config_parameter
+    read_config_parameter, compute_genes_id
 
 
 def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
@@ -47,18 +47,24 @@ def _sanitize_token(s: str) -> str:
 
 
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Merge dataset defaults and ensure output directory exists, persist config.
-
-    Supports 'eval_dir'/'eval_path' base like eval_main; mirrors into 'out_path' for helpers.
-    """
     merged = dict(cfg)
     merged.update(get_dataset_cfg(merged))
     enc = merged.get("encoder_type") or (merged.get("model_config") or {}).get("encoder_type")
     if not isinstance(enc, str) or not enc.strip():
         raise ValueError("encoder_type missing; required to build eval output path")
-    base = os.path.join("../evaluation", _sanitize_token(enc))
-    # mirror eval_main: place under /debug when debug=true to avoid mixing with full runs
-    eval_path = os.path.join(base, "debug") if bool(merged.get("debug", False)) else base
+    enc_token = _sanitize_token(enc)
+    genes = (merged.get("model_config") or {}).get("genes")
+    if not genes:
+        raise ValueError("model_config.genes missing; required to build gene_set path")
+    gs_token = _sanitize_token(compute_genes_id(genes))
+    base_root = "../evaluation/debug" if bool(merged.get("debug", False)) else "../evaluation"
+    label = merged.get("eval_label")
+    if isinstance(label, str) and label.strip():
+        label = _sanitize_token(label)
+    else:
+        label = None
+    base = os.path.join(base_root, label, gs_token, enc_token) if label else os.path.join(base_root, gs_token, enc_token)
+    eval_path = base
     merged["eval_path"] = eval_path
     merged["out_path"] = eval_path
     os.makedirs(eval_path, exist_ok=True)
@@ -134,6 +140,10 @@ def main() -> None:
     args = parse_args()
     raw_cfg = parse_yaml_config(args.config)
     cfg = _build_cfg(raw_cfg)
+    if not cfg.get("eval_label"):
+        msp = raw_cfg.get("model_state_path")
+        if isinstance(msp, str) and msp.strip():
+            cfg["eval_label"] = msp
     mode = cfg.get("xai_pipeline")
     if isinstance(mode, str):
         m = mode.strip().lower()

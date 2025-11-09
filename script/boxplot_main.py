@@ -12,6 +12,7 @@ from script.boxplot_helpers import (
     _maybe_init_wandb_and_update_cfg,
     _plot_all_sets,
     _apply_filters,
+    _sanitize_token,
 )
 
 
@@ -30,8 +31,19 @@ def main() -> None:
 
     _require_keys(
         raw_cfg,
-        ["gene_sets", "log_to_wandb", "plot_box", "plot_violin", "scan_root"],
+        ["gene_sets", "log_to_wandb", "plot_box", "plot_violin"],
     )
+
+    # Derive label from eval_label or model_state_path for symmetry with eval_main
+    label = raw_cfg.get("eval_label")
+    if not isinstance(label, str) or not label.strip():
+        msp = raw_cfg.get("model_state_path")
+        if isinstance(msp, str) and msp.strip():
+            label = msp
+    if isinstance(label, str) and label.strip():
+        label = _sanitize_token(label)
+    else:
+        label = None
 
     scan_root = raw_cfg.get("scan_root") or None
     plot_box = raw_cfg.get("plot_box")
@@ -42,12 +54,17 @@ def main() -> None:
     if not (plot_box or plot_violin):
         raise ValueError("at least one of plot_box/plot_violin must be true")
 
-    if not isinstance(scan_root, str) or not scan_root.strip():
-        raise ValueError(
-            f"scan_root must be a non-empty string; got {scan_root!r}"
-        )
+    # If scan_root not provided, scan from the label root (or base root)
+    if scan_root is None:
+        scan_root = ""
+    if not isinstance(scan_root, str):
+        raise ValueError(f"scan_root must be a string; got {type(scan_root)}")
+    debug_flag = bool(raw_cfg.get("debug", False))
+    base_root = "../evaluation/debug" if debug_flag else "../evaluation"
+    # 'label' already resolved above (from eval_label or model_state_path)
+    root = os.path.join(base_root, label) if label else base_root
     scan_path = (
-        scan_root if os.path.isabs(scan_root) else os.path.join(EVAL_ROOT, scan_root)
+        scan_root if os.path.isabs(scan_root) else os.path.join(root, scan_root)
     )
     df = _load_forward_metrics_recursive(scan_path)
 
@@ -116,6 +133,7 @@ def main() -> None:
     elif group_by == "project+encoder_type":
         df[group_col] = df[["project", "encoder_type"]].astype(str).agg(lambda r: f"{r[0]}::{r[1]}", axis=1)
 
+    out_dir = os.path.join(root, "boxplots")
     saved_paths = _plot_all_sets(
         df=df,
         gene_sets=gene_sets,
@@ -123,7 +141,7 @@ def main() -> None:
         plot_violin=plot_violin,
         skip_non_finite=bool(raw_cfg.get("skip_non_finite", False)),
         run=run,
-        out_dir=OUT_DIR,
+        out_dir=out_dir,
         group_key=group_col,
     )
 
