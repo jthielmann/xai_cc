@@ -136,19 +136,21 @@ class EvalPipeline:
             debug = bool(self.config.get("debug", False))
             # Directly resolve metadata CSV using eval override with model_config fallback
             cfg = self.config
-            meta_dir = cfg.get("meta_data_dir") or cfg["model_config"].get("meta_data_dir", "/meta_data/")
-            gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
-            ds = get_dataset_from_config(
-                dataset_name=self.config["model_config"]["dataset"],
+            meta_dir = cfg.get("meta_data_dir", "/meta_data/")
+            gene_csv = cfg.get("gene_data_filename", "gene_data.csv")
+            data_dir = self.config.get("data_dir")
+            if not data_dir:
+                raise ValueError("Missing 'data_dir' in eval config for LRP; set config.data_dir.")
+            ds = get_dataset(
+                data_dir=data_dir,
                 genes=None,
-                split="test",
-                debug=debug,
                 transforms=eval_tf,
                 samples=self.config.get("test_samples"),
                 max_len=self.config.get("max_len") if debug else None,
                 only_inputs=False,
-                meta_data_dir=meta_dir,
                 gene_data_filename=gene_csv,
+                meta_data_dir=meta_dir,
+                return_patient_and_tilepath=True,
             )
             n = min(int(self.config.get("lrp_max_items", 10)), len(ds))
             loader = DataLoader(Subset(ds, list(range(n))), batch_size=1, shuffle=False)
@@ -221,12 +223,12 @@ class EvalPipeline:
             # Build eval loader (inputs only)
             eval_tf = get_transforms(self.config["model_config"], split="eval")
             debug = bool(self.config.get("debug", False))
-            # Directly resolve metadata CSV using eval override with model_config fallback
+            # Resolve metadata CSV only from eval config
             cfg = self.config
-            meta_dir = cfg.get("meta_data_dir") or cfg["model_config"].get("meta_data_dir", "/meta_data/")
-            gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
+            meta_dir = cfg.get("meta_data_dir", "/meta_data/")
+            gene_csv = cfg.get("gene_data_filename", "gene_data.csv")
             ds = get_dataset_from_config(
-                dataset_name=self.config["model_config"]["dataset"],
+                dataset_name=self.config["dataset"],
                 genes=None,
                 split="test",
                 debug=debug,
@@ -371,9 +373,9 @@ class EvalPipeline:
                 print(f"[EvalPipeline] predictions already exist at {results_csv}; skipping forward_to_csv.")
             else:
                 device = auto_device(self.model)
-                # Directly resolve metadata CSV using eval override with model_config fallback
+                # Resolve gene CSV only from eval config
                 cfg = self.config
-                gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
+                gene_csv = cfg.get("gene_data_filename", "gene_data.csv")
                 for p in patients:
                     print(f"[Eval] Starting forward_to_csv for patient={p} -> {results_dir}")
                     _ = generate_results(

@@ -68,10 +68,10 @@ def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
 
     # Directly resolve metadata CSV using eval override with model_config fallback
     cfg = config
-    meta_dir = cfg.get("meta_data_dir") or cfg["model_config"].get("meta_data_dir", "/meta_data/")
-    gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
+    meta_dir = cfg.get("meta_data_dir", "/meta_data/")
+    gene_csv = cfg.get("gene_data_filename", "gene_data.csv")
     ds = get_dataset_from_config(
-        dataset_name=config["model_config"]["dataset"],
+        dataset_name=config["dataset"],
         genes=None,
         split="test",
         debug=debug,

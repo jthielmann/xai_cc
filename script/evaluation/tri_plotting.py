@@ -80,11 +80,11 @@ def plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=Fals
 
 
 def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path: str, *, max_items: int | None = None, is_online=False, wandb_run=None):
-    data_dir = cfg.get("data_dir") or cfg.get("model_config", {}).get("data_dir")
+    data_dir = cfg.get("data_dir")
     if not data_dir:
         raise ValueError("Missing 'data_dir' in config; cannot build spatial dataset for triptych.")
-    meta_data_dir = cfg.get("meta_data_dir") or cfg.get("model_config", {}).get("meta_data_dir", "/meta_data/")
-    gene_data_filename = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
+    meta_data_dir = cfg.get("meta_data_dir", "/meta_data/")
+    gene_data_filename = cfg.get("gene_data_filename", "gene_data.csv")
 
     # Build a standard dataset restricted to the selected patient and single gene
     # Coordinates (x,y) are expected inside the gene CSV for COAD and similar datasets.

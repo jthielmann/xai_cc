@@ -50,8 +50,8 @@ def plot_scatter(config, model, wandb_run=None):
 
     # Directly resolve metadata CSV using eval override with model_config fallback
     cfg = config
-    meta_dir = cfg.get("meta_data_dir") or base_cfg.get("meta_data_dir", "/meta_data/")
-    gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
+    meta_dir = cfg.get("meta_data_dir", "/meta_data/")
+    gene_csv = cfg.get("gene_data_filename", "gene_data.csv")
     ds = get_dataset_from_config(
         dataset_name=config["dataset"],
         genes=genes,
