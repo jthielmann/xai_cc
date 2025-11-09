@@ -50,8 +50,9 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     if not genes:
         raise ValueError("model_config.genes missing; required to build gene_set path")
     gs_token = _sanitize_token(compute_genes_id(genes))
-    base = os.path.join("../evaluation", gs_token, enc_token)
-    eval_path = os.path.join(base, "debug") if bool(merged.get("debug", False)) else base
+    base_root = "../evaluation/debug" if bool(merged.get("debug", False)) else "../evaluation"
+    base = os.path.join(base_root, gs_token, enc_token)
+    eval_path = base
     merged["eval_path"] = eval_path
     # Maintain legacy 'out_path' for downstream helpers that expect it
     merged["out_path"] = eval_path
@@ -199,25 +200,17 @@ def _run_single(raw_cfg: Dict[str, Any]) -> None:
 
 
 def _find_model_run_dirs(base_dir: str) -> List[str]:
-    """Return subdirectories under base_dir that look like model runs.
-
-    A valid run dir must contain a file named 'config' and 'best_model.pth'.
-    Raises if the base_dir does not exist or is not a directory.
-    Returns absolute paths sorted by name for stable iteration.
-    """
+    """Recursively find run dirs under base_dir containing 'config' + 'best_model.pth'."""
     if not os.path.isdir(base_dir):
-        raise FileNotFoundError(f"Base directory not found or not a directory: {base_dir}")
-    entries = [os.path.join(base_dir, d) for d in os.listdir(base_dir)]
-    out: List[str] = []
-    for p in entries:
-        if not os.path.isdir(p):
-            continue
-        cfg = os.path.join(p, "config")
-        wts = os.path.join(p, "best_model.pth")
-        if os.path.exists(cfg) and os.path.exists(wts):
-            out.append(os.path.abspath(p))
-    out.sort()
-    return out
+        raise FileNotFoundError(
+            f"Base directory not found or not a directory: {base_dir}"
+        )
+    hits: List[str] = []
+    for dirpath, dirnames, filenames in os.walk(base_dir):
+        if "config" in filenames and "best_model.pth" in filenames:
+            hits.append(os.path.abspath(dirpath))
+    hits.sort()
+    return hits
 
 
 def main() -> None:
