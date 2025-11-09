@@ -1,0 +1,7 @@
+is_sweep: true
+model_state_path: "cmmn"
+run_name: "eval"
+log_to_wandb: false
+debug: true
+clear_all: false
+

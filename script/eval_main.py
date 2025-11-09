@@ -39,6 +39,12 @@ def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
 
 def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     merged = dict(cfg)
+    if "dataset" not in merged:
+        mc = merged.get("model_config") or {}
+        ds = mc.get("dataset")
+        if not ds:
+            raise KeyError("'dataset' missing; provide it in config or ensure model_config.dataset exists")
+        merged["dataset"] = ds
     merged.update(get_dataset_cfg(merged))
 
     # Determine base evaluation directory with gene_set/encoder_type subfolders
@@ -250,9 +256,10 @@ def main() -> None:
             if not genes:
                 raise ValueError(f"model_config.genes missing in {model_cfg_path}")
             gs_token = _sanitize_token(compute_genes_id(genes))
-            out_base = os.path.join("../evaluation", gs_token, _sanitize_token(enc))
+            base_root = "../evaluation/debug" if debug_flag else "../evaluation"
+            out_base = os.path.join(base_root, gs_token, _sanitize_token(enc))
             bases_to_aggregate.add(out_base)
-            tgt_base = os.path.join(out_base, "debug") if debug_flag else out_base
+            tgt_base = out_base
             rel_model = os.path.relpath(rd, models_root)
             tgt = os.path.join(tgt_base, rel_model)
             enc_l = enc.lower()
