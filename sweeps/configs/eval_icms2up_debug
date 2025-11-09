@@ -1,7 +1,7 @@
 is_sweep: true
 model_state_path: "icms2up"
 run_name: "eval"
-log_to_wandb: false
+log_to_wandb: true
 debug: true
 clear_all: false
 
