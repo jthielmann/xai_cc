@@ -13,6 +13,8 @@ def load_user_config(path: str) -> Dict[str, Any]:
 # Base dataset specifications for reuse
 _BASE_CRC_N19: Dict[str, Any] = {
     "data_dir": "../data/CRC-N19/",
+    "meta_data_dir": "meta_data",
+    "gene_data_filename": "genedata_log1p.csv",
     "train_samples_all": [
         "TENX92","TENX91","TENX90","TENX89","TENX70","TENX49",
         "ZEN49","ZEN48","ZEN47","ZEN46","ZEN45","ZEN44"
@@ -24,12 +26,16 @@ _BASE_CRC_N19: Dict[str, Any] = {
 
 _BASE_CRC_BASE: Dict[str, Any] = {
     "data_dir": "../data/crc_base/Training_Data/",
+    "meta_data_dir": "meta_data",
+    "gene_data_filename": "genedata_log1p.csv",
     "train_samples_all": ["p007","p014","p016","p020","p025"],
     "val_samples_all":   ["p009","p013"],
 }
 
 _BASE_COAD: Dict[str, Any] = {
     "data_dir": "/data/cephfs-2/unmirrored/groups/krieger/xai/HEST/hest_coad_visium",
+    "meta_data_dir": "metadata",
+    "gene_data_filename": "gene_log1p.csv",
     "train_samples_all": [
          'MISC62', 'ZEN45', 'TENX152', 'MISC73', 'MISC71', 'MISC70', 'MISC68', 'MISC67', 'MISC66', 'MISC65', 'MISC64',
          'MISC63', 'MISC58', 'MISC57', 'MISC51', 'MISC50', 'MISC49', 'MISC48', 'MISC47', 'MISC46', 'MISC44', 'MISC43',
@@ -55,10 +61,6 @@ DATASETS: Dict[str, Dict[str, Any]] = {
         "weights": None,
     },
     "crc_base": {
-        **_BASE_CRC_BASE,
-        "weights": None,
-    },
-    "pseudospot": {
         **_BASE_CRC_BASE,
         "weights": None,
     },
