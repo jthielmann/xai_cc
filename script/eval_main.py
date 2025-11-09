@@ -326,8 +326,10 @@ def main() -> None:
 
             if per_model_run is not None:
                 per_model_run.finish()
-        for b in sorted(bases_to_aggregate):
-            gather_forward_metrics(b)
+        # Skip aggregation in debug runs: aggregator ignores '/debug/' trees
+        if not debug_flag:
+            for b in sorted(bases_to_aggregate):
+                gather_forward_metrics(b)
         return
 
     # Detect sweep-style lists for model_state_path and expand into multiple runs.
