@@ -18,7 +18,7 @@ from script.xai_auto_config import build_auto_xai_config
 from script.evaluation.eval_pipeline import EvalPipeline
 from script.evaluation.gather_results import gather_forward_metrics
 from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, \
-    read_config_parameter
+    read_config_parameter, compute_genes_id
 
 
 def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
@@ -41,12 +41,16 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     merged = dict(cfg)
     merged.update(get_dataset_cfg(merged))
 
-    # Determine base evaluation directory with encoder_type subfolder
+    # Determine base evaluation directory with gene_set/encoder_type subfolders
     enc = merged.get("encoder_type") or (merged.get("model_config") or {}).get("encoder_type")
     if not isinstance(enc, str) or not enc.strip():
         raise ValueError("encoder_type missing; required to build eval output path")
     enc_token = _sanitize_token(enc)
-    base = os.path.join("../evaluation", enc_token)
+    genes = (merged.get("model_config") or {}).get("genes")
+    if not genes:
+        raise ValueError("model_config.genes missing; required to build gene_set path")
+    gs_token = _sanitize_token(compute_genes_id(genes))
+    base = os.path.join("../evaluation", gs_token, enc_token)
     eval_path = os.path.join(base, "debug") if bool(merged.get("debug", False)) else base
     merged["eval_path"] = eval_path
     # Maintain legacy 'out_path' for downstream helpers that expect it
@@ -249,7 +253,11 @@ def main() -> None:
             enc = mc.get("encoder_type")
             if not isinstance(enc, str) or not enc.strip():
                 raise ValueError(f"encoder_type missing in model config: {model_cfg_path}")
-            out_base = os.path.join("../evaluation", _sanitize_token(enc))
+            genes = mc.get("genes")
+            if not genes:
+                raise ValueError(f"model_config.genes missing in {model_cfg_path}")
+            gs_token = _sanitize_token(compute_genes_id(genes))
+            out_base = os.path.join("../evaluation", gs_token, _sanitize_token(enc))
             bases_to_aggregate.add(out_base)
             tgt_base = os.path.join(out_base, "debug") if debug_flag else out_base
             rel_model = os.path.relpath(rd, models_root)

@@ -390,11 +390,13 @@ class TrainerPipeline:
 
 
 
-        # Canonical project root: ../models/<project>
+        # Canonical project root: ../models[/<gene_set>]/<project>
         project = self.config.get("project")
         if not project:
             raise ValueError("Config must set 'project'")
-        project_root = os.path.join("..", "models", str(project))
+        gs = str(self.config.get("gene_set", "")).strip()
+        base = os.path.join("..", "models", gs) if gs else os.path.join("..", "models")
+        project_root = os.path.join(base, str(project))
         os.makedirs(project_root, exist_ok=True)
         # Mirror for back-compat; do not use these to derive paths elsewhere
         self.config["model_dir"] = project_root
@@ -441,11 +443,12 @@ class TrainerPipeline:
         return dir_name
 
     def _prepare_output_dir(self) -> str:
-        # Canonical base: ../models/<project>
+        # Canonical base: ../models[/<gene_set>]/<project>
         project = self.config.get("project")
         if not project:
             raise ValueError("Config must set 'project'")
-        base_dir = os.path.join("..", "models", str(project))
+        gs = str(self.config.get("gene_set", "")).strip()
+        base_dir = os.path.join("..", "models", gs, str(project)) if gs else os.path.join("..", "models", str(project))
 
         # Only add a sweep subdir when running a sweep
         subdir = "" if not self.is_sweep else self._run_name_to_dir(self.wandb_run.name)
