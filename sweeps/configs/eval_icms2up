@@ -2,6 +2,9 @@ is_sweep: true
 model_state_path: "icms2up"
 run_name: "eval"
 log_to_wandb: false
+project: "xai"
+group: "eval"
+job_type: "eval"
+tags: ["eval", "icms2up"]
 debug: false
 clear_all: false
-
