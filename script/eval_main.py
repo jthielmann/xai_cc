@@ -155,7 +155,7 @@ def _sanitize_token(s: str) -> str:
     )[:128]
 
 
-def _run_single(raw_cfg: Dict[str, Any]) -> None:
+def _run_single(raw_cfg: Dict[str, Any], run=None) -> None:
     cfg = _build_cfg(raw_cfg)
     mode = cfg.get("xai_pipeline")
     if isinstance(mode, str):
@@ -183,14 +183,15 @@ def _run_single(raw_cfg: Dict[str, Any]) -> None:
         cfg["diff_max_items"] = 200       # cap tiles in triptychs
     setup_dump_env()
 
-    run = None
-    if bool(cfg.get("log_to_wandb")):
+    created_run = False
+    local_run = run
+    if local_run is None and bool(cfg.get("log_to_wandb")):
         for key in ("run_name", "group", "job_type", "tags"):
             if key not in cfg:
                 raise ValueError(f"Missing required parameter '{key}' in config")
         wb_cfg = {k: v for k, v in cfg.items() if k not in ("project", "metric", "method", "run_name", "group", "job_type", "tags")}
         original_run_name = cfg.get("run_name")
-        run = wandb.init(
+        local_run = wandb.init(
             project=cfg.get("project", "xai"),
             name=cfg["run_name"],
             group=cfg["group"],
@@ -198,16 +199,17 @@ def _run_single(raw_cfg: Dict[str, Any]) -> None:
             tags=cfg["tags"],
             config=wb_cfg,
         )
+        created_run = True
         cfg = dict(cfg)
-        cfg.update(dict(run.config))
+        cfg.update(dict(local_run.config))
         if original_run_name is not None:
             cfg["run_name"] = original_run_name
     cfg = _prepare_cfg(cfg)
 
-    EvalPipeline(cfg, run=run).run()
+    EvalPipeline(cfg, run=local_run).run()
 
-    if run:
-        run.finish()
+    if created_run and local_run is not None:
+        local_run.finish()
 
 
 def _find_model_run_dirs(base_dir: str) -> List[str]:
@@ -248,7 +250,7 @@ def main() -> None:
             pairs.extend((rd, label) for rd in rds)
         if not pairs:
             raise RuntimeError(f"No model run subdirectories with config+best_model.pth under: {base_dir}")
-        base_run_name = raw_cfg.get("run_name") or "eval"
+        base_run_name_cfg = raw_cfg.get("run_name")
         models_root = os.path.dirname(os.path.abspath(base_dir))
         # Insert encoder_type into evaluation output base for per-run skip checks
         # Read encoder_type from each run's stored model config
@@ -279,27 +281,51 @@ def main() -> None:
                 cases.append("lxt")
             if "resnet" in enc_l:
                 cases.append("lrp")
+            # Determine which cases will actually run to avoid empty W&B runs
+            planned = []
             for k in cases:
                 sub = "predictions" if k == "forward_to_csv" else k
                 case_dir = os.path.join(tgt, sub)
-                if os.path.exists(case_dir):
-                    if bool(raw_cfg.get("clear_all", False)):
-                        shutil.rmtree(case_dir)
-                    else:
-                        continue
+                if os.path.exists(case_dir) and not bool(raw_cfg.get("clear_all", False)):
+                    continue
+                planned.append((k, case_dir))
+
+            per_model_run = None
+            per_model_run_name = (base_run_name_cfg or f"eval_all_{gs_token}")
+            token = _sanitize_token(rel_model)
+            per_model_run_name = f"{per_model_run_name}__{token}"[:128]
+
+            if planned and bool(raw_cfg.get("log_to_wandb")):
+                for key in ("group", "job_type", "tags"):
+                    if key not in raw_cfg:
+                        raise ValueError(f"Missing required parameter '{key}' in config for sweep run")
+                wb_cfg = {k: v for k, v in raw_cfg.items() if k not in ("project", "metric", "method", "run_name", "group", "job_type", "tags")}
+                per_model_run = wandb.init(
+                    project=raw_cfg.get("project", "xai"),
+                    name=per_model_run_name,
+                    group=raw_cfg["group"],
+                    job_type=raw_cfg["job_type"],
+                    tags=raw_cfg["tags"],
+                    config=wb_cfg,
+                )
+
+            for k, case_dir in planned:
+                if os.path.exists(case_dir) and bool(raw_cfg.get("clear_all", False)):
+                    shutil.rmtree(case_dir)
                 per_cfg = dict(raw_cfg)
                 per_cfg["xai_pipeline"] = "manual"
                 for kk in ("lrp", "lxt", "scatter", "diff", "sae", "umap", "forward_to_csv"):
                     per_cfg[kk] = (kk == k)
                 if k == "umap" and not per_cfg.get("umap_layer"):
-                    # default to encoder makes sense as that is right now the primary target
                     per_cfg["umap_layer"] = "encoder"
                 per_cfg["model_state_path"] = rd
                 per_cfg["eval_label"] = label_tok
                 per_cfg["encoder_type"] = enc
-                token = _sanitize_token(rel_model)
-                per_cfg["run_name"] = f"{base_run_name}__{token}__{k}"[:128]
-                _run_single(per_cfg)
+                per_cfg["run_name"] = per_model_run_name
+                _run_single(per_cfg, run=per_model_run)
+
+            if per_model_run is not None:
+                per_model_run.finish()
         for b in sorted(bases_to_aggregate):
             gather_forward_metrics(b)
         return

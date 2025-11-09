@@ -397,5 +397,9 @@ class EvalPipeline:
             lxt_dir = os.path.join(self.config["eval_path"], self.model_name, "lxt")
             os.makedirs(lxt_dir, exist_ok=True)
             cfg_lxt["out_path"] = lxt_dir
+            # Provide safe default gamma values for LXT if none supplied
+            if not any(k in cfg_lxt for k in ("lxt_conv_gamma", "lxt_lin_gamma", "lxt_conv_gamma_list", "lxt_lin_gamma_list")):
+                cfg_lxt["lxt_conv_gamma"] = 0.25
+                cfg_lxt["lxt_lin_gamma"] = 0.25
             print(f"[Eval] Starting LXT plots -> {lxt_dir}")
             plot_lxt(self.model, cfg_lxt, run=self.wandb_run)
