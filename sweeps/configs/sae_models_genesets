@@ -1,0 +1,51 @@
+project: sae
+name: sae_models_genesets
+method: grid
+metric:
+  name: val_cosine_sae
+  goal: maximize
+
+# Let W&B agent launch sae_main with this base config;
+# parameters below override keys in that file per run
+command:
+  - ${env}
+  - python
+  - -m
+  - script.sae_main
+  - --config
+  - sweeps/configs/sae_sweep_base
+
+parameters:
+  run_name:
+    value: sae_models_genesets
+  group:
+    value: sae_models_genesets
+  job_type:
+    value: train
+  tags:
+    value: [sae, models, genesets]
+
+  # Models to iterate (folders under ../models with best_model.pth)
+  model_state_path:
+    values:
+      - ../models/REPLACE_ME_MODEL_A
+      - ../models/REPLACE_ME_MODEL_B
+
+  # Gene sets to tag runs and downstream usage
+  gene_set:
+    values: [hvg, icms2down, icms2up, icms3down, icms3up]
+
+  # SAE hyperparameters (extend as needed)
+  d_hidden:
+    values: [512, 1024]
+  k:
+    values: [16, 32]
+  lr:
+    values: [0.001]
+  epochs:
+    values: [10]
+
+  # UMAP sampling cap
+  umap_max_samples:
+    value: 10000
+

@@ -1,7 +1,11 @@
-log_to_wandb: false
+log_to_wandb: true
+project: xai
+run_name: boxplots_icms2down
+group: boxplots
+job_type: analysis
+tags: [boxplot, violin]
 debug: false
 plot_box: true
 plot_violin: true
 gene_sets: "all"
 model_state_path: "icms2down"
-

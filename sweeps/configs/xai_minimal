@@ -40,3 +40,6 @@ pcx_backend: zennit
 
 # Optional overrides for specific visualizations
 patient: p007
+
+boxplots: true
+plot_violin: true

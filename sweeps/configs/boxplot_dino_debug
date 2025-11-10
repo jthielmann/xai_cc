@@ -1,7 +1,11 @@
-log_to_wandb: false
+log_to_wandb: true
+project: xai
+run_name: boxplots_dino
+group: boxplots
+job_type: analysis
+tags: [boxplot, violin]
 debug: true
 plot_box: true
 plot_violin: true
 gene_sets: "all"
 model_state_path: "dino"
-

@@ -2,7 +2,11 @@ is_sweep: true
 model_state_path: "icms2down"
 dataset: coad
 run_name: "crp"
-log_to_wandb: false
+group: crp
+job_type: xai
+tags: [crp]
+project: xai
+log_to_wandb: true
 debug: false
 crp: true
 pcx: false

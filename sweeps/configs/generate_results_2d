@@ -48,3 +48,6 @@ lxt_lin_gamma: 0.0
 # lxt_tilepaths:
 #   - /absolute/path/to/tile1.png
 #   - /absolute/path/to/tile2.png
+
+boxplots: true
+plot_violin: true

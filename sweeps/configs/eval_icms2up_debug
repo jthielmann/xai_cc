@@ -8,3 +8,5 @@ job_type: "eval"
 tags: ["eval", "icms2up"]
 debug: true
 clear_all: false
+boxplots: true
+plot_violin: true

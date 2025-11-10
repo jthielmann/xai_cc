@@ -1,10 +1,12 @@
 is_sweep: true
 model_state_path: "cmmn"
 run_name: "eval"
-log_to_wandb: false
+log_to_wandb: true
 project: "xai"
 group: "eval"
 job_type: "eval"
 tags: ["eval", "cmmn"]
 debug: true
 clear_all: false
+boxplots: true
+plot_violin: true

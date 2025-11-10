@@ -19,3 +19,5 @@ encoder_state_path: null
 gene_head_state_path: null
 sae_state_path: null
 
+boxplots: true
+plot_violin: true
