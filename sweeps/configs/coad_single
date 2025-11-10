@@ -9,7 +9,7 @@ metric:
 debug:
   value: false
 log_to_wandb:
-  value: false
+  value: true
  # Training basics
 epochs:
   value: 40

@@ -9,7 +9,7 @@ num_workers: 2    # 2 works on shared filesystems
 drop_cls_token: true
 embedding_epochs: 1
 
-log_to_wandb: false
+log_to_wandb: true
 project: embeddings test
 group: embeddings
 run_name: embeddings test
