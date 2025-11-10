@@ -100,7 +100,13 @@ class EvalPipeline:
                 raise ValueError("CRP requires 'target_layer' in config (e.g., 'encoder' or a dot-path layer name).")
             enc = getattr(self.model, "encoder", self.model)
             _, default_layer_name = _get_composite_and_layer(enc)
-            resolved_layer = default_layer_name if target_layer == "encoder" else target_layer
+            if target_layer == "encoder":
+                # Fully-qualified name if model has an encoder submodule
+                resolved_layer = (
+                    f"encoder.{default_layer_name}" if enc is not self.model else default_layer_name
+                )
+            else:
+                resolved_layer = target_layer
             # Validate target_layer exists on model for explicit names
             if target_layer != "encoder":
                 names = {n for n, _ in self.model.named_modules()}

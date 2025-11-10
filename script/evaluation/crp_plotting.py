@@ -38,7 +38,21 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
     device = next(model.parameters()).device
     enc = getattr(model, "encoder", model)
     composite, default_layer_name = _get_composite_and_layer(enc)
-    target_layer = default_layer_name if (layer_name is None or layer_name == "encoder") else layer_name
+    if layer_name is None or layer_name == "encoder":
+        target_layer = (
+            f"encoder.{default_layer_name}" if enc is not model else default_layer_name
+        )
+    else:
+        target_layer = layer_name
+    all_names = [n for n, _ in model.named_modules()]
+    has_encoder = (enc is not model)
+    print(f"[CRP][debug] resolved_target={target_layer} default_layer={default_layer_name} has_encoder={has_encoder}")
+    alt = default_layer_name if target_layer.startswith("encoder.") else f"encoder.{target_layer}"
+    record_candidates = [target_layer] if target_layer else []
+    if alt and alt not in record_candidates:
+        record_candidates.append(alt)
+    present = [n for n in record_candidates if n in all_names]
+    print(f"[CRP][debug] present_in_named_modules target={target_layer in all_names} alt={alt in all_names} present={present}")
 
     attribution = CondAttribution(model)
     count = 0
@@ -56,8 +70,22 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
         x.requires_grad_(True)
         x = x + x.new_zeros(())
 
-        attr = attribution(x, [{"y": [0]}], composite, record_layer=[target_layer])
-        rel = attr.relevances[target_layer].sum(1).detach().cpu()
+        attr = attribution(x, [{"y": [0]}], composite, record_layer=record_candidates)
+        keys = list(attr.relevances.keys())
+        pick = None
+        for k in record_candidates:
+            if k in keys:
+                pick = k
+                break
+        if pick is None:
+            if i == 0:
+                sample_keys = keys[:8]
+                print(f"[CRP][debug] no match in recorded layers; candidates={record_candidates}; keys_sample={sample_keys}")
+            raise KeyError(record_candidates[0] if record_candidates else "<empty candidate list>")
+        if i == 0:
+            sample_keys = keys[:8]
+            print(f"[CRP][debug] picked_layer={pick}; keys_sample={sample_keys}")
+        rel = attr.relevances[pick].sum(1).detach().cpu()
         # Sanitize and normalize to avoid NaN/Inf during visualization
         rel = torch.nan_to_num(rel, nan=0.0, posinf=1.0, neginf=-1.0)
         denom = torch.nan_to_num(rel.abs(), nan=0.0).amax(dim=(1, 2), keepdim=True).clamp_min(1e-12)
