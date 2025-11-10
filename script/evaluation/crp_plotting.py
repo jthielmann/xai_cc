@@ -80,7 +80,8 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
     count = 0
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
-    for i in range(len(dataset)):
+    total = len(dataset)
+    for i in range(total):
         if max_items is not None and count >= max_items:
             break
         sample = dataset[i]
@@ -119,6 +120,8 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
             fn = f"crp_{i:04d}.png"
             img.save(os.path.join(out_dir, fn))
         count += 1
+        if (i + 1) % 100 == 0 or (i + 1) == total:
+            print(f"[CRP] progress: {i + 1}/{total}")
 
 
 def _find_module_by_name(model: nn.Module, name: str) -> nn.Module:

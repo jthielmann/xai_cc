@@ -67,8 +67,11 @@ for cfg in "${configs[@]}"; do
       "group: crp_icms" \
       "job_type: xai" \
       "tags: [crp, icms]" \
-      "log_to_wandb: true" \
+      "log_to_wandb: ${CRP_WANDB:-true}" \
       "model_state_path: ${rel}" >"$tmp_cfg"
+    if [[ -n "${CRP_MAX_ITEMS:-}" ]]; then
+      echo "crp_max_items: ${CRP_MAX_ITEMS}" >>"$tmp_cfg"
+    fi
     if python crp_main.py --config "$tmp_cfg"; then
       echo "ok: $cfg :: $rel"
     else
