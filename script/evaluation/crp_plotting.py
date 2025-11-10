@@ -38,7 +38,7 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
     device = next(model.parameters()).device
     enc = getattr(model, "encoder", model)
     composite, default_layer_name = _get_composite_and_layer(enc)
-    target_layer = layer_name or default_layer_name
+    target_layer = default_layer_name if (layer_name is None or layer_name == "encoder") else layer_name
 
     attribution = CondAttribution(model)
     count = 0

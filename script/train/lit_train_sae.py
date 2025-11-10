@@ -15,6 +15,8 @@ from umap import UMAP
 
 from script.data_processing.lit_STDataModule import get_data_module
 from script.model.lit_sae import LitSparseAutoencoder
+from script.model.preproc import LinearPCATransform
+from sklearn.decomposition import PCA
 
 
 class UMAPCallback(Callback):
@@ -47,29 +49,22 @@ class WandbMetricCallback(Callback):
             return
         metrics = trainer.callback_metrics
         payload = {"epoch": trainer.current_epoch}
-        # Cosine similarity
-        # Reasoning: metrics can be tensors on CUDA, CPU, or metric wrapper types.
-        # We prefer detach().cpu().item() for robustness; if the object is already a plain
-        # Python scalar (or an unexpected type that doesn't support .detach()), we silently
-        # fall back to float(..). Silent except is acceptable because this path is best-effort
-        # logging only; failures here should never interrupt training, and the fallback covers
-        # common non-tensor cases without cluttering logs.
         val_cos = metrics.get("val_cosine_sae")
         if val_cos is not None:
-            try:
-                payload["val_cosine_sae"] = float(val_cos.detach().cpu().item()) if hasattr(val_cos, 'detach') else float(val_cos)
-            except Exception:
-                payload["val_cosine_sae"] = float(val_cos)
-        # Validation MSE (as logged by Lightning)
-        # Same casting rationale as above: handle tensors and non-tensors uniformly. Silent except
-        # is deliberate to avoid noisy logs on metrics conversion while ensuring metrics are logged
-        # when possible.
+            v = val_cos.detach().cpu().item() if hasattr(val_cos, "detach") else val_cos
+            if torch.is_tensor(v):
+                v = v.item()
+            if not isinstance(v, (int, float)):
+                raise TypeError(f"val_cosine_sae type unsupported: {type(v)}")
+            payload["val_cosine_sae"] = float(v)
         val_mse = metrics.get("val_MSELoss_sae")
         if val_mse is not None:
-            try:
-                payload["val_MSELoss_sae"] = float(val_mse.detach().cpu().item()) if hasattr(val_mse, 'detach') else float(val_mse)
-            except Exception:
-                payload["val_MSELoss_sae"] = float(val_mse)
+            v = val_mse.detach().cpu().item() if hasattr(val_mse, "detach") else val_mse
+            if torch.is_tensor(v):
+                v = v.item()
+            if not isinstance(v, (int, float)):
+                raise TypeError(f"val_MSELoss_sae type unsupported: {type(v)}")
+            payload["val_MSELoss_sae"] = float(v)
         if len(payload) > 1:
             run.log(payload)
 
@@ -92,7 +87,7 @@ class SAETrainerPipeline:
 
     def setup(self):
 
-        # Infer d_in from the encoder output if not specified
+        # Infer d_in from encoder output (flatten if needed) if not specified
         if "d_in" not in self.config:
             sample_batch = next(iter(self.train_loader))
             # The batch is either a tensor or a list/tuple.
@@ -104,16 +99,60 @@ class SAETrainerPipeline:
             with torch.no_grad():
                 encoder_output = self.encoder(sample_input)
             
-            d_in = encoder_output.shape[-1]
+            if encoder_output.ndim == 2:
+                d_in = int(encoder_output.shape[-1])
+            else:
+                d_in = int(np.prod(encoder_output.shape[1:]))
             self.config['d_in'] = d_in
 
-        self.sae = LitSparseAutoencoder(self.config, encoder=self.encoder)
+        preproc = None
+        use_pca = bool(self.config.get("pca_enable", False) or self.config.get("use_pca", False) or (self.config.get("pca_k") is not None))
+        if use_pca:
+            k = int(self.config.get("pca_k", self.config['d_in']))
+            if not (1 <= k <= int(self.config['d_in'])):
+                raise ValueError(f"pca_k must be in [1, d_in], got k={k}, d_in={self.config['d_in']}")
+            whiten = bool(self.config.get("pca_whiten", True))
+            fit_cap = self.config.get("pca_fit_max_samples")
+            feats = []
+            seen = 0
+            dev = next(self.encoder.parameters()).device
+            self.encoder.eval()
+            with torch.no_grad():
+                for batch in self.train_loader:
+                    x = batch[0] if isinstance(batch, (list, tuple)) else batch
+                    x = x.to(dev)
+                    z = self.encoder(x)
+                    if z.ndim == 4:
+                        z = z.mean(dim=(2, 3))
+                    elif z.ndim == 3:
+                        z = z.mean(dim=1)
+                    z = z.view(z.size(0), -1)
+                    feats.append(z.detach().cpu().numpy().astype(np.float32))
+                    seen += z.size(0)
+                    if fit_cap is not None and seen >= int(fit_cap):
+                        break
+            if not feats:
+                raise RuntimeError("no features collected for PCA fit")
+            X = np.concatenate(feats, axis=0)
+            if fit_cap is not None:
+                X = X[: int(fit_cap)]
+            p = PCA(n_components=k, whiten=False, svd_solver='auto', random_state=42)
+            p.fit(X)
+            mean = torch.from_numpy(p.mean_.astype(np.float32))
+            comps = torch.from_numpy(p.components_.astype(np.float32))
+            var = torch.from_numpy(p.explained_variance_.astype(np.float32))
+            preproc = LinearPCATransform(mean, comps, var, whiten=whiten)
+            self.config['d_in'] = int(k)
+
+        self.sae = LitSparseAutoencoder(self.config, encoder=self.encoder, preproc=preproc)
 
         logger = None
         if self.config.get("log_to_wandb"):
             logger = WandbLogger(project=self.config["project"], name=self.config["name"], log_model=False)
 
-        callbacks: list[Callback] = [UMAPCallback(self), WandbMetricCallback(self)]
+        callbacks: list[Callback] = [UMAPCallback(self)]
+        if logger is None and self.wandb_run is not None:
+            callbacks.append(WandbMetricCallback(self))
         
         if self.config.get("model_dir"):
             checkpoint_callback = ModelCheckpoint(
@@ -209,6 +248,10 @@ class SAETrainerPipeline:
         out_dir = self.config.get("out_path") or self.config.get("sweep_dir") or self.config.get("model_dir") or "."
         os.makedirs(out_dir, exist_ok=True)
 
+        out_dir = self.config.get("out_path") or self.config.get("sweep_dir") or self.config.get("model_dir") or "."
+        if self.config.get("umap") and out_dir == ".":
+            raise ValueError("UMAP enabled but no out_path/sweep_dir/model_dir set")
+
         for n_neighbors in n_neighbors_list:
             for min_dist in min_dist_list:
                 umap_model = UMAP(
@@ -247,14 +290,15 @@ class SAETrainerPipeline:
                     embedding_norm = (embedding - embedding.min(0)) / (embedding.max(0) - embedding.min(0))
 
                     for i, (x, y) in enumerate(embedding_norm):
-                        try:
-                            img = Image.open(paths_list[i])
+                        pth = paths_list[i]
+                        if os.path.isfile(pth):
+                            img = Image.open(pth)
                             img.thumbnail((128, 128))
                             im = OffsetImage(img, zoom=0.35)
                             ab = AnnotationBbox(im, (x, y), frameon=False, pad=0.0)
                             ax.add_artist(ab)
-                        except FileNotFoundError:
-                            print(f"Warning: Image not found at {paths_list[i]}")
+                        else:
+                            print(f"Warning: Image not found at {pth}")
 
                     ax.update_datalim(embedding_norm)
                     ax.set_xlim(-0.1, 1.1)

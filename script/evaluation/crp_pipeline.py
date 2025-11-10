@@ -3,7 +3,7 @@ import os
 import torch
 from typing import Any, Dict
 
-from script.evaluation.crp_plotting import plot_crp_zennit, plot_crp
+from script.evaluation.crp_plotting import plot_crp_zennit, plot_crp, _get_composite_and_layer
 from script.evaluation.pcx_plotting import plot_pcx
 from script.model.lit_model import load_lit_regressor
 from script.data_processing.data_loader import get_dataset_from_config
@@ -94,22 +94,25 @@ class EvalPipeline:
                 ds_subset = ds
             out_dir = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "crp")
             os.makedirs(out_dir, exist_ok=True)
-            # Require explicit target_layer in config (no default). Allow special value 'encoder'.
+            # Require explicit target_layer in config; allow special value 'encoder' which maps to a model-specific default
             target_layer = self.config.get("target_layer")
             if not target_layer or not isinstance(target_layer, str):
                 raise ValueError("CRP requires 'target_layer' in config (e.g., 'encoder' or a dot-path layer name).")
-            # Validate target_layer exists on model
+            enc = getattr(self.model, "encoder", self.model)
+            _, default_layer_name = _get_composite_and_layer(enc)
+            resolved_layer = default_layer_name if target_layer == "encoder" else target_layer
+            # Validate target_layer exists on model for explicit names
             if target_layer != "encoder":
                 names = {n for n, _ in self.model.named_modules()}
-                if target_layer not in names:
-                    raise KeyError(f"target_layer '{target_layer}' not found in model named_modules().")
+                if resolved_layer not in names:
+                    raise KeyError(f"target_layer '{resolved_layer}' not found in model named_modules().")
 
             ds_len = len(ds_subset)
-            print(f"[CRP] Starting CRP (backend={crp_backend}, layer='{target_layer}') on {ds_len} items -> {out_dir}")
+            print(f"[CRP] Starting CRP (backend={crp_backend}, layer='{resolved_layer}') on {ds_len} items -> {out_dir}")
             if crp_backend == "custom":
-                plot_crp(self.model, ds_subset, run=self.wandb_run, out_dir=out_dir, layer_name=target_layer)
+                plot_crp(self.model, ds_subset, run=self.wandb_run, out_dir=out_dir, layer_name=resolved_layer)
             else:
-                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=max_items if max_items > 0 else None, out_dir=out_dir, layer_name=target_layer)
+                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=max_items if max_items > 0 else None, out_dir=out_dir, layer_name=resolved_layer)
 
         if self.config.get("pcx"):
             # Enforce: always use model genes; eval config must not set 'genes'.
