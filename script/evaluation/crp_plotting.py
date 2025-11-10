@@ -52,7 +52,9 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
         x = x.to(device)
         if x.dim() == 3:
             x = x.unsqueeze(0)
-        x = x.detach().requires_grad_(True)
+        # Make input require grad and be non-leaf so zennit can attach grad_fn hooks
+        x.requires_grad_(True)
+        x = x + x.new_zeros(())
 
         attr = attribution(x, [{"y": [0]}], composite, record_layer=[target_layer])
         rel = attr.relevances[target_layer].sum(1).detach().cpu()

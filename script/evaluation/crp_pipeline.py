@@ -64,6 +64,9 @@ class EvalPipeline:
 
     def run(self):
         if self.config.get("crp"):
+            # Ensure gradients flow for attribution even if encoder was frozen during training
+            if hasattr(self.model, "encoder_is_fully_frozen"):
+                self.model.encoder_is_fully_frozen = False
             crp_backend = str(self.config.get("crp_backend", "zennit")).lower()
             eval_tf = get_transforms(self.config["model_config"], split="eval")
             # Use TEST split from the selected dataset; honor configured test_samples
