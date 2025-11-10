@@ -166,3 +166,4 @@ def compute_genes_id(genes: List[str] | Any) -> str:
         seq = [str(genes)]
     blob = "\n".join(seq).encode("utf-8")
     return hashlib.sha1(blob).hexdigest()[:10]
+from __future__ import annotations
