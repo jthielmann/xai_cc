@@ -261,3 +261,4 @@ def _plot_all_sets(
     if not saved_paths:
         raise RuntimeError("no plots saved")
     return saved_paths
+from __future__ import annotations

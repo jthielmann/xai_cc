@@ -1249,3 +1249,4 @@ def get_spatial_dataset(
         return_patient=return_patient,
     )
     return ds
+from __future__ import annotations

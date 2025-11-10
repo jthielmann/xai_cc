@@ -213,3 +213,4 @@ def build_scatter_appendix(config: Dict[str, Any], sweep_keys: Iterable[str] | N
     for key in sweep_keys:
         parts.append(f"{SCATTER_KEY_ABBREVIATIONS.get(key, key)}={config.get(key)}")
     return " | ".join(parts)
+from __future__ import annotations
