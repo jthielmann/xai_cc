@@ -12,7 +12,7 @@ if [[ $# -ne 0 ]]; then
   exit 1
 fi
 
-SCAN_ROOT="../evaluation/results"
+SCAN_ROOT="../evaluation"
 if [[ ! -d "$SCAN_ROOT" ]]; then
   echo "error: scan_root not found: $SCAN_ROOT" >&2
   exit 1

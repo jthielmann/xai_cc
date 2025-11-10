@@ -7,6 +7,7 @@ from umap import UMAP
 import matplotlib.pyplot as plt
 import pandas as pd
 import wandb
+import yaml
 
 #from script.evaluation.crp_plotting import plot_crp, plot_crp_zennit, plot_crp2
 from script.evaluation.lrp_plotting import plot_lrp, plot_lrp_custom
@@ -51,28 +52,34 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
     agg_dir = os.path.join(p, "results")
     os.makedirs(agg_dir, exist_ok=True)
     agg_csv = os.path.join(agg_dir, "forward_metrics.csv")
-    df = pd.read_csv(results_csv)
-    genes = [c[6:] for c in df.columns if c.startswith("label_") and (f"pred_{c[6:]}" in df.columns)]
-    if not genes:
-        raise RuntimeError("no label_/pred_ columns in results.csv")
-    sse = 0.0
-    n = 0
-    for g in genes:
-        a = pd.to_numeric(df[f"label_{g}"], errors="coerce").to_numpy()
-        b = pd.to_numeric(df[f"pred_{g}"], errors="coerce").to_numpy()
-        m = np.isfinite(a) & np.isfinite(b)
-        a = a[m]
-        b = b[m]
-        sse += float(np.sum((a - b) ** 2))
-        n += int(a.shape[0])
-    score = float(sse / n) if n > 0 else float("nan")
+    metrics, counts = _compute_metrics_for_csv(results_csv)
+    pearson_vals = {k[8:]: v for k, v in metrics.items() if k.startswith("pearson_")}
+    mse_vals = {k[4:]: v for k, v in metrics.items() if k.startswith("mse_")}
+    cfg_path = os.path.join(eval_path, "config")
+    if not os.path.exists(cfg_path):
+        raise FileNotFoundError(f"missing eval config at {cfg_path}")
+    with open(cfg_path, "r") as f:
+        eval_cfg = yaml.safe_load(f)
+    if not isinstance(eval_cfg, dict):
+        raise RuntimeError("eval config invalid; expected mapping")
+    mc = eval_cfg.get("model_config")
+    if not isinstance(mc, dict):
+        raise RuntimeError("eval config missing model_config")
+    enc = mc.get("encoder_type")
+    if not isinstance(enc, str) or not enc.strip():
+        raise RuntimeError("encoder_type missing in model config")
+    loss_name = mc.get("loss_fn_switch")
     row = {
+        "encoder_type": str(enc),
         "project": str(project),
         "run_name": str(run_name),
         "model_path": str(model_path),
         "metric_name": "mse",
-        "mse_mean": score,
+        "loss_name": loss_name,
+        "pearson_mean": _weighted_mean(pearson_vals, counts),
+        "mse_mean": _weighted_mean(mse_vals, counts),
     }
+    row.update(metrics)
     if os.path.exists(agg_csv):
         d = pd.read_csv(agg_csv)
         mask = (
@@ -84,7 +91,8 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
         if idx.size > 0:
             i = int(idx[0])
             old = d.loc[i, "mse_mean"] if "mse_mean" in d.columns else float("nan")
-            better = (not np.isfinite(old) and np.isfinite(score)) or (np.isfinite(old) and np.isfinite(score) and score < float(old))
+            new = row.get("mse_mean", float("nan"))
+            better = (not np.isfinite(old) and np.isfinite(new)) or (np.isfinite(old) and np.isfinite(new) and new < float(old))
             if better:
                 for k, v in row.items():
                     d.loc[i, k] = v

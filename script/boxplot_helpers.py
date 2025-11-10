@@ -35,6 +35,8 @@ def _load_forward_metrics_recursive(scan_root: str) -> pd.DataFrame:
     for dirpath, dirnames, filenames in os.walk(scan_root):
         if "/debug/" in (dirpath + "/"):
             continue
+        if "/results/" in (dirpath + "/"):
+            continue
         if "forward_metrics.csv" in filenames:
             csvp = os.path.join(dirpath, "forward_metrics.csv")
             df = pd.read_csv(csvp)
