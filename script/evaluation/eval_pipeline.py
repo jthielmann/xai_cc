@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from umap import UMAP
 import matplotlib.pyplot as plt
+import pandas as pd
 import wandb
 
 #from script.evaluation.crp_plotting import plot_crp, plot_crp_zennit, plot_crp2
@@ -29,6 +30,70 @@ from script.evaluation.eval_helpers import (
     collect_state_dicts,
 )
 from script.evaluation.tri_plotting import plot_triptych_from_model
+
+def update_forward_metrics_global(eval_path: str, results_csv: str, project: str,
+                                  run_name: str, model_path: str, debug: bool) -> str:
+    if not eval_path:
+        raise ValueError("eval_path required")
+    if not results_csv or not os.path.isfile(results_csv):
+        raise FileNotFoundError(f"results_csv missing: {results_csv}")
+    if not project or not run_name or not model_path:
+        raise ValueError("project, run_name, model_path required")
+    if debug:
+        return ""
+    p = os.path.abspath(eval_path)
+    while os.path.basename(p) != "evaluation":
+        np_ = os.path.dirname(p)
+        if np_ == p:
+            raise RuntimeError(f"cannot locate evaluation root from eval_path: {eval_path}")
+        p = np_
+    agg_dir = os.path.join(p, "results")
+    os.makedirs(agg_dir, exist_ok=True)
+    agg_csv = os.path.join(agg_dir, "forward_metrics.csv")
+    df = pd.read_csv(results_csv)
+    genes = [c[6:] for c in df.columns if c.startswith("label_") and (f"pred_{c[6:]}" in df.columns)]
+    if not genes:
+        raise RuntimeError("no label_/pred_ columns in results.csv")
+    sse = 0.0
+    n = 0
+    for g in genes:
+        a = pd.to_numeric(df[f"label_{g}"], errors="coerce").to_numpy()
+        b = pd.to_numeric(df[f"pred_{g}"], errors="coerce").to_numpy()
+        m = np.isfinite(a) & np.isfinite(b)
+        a = a[m]
+        b = b[m]
+        sse += float(np.sum((a - b) ** 2))
+        n += int(a.shape[0])
+    score = float(sse / n) if n > 0 else float("nan")
+    row = {
+        "project": str(project),
+        "run_name": str(run_name),
+        "model_path": str(model_path),
+        "metric_name": "mse",
+        "mse_mean": score,
+    }
+    if os.path.exists(agg_csv):
+        d = pd.read_csv(agg_csv)
+        mask = (
+            (d.get("project", pd.Series(dtype=str)).astype(str) == row["project"]) &
+            (d.get("run_name", pd.Series(dtype=str)).astype(str) == row["run_name"]) &
+            (d.get("model_path", pd.Series(dtype=str)).astype(str) == row["model_path"]) 
+        )
+        idx = np.where(mask.to_numpy() if hasattr(mask, 'to_numpy') else mask.values)[0]
+        if idx.size > 0:
+            i = int(idx[0])
+            old = d.loc[i, "mse_mean"] if "mse_mean" in d.columns else float("nan")
+            better = (not np.isfinite(old) and np.isfinite(score)) or (np.isfinite(old) and np.isfinite(score) and score < float(old))
+            if better:
+                for k, v in row.items():
+                    d.loc[i, k] = v
+                d.to_csv(agg_csv, index=False)
+            return agg_csv
+        d = pd.concat([d, pd.DataFrame([row])], ignore_index=True)
+        d.to_csv(agg_csv, index=False)
+        return agg_csv
+    pd.DataFrame([row]).to_csv(agg_csv, index=False)
+    return agg_csv
 
 class EvalPipeline:
     def __init__(self, config, run):
@@ -359,23 +424,27 @@ class EvalPipeline:
                 self.wandb_run.log({"umap/table": table})
 
         if self.config.get("forward_to_csv"):
-            # Use explicit test_samples; dataset config populates this when absent.
             patients = list(self.config.get("test_samples", []))
-
             genes = self.config["model_config"]["genes"]
             run_name = self.model_name
             image_size = int(self.config["model_config"].get("image_size", 224))
-
-            # Early‑exit if the aggregate target already exists to avoid doing any forwards
             results_dir = os.path.join(self.config["eval_path"], run_name, "predictions")
             results_csv = os.path.join(results_dir, "results.csv")
+            device = auto_device(self.model)
+            cfg = self.config
+            gene_csv = cfg.get("gene_data_filename")
+            if not gene_csv:
+                raise RuntimeError(f"missing gene_data_filename; dataset={cfg.get('dataset', 'unknown')}")
+            project = cfg.get("project") or (cfg.get("model_config") or {}).get("project")
+            if not project:
+                raise RuntimeError("project missing in config for forward metrics")
+            per_patient = bool(self.config.get("forward_metrics_per_patient", False))
             if os.path.exists(results_csv):
-                print(f"[EvalPipeline] predictions already exist at {results_csv}; skipping forward_to_csv.")
+                update_forward_metrics_global(
+                    self.config["eval_path"], results_csv, project, self.run_name,
+                    self.model_name, bool(self.config.get("debug", False))
+                )
             else:
-                device = auto_device(self.model)
-                # Resolve gene CSV only from eval config
-                cfg = self.config
-                gene_csv = cfg.get("gene_data_filename", "gene_data.csv")
                 for p in patients:
                     print(f"[Eval] Starting forward_to_csv for patient={p} -> {results_dir}")
                     _ = generate_results(
@@ -392,6 +461,16 @@ class EvalPipeline:
                         max_len=self.config.get("forward_max_tiles") if bool(self.config.get("debug", False)) else None,
                         forward_batch_size=int(self.config.get("forward_batch_size", 32)),
                         forward_num_workers=int(self.config.get("forward_num_workers", 0)),
+                    )
+                    if per_patient:
+                        update_forward_metrics_global(
+                            self.config["eval_path"], results_csv, project, self.run_name,
+                            self.model_name, bool(self.config.get("debug", False))
+                        )
+                if not per_patient:
+                    update_forward_metrics_global(
+                        self.config["eval_path"], results_csv, project, self.run_name,
+                        self.model_name, bool(self.config.get("debug", False))
                     )
         if self.config.get("lxt"):
             # Delegate to LXT plotting and save under out_path/<model_name>/lxt
