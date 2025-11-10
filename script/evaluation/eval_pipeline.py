@@ -199,10 +199,13 @@ class EvalPipeline:
             lrp_backend = str(self.config.get("lrp_backend", "zennit")).lower()
             eval_tf = get_transforms(self.config["model_config"], split="eval")
             debug = bool(self.config.get("debug", False))
-            # Directly resolve metadata CSV using eval override with model_config fallback
             cfg = self.config
-            meta_dir = cfg.get("meta_data_dir", "/meta_data/")
-            gene_csv = cfg.get("gene_data_filename", "gene_data.csv")
+            meta_dir = cfg.get("meta_data_dir")
+            if not meta_dir:
+                raise ValueError("meta_data_dir missing; dataset config must provide it")
+            gene_csv = cfg.get("gene_data_filename")
+            if not gene_csv:
+                raise ValueError("gene_data_filename missing; dataset config must provide it")
             data_dir = self.config.get("data_dir")
             if not data_dir:
                 raise ValueError("Missing 'data_dir' in eval config for LRP; set config.data_dir.")
@@ -288,10 +291,13 @@ class EvalPipeline:
             # Build eval loader (inputs only)
             eval_tf = get_transforms(self.config["model_config"], split="eval")
             debug = bool(self.config.get("debug", False))
-            # Resolve metadata CSV only from eval config
             cfg = self.config
-            meta_dir = cfg.get("meta_data_dir", "/meta_data/")
-            gene_csv = cfg.get("gene_data_filename", "gene_data.csv")
+            meta_dir = cfg.get("meta_data_dir")
+            if not meta_dir:
+                raise ValueError("meta_data_dir missing; dataset config must provide it")
+            gene_csv = cfg.get("gene_data_filename")
+            if not gene_csv:
+                raise ValueError("gene_data_filename missing; dataset config must provide it")
             ds = get_dataset_from_config(
                 dataset_name=self.config["dataset"],
                 genes=None,
