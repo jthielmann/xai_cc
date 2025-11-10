@@ -9,6 +9,7 @@ import zennit.image as zimage
 from zennit.composites import EpsilonPlusFlat
 from zennit.torchvision import VGGCanonizer, ResNetCanonizer
 from crp.attribution import CondAttribution
+import re
 
 
 def _get_layer_names(model, types):
@@ -21,15 +22,35 @@ def _get_layer_names(model, types):
     return names
 
 
+def _auto_record_layer_name(encoder: nn.Module) -> str:
+    names = [n for n, _ in encoder.named_modules()]
+    res = [n for n in names if re.match(r"^layer[1-4]\.\d+$", n)]
+    if res:
+        return sorted(res, key=lambda s: (int(s.split('.')[0][5:]), int(s.split('.')[1])))[-1]
+    cnx = [n for n in names if re.match(r"^stages\.\d+\.blocks\.\d+$", n)]
+    if cnx:
+        def _key(s):
+            p = s.split('.')
+            return (int(p[1]), int(p[3]))
+        return sorted(cnx, key=_key)[-1]
+    vit = [n for n in names if re.match(r"^(blocks|layers|encoder_layers)\.\d+$", n)]
+    if vit:
+        return sorted(vit, key=lambda s: int(s.split('.')[1]))[-1]
+    picks = _get_layer_names(encoder, [nn.Conv2d, nn.Linear])
+    if picks:
+        return picks[-1]
+    raise ValueError("No suitable layer found for CRP recording.")
+
+
 def _get_composite_and_layer(encoder):
-    if type(encoder).__name__ == "VGG":
+    enc_type = type(encoder).__name__
+    if enc_type == "VGG":
         composite = EpsilonPlusFlat(canonizers=[VGGCanonizer()])
-        layer_type = nn.Linear
-        layer_name = _get_layer_names(encoder, [nn.Linear])[-3]
-    else:
+    elif hasattr(encoder, "layer1"):
         composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
-        layer_type = type(getattr(encoder, "layer1", [nn.Identity()])[0])
-        layer_name = _get_layer_names(encoder, [layer_type])[-1]
+    else:
+        composite = EpsilonPlusFlat()
+    layer_name = _auto_record_layer_name(encoder)
     return composite, layer_name
 
 def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items: int = None, out_dir: str = None):
@@ -53,6 +74,7 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
         record_candidates.append(alt)
     present = [n for n in record_candidates if n in all_names]
     print(f"[CRP][debug] present_in_named_modules target={target_layer in all_names} alt={alt in all_names} present={present}")
+    record_for_call = present if present else record_candidates
 
     attribution = CondAttribution(model)
     count = 0
@@ -70,18 +92,18 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
         x.requires_grad_(True)
         x = x + x.new_zeros(())
 
-        attr = attribution(x, [{"y": [0]}], composite, record_layer=record_candidates)
+        attr = attribution(x, [{"y": [0]}], composite, record_layer=record_for_call)
         keys = list(attr.relevances.keys())
         pick = None
-        for k in record_candidates:
+        for k in record_for_call:
             if k in keys:
                 pick = k
                 break
         if pick is None:
             if i == 0:
                 sample_keys = keys[:8]
-                print(f"[CRP][debug] no match in recorded layers; candidates={record_candidates}; keys_sample={sample_keys}")
-            raise KeyError(record_candidates[0] if record_candidates else "<empty candidate list>")
+                print(f"[CRP][debug] no match in recorded layers; candidates={record_for_call}; keys_sample={sample_keys}")
+            raise KeyError(record_for_call[0] if record_for_call else "<empty candidate list>")
         if i == 0:
             sample_keys = keys[:8]
             print(f"[CRP][debug] picked_layer={pick}; keys_sample={sample_keys}")

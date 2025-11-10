@@ -203,9 +203,10 @@ class SAETrainerPipeline:
                 if max_samples is not None and num_samples >= max_samples:
                     break
                 imgs = imgs.to(device)
-                features = self.encoder(imgs)
-                features = self.sae(features)
-                features_list.append(features.cpu().numpy())
+                feats = self.encoder(imgs)
+                _ = self.sae(feats)
+                codes = self.sae.sae.last_sparse
+                features_list.append(codes.cpu().numpy())
 
                 start_idx = batch_idx * self.config['batch_size']
                 end_idx = start_idx + len(imgs)
@@ -246,11 +247,9 @@ class SAETrainerPipeline:
         cmap = plt.get_cmap('tab20', len(unique_patients))
         patient_to_color = {p: cmap(i) for i, p in enumerate(unique_patients)}
         out_dir = self.config.get("out_path") or self.config.get("sweep_dir") or self.config.get("model_dir") or "."
-        os.makedirs(out_dir, exist_ok=True)
-
-        out_dir = self.config.get("out_path") or self.config.get("sweep_dir") or self.config.get("model_dir") or "."
         if self.config.get("umap") and out_dir == ".":
             raise ValueError("UMAP enabled but no out_path/sweep_dir/model_dir set")
+        os.makedirs(out_dir, exist_ok=True)
 
         for n_neighbors in n_neighbors_list:
             for min_dist in min_dist_list:
