@@ -92,33 +92,27 @@ def main() -> None:
     args = parse_args()
     raw_cfg = parse_yaml_config(args.config)
 
-    model_dir = _require_model_dir(raw_cfg)
-    cfg = _prepare_eval_paths(raw_cfg, model_dir)
-
     setup_dump_env()
 
     run = None
-    if bool(cfg.get("log_to_wandb")):
+    cfg = dict(raw_cfg)
+    if bool(raw_cfg.get("log_to_wandb")):
         for key in ("run_name", "group", "job_type", "tags"):
-            if key not in cfg:
+            if key not in raw_cfg:
                 raise ValueError(f"Missing required parameter '{key}' in config")
-        wb_cfg = {
-            k: v
-            for k, v in cfg.items()
-            if k
-            not in ("project", "metric", "method", "run_name", "group", "job_type", "tags")
-        }
         run = wandb.init(
-            project=cfg.get("project", "xai"),
-            name=cfg["run_name"],
-            group=cfg["group"],
-            job_type=cfg["job_type"],
-            tags=cfg["tags"],
-            config=wb_cfg,
+            project=raw_cfg.get("project", "xai"),
+            name=raw_cfg["run_name"],
+            group=raw_cfg["group"],
+            job_type=raw_cfg["job_type"],
+            tags=raw_cfg["tags"],
+            config=raw_cfg,
         )
-        cfg = dict(cfg)
         cfg.update(dict(run.config))
-        cfg["run_name"] = raw_cfg.get("run_name", cfg["run_name"]) 
+        cfg["run_name"] = raw_cfg.get("run_name", cfg.get("run_name"))
+
+    model_dir = _require_model_dir(cfg)
+    cfg = _prepare_eval_paths(cfg, model_dir)
 
     best_path = os.path.join(model_dir, "best_model.pth")
     bundled = load_state_dict_from_path(best_path)

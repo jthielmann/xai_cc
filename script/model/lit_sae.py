@@ -1,7 +1,7 @@
 import argparse
 import json
 import os
-from typing import Any, Dict, Tuple, List
+from typing import Any, Dict, Tuple, List, Optional
 from pathlib import Path
 
 import lightning as L
@@ -94,17 +94,20 @@ class LitSparseAutoencoder(L.LightningModule):
     """
     A minimal Lightning wrapper for the SparseAutoencoder model.
     """
-    def __init__(self, config, encoder: nn.Module):
+    def __init__(self, config, encoder: nn.Module, preproc: Optional[nn.Module] = None):
         super().__init__()
         self.save_hyperparameters(ignore=['encoder'])
         self.config = config
         self.sae = SparseAutoencoder(config)
         self.loss_fn = nn.MSELoss()
         self.encoder = encoder
+        self.preproc = preproc
         for p in self.encoder.parameters():
             p.requires_grad = False
 
     def forward(self, x):
+        if self.preproc is not None:
+            x = self.preproc(x)
         return self.sae(x)
 
     def _step(self, batch):
@@ -118,26 +121,14 @@ class LitSparseAutoencoder(L.LightningModule):
         if self.encoder:
             with torch.no_grad():
                 x = self.encoder(x)
+        if self.preproc is not None:
+            x = self.preproc(x)
 
-        reconstruction = self(x)
+        reconstruction = self.sae(x)
         loss = self.loss_fn(reconstruction, x)
-        # Cosine similarity between input vector and reconstruction (mean over batch)
-        # Rationale for try/except: cosine_similarity expects matching shapes along the chosen dim.
-        # Some encoders/dataloaders may yield non-2D features (e.g., extra spatial dims) or
-        # downstream transforms may alter shapes; in those cases, we gracefully fall back to
-        # a per-sample vector cosine by flattening. This keeps the metric well-defined without
-        # impacting training stability or loss. Catching RuntimeError here is appropriate and
-        # intentionally silent because this is a best-effort metric only; it does not affect
-        # gradients or checkpointing beyond reporting a numerically equivalent metric.
-        try:
-            cosine = F.cosine_similarity(reconstruction, x, dim=-1).mean()
-        except RuntimeError:
-            # Fallback: flatten last dims if shapes are not directly compatible.
-            # This preserves the intended per-sample cosine definition while avoiding noisy logs
-            # for benign shape mismatches in purely diagnostic code.
-            rec_flat = reconstruction.view(reconstruction.size(0), -1)
-            x_flat = x.view(x.size(0), -1)
-            cosine = F.cosine_similarity(rec_flat, x_flat, dim=-1).mean()
+        rec_flat = reconstruction.view(reconstruction.size(0), -1)
+        x_flat = x.view(x.size(0), -1)
+        cosine = F.cosine_similarity(rec_flat, x_flat, dim=-1).mean()
         return {"loss": loss, "cosine": cosine}
 
     def training_step(self, batch, batch_idx):
