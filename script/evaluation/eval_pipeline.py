@@ -173,35 +173,7 @@ class EvalPipeline:
         return load_lit_regressor(self.config["model_config"], state_dicts)
 
     def _derive_model_name(self) -> str:
-        def _rel_model_path(p: str) -> str:
-            s = str(p).replace("\\", "/")
-            if "/models/" in s:
-                s = s.split("/models/", 1)[1]
-            elif s.startswith("../models/"):
-                s = s[len("../models/"):]
-            return s.strip("/")
-
-        parts = []
-        ms = self.config.get("model_state_path")
-        enc = self.config.get("encoder_state_path")
-        head = self.config.get("gene_head_state_path")
-        if ms:
-            parts.append(_rel_model_path(ms))
-        else:
-            if enc:
-                parts.append(_rel_model_path(enc))
-            if head:
-                parts.append(_rel_model_path(head))
-
-        name = os.path.join(*parts) if parts else str(self.run_name)
-        MAX_LEN = 160
-        if len(name) <= MAX_LEN:
-            return name
-        tokens = [t for t in name.split("/") if t]
-        tail = "/".join(tokens[-2:]) if len(tokens) >= 2 else tokens[-1]
-        h = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
-        short = f"{tail}/__{h}"
-        return short[:MAX_LEN]
+        return ""
 
     def run(self):
         if self.config.get("lrp"):
@@ -457,7 +429,7 @@ class EvalPipeline:
             if os.path.exists(results_csv):
                 update_forward_metrics_global(
                     self.config["eval_path"], results_csv, project, self.run_name,
-                    self.model_name, bool(self.config.get("debug", False))
+                    self.config.get("model_state_path") or self.model_name, bool(self.config.get("debug", False))
                 )
             else:
                 for p in patients:
@@ -480,12 +452,12 @@ class EvalPipeline:
                     if per_patient:
                         update_forward_metrics_global(
                             self.config["eval_path"], results_csv, project, self.run_name,
-                            self.model_name, bool(self.config.get("debug", False))
+                            self.config.get("model_state_path") or self.model_name, bool(self.config.get("debug", False))
                         )
                 if not per_patient:
                     update_forward_metrics_global(
                         self.config["eval_path"], results_csv, project, self.run_name,
-                        self.model_name, bool(self.config.get("debug", False))
+                        self.config.get("model_state_path") or self.model_name, bool(self.config.get("debug", False))
                     )
             # Write per-run metrics summary and update aggregated forward_metrics.csv (non-debug)
             if not os.path.exists(results_csv):
