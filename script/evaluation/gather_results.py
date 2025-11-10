@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 import yaml
+from script.main_utils import compute_genes_id
 
 
 def _list_results(eval_root: str) -> List[str]:
@@ -173,6 +174,13 @@ def gather_forward_metrics(eval_root: str, output_csv: str | None = None) -> str
         if not isinstance(project, str) or not project.strip():
             parts = os.path.normpath(rel_run_dir).split(os.sep)
             project = parts[0] if parts else "project"
+        gene_set = str(mc.get("gene_set", "custom"))
+        genes_id = mc.get("genes_id")
+        if not genes_id:
+            genes = mc.get("genes")
+            if genes is None:
+                raise RuntimeError("model config missing 'genes' to compute genes_id")
+            genes_id = compute_genes_id(genes)
         run_key = f"{project}/{run_name}"
         if rel_run_dir in existing_run_dirs or run_name in existing_run_names or run_key in existing_proj_run_keys:
             continue
@@ -184,6 +192,8 @@ def gather_forward_metrics(eval_root: str, output_csv: str | None = None) -> str
             "run_name": run_name,
             "metric_name": train_metric,
             "loss_name": loss_name,
+            "gene_set": gene_set,
+            "genes_id": genes_id,
             "pearson_mean": _weighted_mean(pearson_vals, counts),
             "mse_mean": _weighted_mean(mse_vals, counts),
             f"{train_metric}_mean": _weighted_mean(train_vals, counts),

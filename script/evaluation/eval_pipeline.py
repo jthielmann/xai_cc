@@ -13,6 +13,7 @@ from script.evaluation.lrp_plotting import plot_lrp, plot_lrp_custom
 from script.evaluation.lxt_plotting import plot_lxt
 from script.evaluation.scatter_plotting import plot_scatter
 from script.evaluation.generate_results import generate_results
+from script.evaluation.gather_results import gather_forward_metrics, _compute_metrics_for_csv, _weighted_mean
 from script.model.model_factory import get_encoder
 from script.model.lit_model import load_lit_regressor
 from script.model.encoder_detection import detect_encoder_family
@@ -478,6 +479,20 @@ class EvalPipeline:
                         self.config["eval_path"], results_csv, project, self.run_name,
                         self.model_name, bool(self.config.get("debug", False))
                     )
+            # Write per-run metrics summary and update aggregated forward_metrics.csv (non-debug)
+            if not os.path.exists(results_csv):
+                raise RuntimeError(f"results.csv not found at {results_csv}")
+            metrics, counts = _compute_metrics_for_csv(results_csv)
+            pearson_vals = {k[len("pearson_"):]: v for k, v in metrics.items() if k.startswith("pearson_")}
+            mse_vals = {k[len("mse_"):]: v for k, v in metrics.items() if k.startswith("mse_")}
+            row = {**metrics}
+            row.update({f"count_{g}": counts[g] for g in counts})
+            row["pearson_mean"] = _weighted_mean(pearson_vals, counts)
+            row["mse_mean"] = _weighted_mean(mse_vals, counts)
+            os.makedirs(results_dir, exist_ok=True)
+            pd.DataFrame([row]).to_csv(os.path.join(results_dir, "metrics_summary.csv"), index=False)
+            if not bool(self.config.get("debug", False)):
+                gather_forward_metrics(self.config["eval_path"])
         if self.config.get("lxt"):
             # Delegate to LXT plotting and save under out_path/<model_name>/lxt
             cfg_lxt = dict(self.config)

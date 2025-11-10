@@ -19,6 +19,11 @@ from script.evaluation.eval_pipeline import EvalPipeline
 from script.evaluation.gather_results import gather_forward_metrics
 from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, \
     read_config_parameter, compute_genes_id
+from script.boxplot_helpers import (
+    _maybe_init_wandb_and_update_cfg,
+    _load_forward_metrics_recursive,
+    _plot_all_sets,
+)
 
 
 def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
@@ -226,9 +231,130 @@ def _find_model_run_dirs(base_dir: str) -> List[str]:
     return hits
 
 
+def _compute_boxplot_root(cfg: Dict[str, Any]) -> str:
+    debug_flag = bool(cfg["debug"])
+    base_root = "../evaluation/debug" if debug_flag else "../evaluation"
+    label = cfg.get("eval_label")
+    if not isinstance(label, str) or not label.strip():
+        msp = cfg.get("model_state_path")
+        if isinstance(msp, str) and msp.strip():
+            label = msp
+    label_tok = (
+        label.replace("\\", "/").rstrip("/").replace("/", "__").replace(" ", "_")[:128]
+        if isinstance(label, str) and label.strip()
+        else None
+    )
+    ms = read_config_parameter(cfg, "model_state_path")
+    if not isinstance(ms, str) or not ms.strip():
+        raise ValueError("model_state_path must be a string for boxplots root computation")
+    ms_path = _verify_path(ms, "../models")
+    model_cfg = parse_yaml_config(os.path.join(ms_path, "config")) or {}
+    genes = model_cfg.get("genes")
+    if not genes:
+        raise RuntimeError("model_config.genes missing in model config for boxplots root computation")
+    gs_token = _sanitize_token(compute_genes_id(genes))
+    root = os.path.join(base_root, label_tok, gs_token) if label_tok else os.path.join(base_root, gs_token)
+    return root
+
+
+def _simple_filter_df(df, include_projects=None, include_encoders=None):
+    out = df
+    if include_projects:
+        out = out[out["project"].astype(str).isin([str(x) for x in include_projects])]
+    if include_encoders:
+        out = out[out["encoder_type"].astype(str).isin([str(x) for x in include_encoders])]
+    if out.empty:
+        raise RuntimeError("no rows left after filters")
+    return out
+
+
+def _infer_gene_sets_from_df(df):
+    genes: List[str] = []
+    for c in df.columns:
+        if not c.startswith("pearson_"):
+            continue
+        g = c[len("pearson_") :].strip()
+        if not g:
+            continue
+        if g.lower().startswith("unnamed"):
+            continue
+        genes.append(g)
+    if not genes:
+        raise RuntimeError("no pearson_* columns found to infer genes")
+    return {"all": genes}
+
+
+def _run_boxplots(root: str, cfg: Dict[str, Any]) -> None:
+    if not cfg["boxplots"]:
+        return
+    df = _load_forward_metrics_recursive(root)
+    df = _simple_filter_df(
+        df,
+        include_projects=cfg.get("include_projects"),
+        include_encoders=cfg.get("include_encoders"),
+    )
+    gene_sets = cfg.get("gene_sets")
+    if isinstance(gene_sets, dict):
+        cleaned = {}
+        for name, gl in gene_sets.items():
+            vals = []
+            for g in gl:
+                s = str(g).strip()
+                if s and not s.lower().startswith("unnamed"):
+                    vals.append(s)
+            cleaned[name] = vals
+        gene_sets = cleaned
+    else:
+        gene_sets = _infer_gene_sets_from_df(df)
+
+    group_by = str(cfg.get("group_by", "gene_set+encoder_type+loss")).strip().lower()
+    group_col = "__group__"
+    if group_by == "encoder_type":
+        df[group_col] = df["encoder_type"].astype(str)
+    elif group_by == "encoder_type+loss":
+        if "loss_name" not in df.columns:
+            raise RuntimeError("loss_name column missing in metrics; re-run aggregation")
+        df[group_col] = df[["encoder_type", "loss_name"]].astype(str).agg(lambda r: f"{r[0]} ({r[1]})", axis=1)
+    elif group_by == "project":
+        df[group_col] = df["project"].astype(str)
+    elif group_by == "project+encoder_type":
+        df[group_col] = df[["project", "encoder_type"]].astype(str).agg(lambda r: f"{r[0]}::{r[1]}", axis=1)
+    elif group_by == "gene_set+encoder_type+loss":
+        if "gene_set" not in df.columns or "loss_name" not in df.columns:
+            raise RuntimeError("gene_set/loss_name column missing in metrics; re-run aggregation")
+        df[group_col] = df[["gene_set", "encoder_type", "loss_name"]].astype(str).agg(lambda r: f"{r[0]}::{r[1]} ({r[2]})", axis=1)
+    else:
+        raise ValueError(f"unsupported group_by: {group_by}")
+
+    # Deduplicate per gene within each group: keep best (max Pearson) per gene
+    pearson_cols = [c for c in df.columns if c.startswith("pearson_")]
+    if not pearson_cols:
+        raise RuntimeError("no pearson_* columns found for boxplots")
+    df = df.groupby(group_col, as_index=False)[pearson_cols].max()
+
+    run, cfg2 = _maybe_init_wandb_and_update_cfg(cfg)
+    out_dir = os.path.join(root, "boxplots")
+    _plot_all_sets(
+        df=df,
+        gene_sets=gene_sets,
+        plot_box=bool(cfg2.get("plot_box", True)),
+        plot_violin=bool(cfg2.get("plot_violin", False)),
+        skip_non_finite=bool(cfg2.get("skip_non_finite", False)),
+        run=run,
+        out_dir=out_dir,
+        group_key=group_col,
+    )
+    if run is not None:
+        run.finish()
+
+
 def main() -> None:
     args = parse_args()
     raw_cfg = parse_yaml_config(args.config)
+    if "boxplots" not in raw_cfg:
+        raise ValueError("Missing required parameter 'boxplots' in config")
+    if "debug" not in raw_cfg:
+        raise ValueError("Missing required parameter 'debug' in config")
 
     # Project-scope eval: when 'is_sweep' is true, treat model_state_path as a base
     # directory and run eval for each subdir that looks like a model run.
@@ -254,9 +380,10 @@ def main() -> None:
         models_root = os.path.dirname(os.path.abspath(base_dir))
         # Insert encoder_type into evaluation output base for per-run skip checks
         # Read encoder_type from each run's stored model config
-        debug_flag = bool(raw_cfg.get("debug", False))
+        debug_flag = bool(raw_cfg["debug"])
         # out_base is computed per-run below since it depends on encoder_type
         bases_to_aggregate = set()
+        boxplot_roots = set()
         for rd, label in pairs:
             model_cfg_path = os.path.join(rd, "config")
             if not os.path.exists(model_cfg_path):
@@ -273,6 +400,7 @@ def main() -> None:
             label_tok = _sanitize_token(label)
             out_base = os.path.join(base_root, label_tok, gs_token, _sanitize_token(enc))
             bases_to_aggregate.add(out_base)
+            boxplot_roots.add(os.path.dirname(out_base))
             rel_model = os.path.relpath(rd, models_root)
             tgt = os.path.join(out_base, rel_model)
             enc_l = enc.lower()
@@ -330,12 +458,16 @@ def main() -> None:
         if not debug_flag:
             for b in sorted(bases_to_aggregate):
                 gather_forward_metrics(b)
+            if raw_cfg["boxplots"]:
+                for r in sorted(boxplot_roots):
+                    _run_boxplots(r, raw_cfg)
         return
 
     # Detect sweep-style lists for model_state_path and expand into multiple runs.
     ms_param = read_config_parameter(raw_cfg, "model_state_path")
     if isinstance(ms_param, list):
         base_run_name = raw_cfg.get("run_name") or "forward_to_csv"
+        roots = set()
         for ms in ms_param:
             per_cfg = dict(raw_cfg)
             per_cfg["model_state_path"] = ms
@@ -343,10 +475,17 @@ def main() -> None:
             token = _sanitize_token(ms)
             per_cfg["run_name"] = f"{base_run_name}__{token}"[:128]
             _run_single(per_cfg)
+            if raw_cfg["boxplots"] and not raw_cfg["debug"]:
+                roots.add(_compute_boxplot_root(per_cfg))
+        if raw_cfg["boxplots"] and not raw_cfg["debug"]:
+            for r in sorted(roots):
+                _run_boxplots(r, raw_cfg)
         return
 
     # Fallback to single-run behavior
     _run_single(raw_cfg)
+    if raw_cfg["boxplots"] and not raw_cfg["debug"]:
+        _run_boxplots(_compute_boxplot_root(raw_cfg), raw_cfg)
 
 
 if __name__ == "__main__":
