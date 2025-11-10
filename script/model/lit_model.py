@@ -4,7 +4,7 @@ import os
 import warnings
 from contextlib import nullcontext
 from io import BytesIO
-from typing import Dict, Any, Mapping, Iterable, Optional
+from typing import Dict, Any, Mapping, Iterable
 
 import lightning as L
 import matplotlib.pyplot as plt
@@ -247,7 +247,7 @@ class GeneExpressionRegressor(L.LightningModule):
                 matched.append(group)
         return matched
 
-    def _unfreeze_last_n_groups(self, count: int, exclude: Optional[Iterable[str]] = None) -> list[str]:
+    def _unfreeze_last_n_groups(self, count: int, exclude: Iterable[str] = None) -> list[str]:
         if count <= 0:
             return []
         exclude_set = set(exclude)
@@ -374,7 +374,7 @@ class GeneExpressionRegressor(L.LightningModule):
 
     # Removed: W&B artifact upload is disabled; no artifacts uploaded
 
-    def _log_weight_stats(self, stats: Optional[dict], *, prefix: str, on_step: bool, on_epoch: bool) -> None:
+    def _log_weight_stats(self, stats: dict, *, prefix: str, on_step: bool, on_epoch: bool) -> None:
         if not stats:
             return
         for key in ("weight_mean", "weight_max", "weight_min", "weight_nonzero_frac"):

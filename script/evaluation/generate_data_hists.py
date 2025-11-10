@@ -22,7 +22,7 @@ def _pick_gene_data_filename(cfg):
 
 def plot_data_hists(
     config: dict,
-    save_dir: str | Path | None = None,
+    save_dir: str = None,
     overlay_per_gene: bool = False,
 ):
     # Accept either flattened configs (preferred) or legacy nested sweep-style

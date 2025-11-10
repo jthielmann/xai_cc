@@ -1,5 +1,5 @@
 import itertools
-from typing import Optional, Tuple, List
+from typing import Tuple, List
 import os
 
 import numpy as np
@@ -57,7 +57,7 @@ def _resolve_gamma_config(config) -> Tuple[List[float], List[float]]:
     )
 
 
-def plot_lxt(model, config, run: Optional["wandb.sdk.wandb_run.Run"] = None):
+def plot_lxt(model, config, run=None):
     # Ensure ViT and zennit are patched for LXT
     monkey_patch(vision_transformer, verbose=True)
     monkey_patch_zennit(verbose=True)

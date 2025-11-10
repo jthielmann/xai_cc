@@ -47,7 +47,7 @@ from script.configs.config_factory import get_dataset_cfg
 import timm
 from typing import Tuple
 
-from typing import Iterable, Sequence, Callable, Optional, Union
+from typing import Iterable, Sequence, Callable
 
 # resolver.py (or inline in your loader code)
 from pathlib import Path
@@ -56,7 +56,7 @@ from typing import Iterable
 
 def resolve_unique_model_file(
         encoder_type: str,
-        encoders_dir: Union[str, Path] = "../encoders",
+        encoders_dir = "../encoders",
 ) -> Path:
     # Map: hub callable name -> checkpoint filename
     DINOv3_FILEMAP = {
@@ -108,7 +108,7 @@ def _extract_features(encoder: nn.Module, x: torch.Tensor) -> torch.Tensor:
 def infer_encoder_out_dim(
     encoder: nn.Module,
     input_size: Tuple[int, int, int] = (3, 224, 224),
-    device: Optional[torch.device] = None,
+    device = None,
     vit_pooling: str = "mean_patch",
 ) -> int:
     # Fast-path: many backbones expose feature dims directly
@@ -247,7 +247,7 @@ def _imagenet_parts(resize_size: int = 224):
 
 
 def _build_pipeline(base_pre: Sequence[Callable], norm: Callable,
-                    extra: Optional[Iterable[Callable]] = None,
+                    extra: Iterable[Callable] = None,
                     place: str = "pre_norm") -> v2.Compose:
     extra_list = [] if extra is None else list(extra)
     if place == "pre_norm":
@@ -261,7 +261,7 @@ def _build_pipeline(base_pre: Sequence[Callable], norm: Callable,
 
 def get_encoder_transforms(encoder_type: str,
                            resize_size: int = 224,
-                           extra: Optional[Iterable[Callable]] = None,
+                           extra: Iterable[Callable] = None,
                            place: str = "pre_norm") -> v2.Compose:
     """
     `extra`: optional iterable of v2 transforms to insert (default before Normalize).

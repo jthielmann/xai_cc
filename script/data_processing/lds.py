@@ -151,7 +151,7 @@ def grid_search_lds(
 
     for gene in genes:
         best_js = float("inf")
-        best_row: Dict | None = None
+        best_row = None
 
         # cache labels/hists once per (gene,bins)
         _ = lds._labels_for_gene(gene)  # ensure cache

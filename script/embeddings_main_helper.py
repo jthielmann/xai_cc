@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import torch
@@ -58,14 +58,14 @@ def build_encoder(encoder_type: str, device: torch.device) -> torch.nn.Module:
 
 def convert_model_output_to_tokens(
     out: torch.Tensor, drop_cls_token: bool
-) -> Tuple[torch.Tensor, Optional[Tuple[int, int]]]:
+) -> Tuple[torch.Tensor, tuple]:
     # Normalize common container types
     if isinstance(out, (list, tuple)) and len(out) > 0:
         out = out[0]
     if hasattr(out, "last_hidden_state"):
         out = out.last_hidden_state  # (B, T, D)
 
-    grid_hw: Optional[Tuple[int, int]] = None
+    grid_hw = None
     if out.ndim == 4:
         # (B, C, H, W) → (B, T, D) with T=H*W, D=C
         B, C, H, W = out.shape
@@ -103,7 +103,7 @@ def export_split_embeddings(
     epochs: int,
     image_size: int,
     idx_map: Dict[str, Dict[str, Any]],
-    stats_accum: Optional[Dict[str, Any]],
+    stats_accum: Dict[str, Any] = None,
     patient_split_guard: Dict[str, str],
 ) -> None:
     out_dir = os.path.join(cfg["embeddings_path"], split)

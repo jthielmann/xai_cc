@@ -5,7 +5,7 @@ import torch.nn.functional
 from torchvision import transforms
 from script.data_processing.image_transforms import get_eval_transforms, get_transforms
 from script.configs.dataset_config import get_dataset_cfg
-from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Literal, Mapping, Sequence, Tuple
 DEFAULT_RANDOM_SEED = 42
 
 import matplotlib.pyplot as plt
@@ -65,7 +65,7 @@ class STDataset(Dataset):
         *,
         image_transforms=None,
         inputs_only: bool = False,
-        genes: list[str] | None = None,
+        genes: list[str] = None,
         use_weights: bool = False,
         return_floats: bool = False,
         gene_list_index = -1,
@@ -328,22 +328,22 @@ def get_all_genes():
 
 # contains tile path and gene data
 def get_base_dataset(
-    data_dir: str | Path,
+    data_dir,
     samples: List[str],
-    genes: list[str] | None = None,
+    genes: list[str] = None,
     *,
-    max_len: int | None = None,
+    max_len: int = None,
     bins: int = 1,
     gene_data_filename: str = "gene_data.csv",
     meta_data_dir: str = "/meta_data/",
-    lds_smoothing_csv: str | Path | None = None,      # <─ NOW one file, not a dir
+    lds_smoothing_csv: str = None,      # <─ NOW one file, not a dir
     weight_transform: str = "inverse",
     weight_clamp: int = 10,
     lds_bin_edge_strategy: str = "quantile",
     lds_bin_edge_clip: float = 0.0,
-    precomputed_edges: Dict[str, np.ndarray] | None = None,
+    precomputed_edges: Dict[str, np.ndarray] = None,
     return_edges: bool = False,
-) -> Union[pd.DataFrame, Tuple[pd.DataFrame, Dict[str, np.ndarray]]]:
+) :
     if lds_smoothing_csv is not None and genes is None:
         raise RuntimeError(f"lds_smoothing_csv is not None ({lds_smoothing_csv}) and genes is None")
     # normalize meta data directory token (support 'meta_data', '/meta_data', 'meta_data/')
@@ -498,23 +498,23 @@ def overlay_patient_hists_for_gene(df, gene, patients=None, bins=50, density=Tru
     plt.show(); plt.close()
 
 def get_dataset(
-    data_dir: str | Path,
-    genes: list[str] | None = None,
+    data_dir,
+    genes: list[str] = None,
     *,
     transforms=None,
-    samples: list[str] | None = None,
-    max_len: int | None = None,
+    samples: list[str] = None,
+    max_len: int = None,
     bins: int = 1,
     only_inputs: bool = False,
     gene_data_filename: str = "gene_data.csv",
     meta_data_dir: str = "/meta_data/",
-    lds_smoothing_csv: str | Path | None = None,
+    lds_smoothing_csv: str = None,
     weight_transform: str = "inverse",
     weight_clamp: int = 10,
     return_floats: bool = False,
     lds_bin_edge_strategy: str = "quantile",
     lds_bin_edge_clip: float = 0.0,
-    precomputed_bin_edges: Dict[str, np.ndarray] | None = None,
+    precomputed_bin_edges: Dict[str, np.ndarray] = None,
     return_edges: bool = False,
     return_patient_and_tilepath=False
 ):
@@ -561,24 +561,24 @@ def get_dataset(
 
 def get_dataset_from_config(
     dataset_name: str,
-    genes: list[str] | None = None,
+    genes: list[str] = None,
     *,
     split: Literal["train", "val", "test"] = "train",
     debug: bool = False,
     transforms=None,
-    samples: list[str] | None = None,
-    max_len: int | None = None,
+    samples: list[str] = None,
+    max_len: int = None,
     bins: int = 1,
     only_inputs: bool = False,
     gene_data_filename: str = "gene_data.csv",
     meta_data_dir: str = "/meta_data/",
-    lds_smoothing_csv: str | Path | None = None,
+    lds_smoothing_csv: str = None,
     weight_transform: str = "inverse",
     weight_clamp: int = 10,
     return_floats: bool = False,
     lds_bin_edge_strategy: str = "quantile",
     lds_bin_edge_clip: float = 0.0,
-    precomputed_bin_edges: Dict[str, np.ndarray] | None = None,
+    precomputed_bin_edges: Dict[str, np.ndarray] = None,
     return_edges: bool = False,
 ) -> STDataset:
 
@@ -651,23 +651,23 @@ def get_dataset_for_umap(data_dir, genes, transforms=None, samples=None, meta_da
 
 
 def get_base_dataset_single_file(
-    csv_path: str | Path,
+    csv_path,
     *,
-    data_dir: str | Path | None = None,
-    genes: list[str] | None = None,
-    max_len: int | None = None,
+    data_dir = None,
+    genes: list[str] = None,
+    max_len: int = None,
     bins: int = 1,
-    lds_smoothing_csv: str | Path | None = None,
+    lds_smoothing_csv: str = None,
     weight_transform: str = "inverse",
     weight_clamp: int = 10,
-    tile_subdir: str | None = None,
-    split: str | list[str] | None = None,
+    tile_subdir: str = None,
+    split = None,
     split_col_name: str = "split",
     lds_bin_edge_strategy: str = "quantile",
     lds_bin_edge_clip: float = 0.0,
-    precomputed_edges: Dict[str, np.ndarray] | None = None,
+    precomputed_edges: Dict[str, np.ndarray] = None,
     return_edges: bool = False,
-) -> Union[pd.DataFrame, Tuple[pd.DataFrame, Dict[str, np.ndarray]]]:
+):
     """Build a base DataFrame from a single top-level CSV.
 
     The CSV should contain at least a `tile` column and gene columns. If `data_dir`
@@ -788,24 +788,24 @@ def get_base_dataset_single_file(
 
 
 def get_dataset_single_file(
-    csv_path: str | Path,
+    csv_path,
     *,
-    data_dir: str | Path | None = None,
-    genes: list[str] | None = None,
+    data_dir = None,
+    genes: list[str] = None,
     transforms=None,
-    max_len: int | None = None,
+    max_len: int = None,
     bins: int = 1,
     only_inputs: bool = False,
-    lds_smoothing_csv: str | Path | None = None,
+    lds_smoothing_csv: str = None,
     weight_transform: str = "inverse",
     weight_clamp: int = 10,
     return_floats: bool = False,
-    tile_subdir: str | None = None,
-    split: str | list[str] | None = None,
+    tile_subdir: str = None,
+    split = None,
     split_col_name: str = "split",
     lds_bin_edge_strategy: str = "quantile",
     lds_bin_edge_clip: float = 0.0,
-    precomputed_bin_edges: Dict[str, np.ndarray] | None = None,
+    precomputed_bin_edges: Dict[str, np.ndarray] = None,
     return_edges: bool = False,
 ):
     """Return an `STDataset` built from a single top-level CSV.
@@ -929,7 +929,7 @@ class label_dataset(torch.utils.data.Dataset):
         val = self.dataframe.iloc[idx, self.dataframe.columns.get_loc(self.gene)]
         return torch.tensor(float(val), dtype=self.dtype) # supposed to be a 0D tensor
 
-def load_best_smoothing(csv_path: str | Path, gene: str) -> Dict[str, Any]:
+def load_best_smoothing(csv_path, gene: str) -> Dict[str, Any]:
     """Load best smoothing params for a gene using JS divergence (smaller is better).
 
     Expects a CSV produced by `script/data_processing/lds_coad.py:grid_search_lds`, which
@@ -965,7 +965,7 @@ def load_best_smoothing(csv_path: str | Path, gene: str) -> Dict[str, Any]:
 
 
 def load_gene_weights(
-    csv_path: str | Path,
+    csv_path,
     genes: List[str],
     *,
     weight_transform: Literal["inverse", "sqrt-inverse", "none"] = "inverse",
@@ -973,9 +973,9 @@ def load_gene_weights(
     mode: Literal["min", "max"] = "min",
     eps: float = 1e-12,
     renorm_mean1: bool = True,
-    clip_max: Optional[float] = None,
+    clip_max = None,
     return_scales: bool = False,
-) -> Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Dict[str, float]]]:
+):
     csv_path = Path(csv_path)
     if not csv_path.is_file():
         raise FileNotFoundError(csv_path)
@@ -1059,10 +1059,10 @@ class STSpatialDataset(Dataset):
         df,
         *,
         image_transforms=None,
-        genes: Optional[List[str]] = None,
+        genes: List[str] = None,
         return_floats: bool = False,
         dtype: torch.dtype = torch.float32,
-        patient_filter: Optional[Union[str, Sequence[str]]] = None,
+        patient_filter = None,
         return_patient: bool = False,
     ):
         # Basic column checks
@@ -1205,16 +1205,16 @@ class STSpatialDataset(Dataset):
 
 
 def get_spatial_dataset(
-    data_dir: str | Path,
+    data_dir,
     genes: list[str],
     *,
     transforms=T.ToTensor(),
-    samples: list[str] | None = None,
+    samples: list[str] = None,
     meta_data_dir: str = "/meta_data/",
     gene_data_filename: str = "gene_data.csv",
     return_floats: bool = False,
-    max_len: int | None = None,
-    patient_filter: str | list[str] | None = None,
+    max_len: int = None,
+    patient_filter = None,
     return_patient: bool = False,
 ):
 
@@ -1249,4 +1249,3 @@ def get_spatial_dataset(
         return_patient=return_patient,
     )
     return ds
-from __future__ import annotations

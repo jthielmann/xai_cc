@@ -131,7 +131,7 @@ def sanitize_for_json(value: Any) -> Any:
         return str(value)
 
 
-def build_config_columns(config: Dict[str, Any], tuned_lrs: Dict[str, Any] | None) -> Dict[str, Any]:
+def build_config_columns(config: Dict[str, Any], tuned_lrs: Dict[str, Any] = None) -> Dict[str, Any]:
     cfg_cols = {f"cfg_{k}": sanitize_for_json(v) for k, v in config.items()}
     if tuned_lrs is not None:
         cfg_cols["cfg_tuned_lr"] = sanitize_for_json(tuned_lrs)
@@ -157,9 +157,9 @@ def append_row_with_schema(csv_path: str, row: Dict[str, Any]) -> None:
 
 
 def select_per_gene_values(
-    best_pearson_per_gene: Sequence[float] | None,
-    best_r: Sequence[float] | None,
-    last_r: Sequence[float] | None,
+    best_pearson_per_gene: Sequence[float],
+    best_r: Sequence[float],
+    last_r: Sequence[float],
     expected_len: int,
 ) -> list[float]:
     for values in (best_pearson_per_gene, best_r, last_r):
@@ -177,7 +177,7 @@ def build_results_row(
     genes: Sequence[str],
     metrics: Dict[str, Any],
     per_gene_values: Sequence[float],
-    tuned_lrs: Dict[str, Any] | None,
+    tuned_lrs: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     row = {
         "best_epoch": metrics["best_epoch"],
@@ -206,11 +206,10 @@ def build_results_row(
     return row
 
 
-def build_scatter_appendix(config: Dict[str, Any], sweep_keys: Iterable[str] | None) -> str:
+def build_scatter_appendix(config: Dict[str, Any], sweep_keys: Iterable[str]) -> str:
     if not sweep_keys:
         return ""
     parts = []
     for key in sweep_keys:
         parts.append(f"{SCATTER_KEY_ABBREVIATIONS.get(key, key)}={config.get(key)}")
     return " | ".join(parts)
-from __future__ import annotations

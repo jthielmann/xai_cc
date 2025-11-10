@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Iterable
+from typing import Iterable
 
 import numpy as np
 from matplotlib import cm, colors, pyplot as plt

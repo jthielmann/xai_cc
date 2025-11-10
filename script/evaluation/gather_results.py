@@ -128,7 +128,7 @@ def _weighted_mean(values: Dict[str, float], counts: Dict[str, int]) -> float:
     return float(num / den)
 
 
-def gather_forward_metrics(eval_root: str, output_csv: str | None = None) -> str:
+def gather_forward_metrics(eval_root: str, output_csv: str = None) -> str:
     if not eval_root:
         raise ValueError("eval_root is required")
     if not output_csv:
@@ -140,7 +140,7 @@ def gather_forward_metrics(eval_root: str, output_csv: str | None = None) -> str
     models_root = os.path.normpath(os.path.join(os.path.dirname(eval_root), "..", "models"))
 
     rows: List[Dict[str, object]] = []
-    existing_df: pd.DataFrame | None = None
+    existing_df = None
     existing_run_dirs: set[str] = set()
     existing_run_names: set[str] = set()
     existing_proj_run_keys: set[str] = set()

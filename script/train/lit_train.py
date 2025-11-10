@@ -17,7 +17,7 @@ from lightning.pytorch.tuner.tuning import Tuner
 from lightning.pytorch.callbacks import LearningRateMonitor
 from matplotlib import pyplot as plt
 from wandb.wandb_run import Run
-from typing import Optional, cast, Any
+from typing import cast, Any
 import re
 import numpy as np
 from typing import Dict, List
@@ -38,7 +38,7 @@ from script.configs.normalization import resolve_norm
 
 
 @contextmanager
-def _temp_cwd(path: str | os.PathLike):
+def _temp_cwd(path):
     """Temporarily change the current working directory.
 
     Used to redirect Lightning's lr_find temporary checkpoint ('.lr_find_*.ckpt')
@@ -548,7 +548,7 @@ class TrainerPipeline:
             trainer: L.Trainer,
             train_dl: torch.utils.data.DataLoader,
             steps: int = 100,
-            early_stop: Optional[float] = None,
+            early_stop: float = None,
             use_lr_find: bool = True
     ) -> float:
         tuner = Tuner(trainer)

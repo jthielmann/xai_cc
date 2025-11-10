@@ -20,7 +20,7 @@ from script.model.lit_dino import DINO
 from main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, read_config_parameter, get_sweep_parameter_names
 
 @contextmanager
-def _temp_cwd(path: str | os.PathLike):
+def _temp_cwd(path):
     old = os.getcwd()
     os.makedirs(path, exist_ok=True)
     os.chdir(path)
@@ -30,7 +30,7 @@ def _temp_cwd(path: str | os.PathLike):
         os.chdir(old)
 
 
-def _train(cfg: dict, run: wandb.sdk.wandb_run.Run | None = None):
+def _train(cfg: dict, run=None):
     # Initialise W&B run with sanitized config (avoid nested parameters/metric)
     if run is None:
         wb_cfg = {k: v for k, v in cfg.items() if k not in ("parameters", "metric", "method")}

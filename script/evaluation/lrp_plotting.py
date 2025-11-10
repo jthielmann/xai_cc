@@ -15,7 +15,7 @@ def _imgify_rel(att):
     return zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
 
 
-def plot_lrp(model, data, run=None, save_dir: str | None = None):
+def plot_lrp(model, data, run=None, save_dir: str = None):
     """Compute LRP attributions and either log to W&B and/or save locally.
 
     - If a W&B run is provided, log images under "lrp/".
@@ -90,7 +90,7 @@ def plot_lrp(model, data, run=None, save_dir: str | None = None):
         run.log({"lrp/table": table})
 
 
-def plot_lrp_custom(model, data, run=None, save_dir: str | None = None):
+def plot_lrp_custom(model, data, run=None, save_dir: str = None):
     model.eval()
     device = next(model.parameters()).device
     table_rows = []

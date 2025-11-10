@@ -145,7 +145,7 @@ def prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     return cfg
 
 
-def compute_genes_id(genes: List[str] | Any) -> str:
+def compute_genes_id(genes) -> str:
     """Compute a short, stable identifier for a gene list.
 
     - Accepts a list of strings (preferred). If a nested list is passed, it will
@@ -168,4 +168,3 @@ def compute_genes_id(genes: List[str] | Any) -> str:
         seq = [str(genes)]
     blob = "\n".join(seq).encode("utf-8")
     return hashlib.sha1(blob).hexdigest()[:10]
-from __future__ import annotations

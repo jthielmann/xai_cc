@@ -1,6 +1,6 @@
 import glob
 import os
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 import pandas as pd
 
 
@@ -101,7 +101,7 @@ def prepare_gene_list(cfg: Dict[str, Any]) -> List[List[str]]:
     return cfg["genes"]
 
 
-def get_active_chunk_idx(cfg: Dict[str, Any], chunk: Optional[List[str]] = None) -> int:
+def get_active_chunk_idx(cfg: Dict[str, Any], chunk: List[str] = None) -> int:
     chunks = cfg.get("gene_chunks")
     if not chunks:
         return 0

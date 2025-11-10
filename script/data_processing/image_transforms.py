@@ -1,5 +1,5 @@
 import importlib.util
-from typing import Optional, Dict
+from typing import Dict
 
 import torch
 from script.data_processing.transforms import build_transforms as _build_transforms
@@ -57,7 +57,7 @@ def get_eval_transforms(image_size: int = 256):
         ])
 
 
-def get_transforms(cfg: Optional[Dict] = None, *, split: str = "train", normalize: bool = True):
+def get_transforms(cfg: Dict = None, *, split: str = "train", normalize: bool = True):
     if cfg is None:
         base = get_train_transforms() if split == "train" else get_eval_transforms()
         if normalize:

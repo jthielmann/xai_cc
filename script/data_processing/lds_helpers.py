@@ -1,4 +1,4 @@
-from typing import Iterable, Tuple, Optional
+from typing import Iterable, Tuple
 
 import numpy as np
 from scipy.ndimage import convolve1d, gaussian_filter1d
@@ -13,7 +13,7 @@ class LDS:
         bins: int = 30,
         ks: int = 5,
         kind: str = "gaussian",
-        sigma: Optional[float] = 2.0,
+        sigma = 2.0,
     ) -> None:
         if ks % 2 == 0:
             raise ValueError("`ks` must be odd.")

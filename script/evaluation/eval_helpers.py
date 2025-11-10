@@ -1,5 +1,5 @@
 import torch
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 def auto_device(model: torch.nn.Module) -> torch.device:
@@ -45,7 +45,7 @@ def normalize_state_dicts(raw: Dict[str, Any]) -> Dict[str, Any]:
     return {"encoder": raw}
 
 
-def collect_state_dicts(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def collect_state_dicts(config: Dict[str, Any]) -> Dict[str, Any]:
     """Collect and load model state dicts based on config.
 
     Handles either separate encoder/gene_head/sae paths or a bundled
@@ -80,4 +80,3 @@ def collect_state_dicts(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             f"gene_head_state_path \n{config.get('gene_head_state_path', 'None')}"
             f"model_state_path \n{config.get('model_state_path', 'None')}"
         )
-

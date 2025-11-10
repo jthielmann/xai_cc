@@ -1,5 +1,5 @@
 import csv, sys, os, random, numpy, torch, yaml, pandas as pd, wandb
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List
 
 sys.path.insert(0, '..')
 from script.configs.dataset_config import get_dataset_cfg

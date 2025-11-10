@@ -8,7 +8,7 @@ sys.path.insert(0, '..')
 # Make numba avoid OpenMP/TBB to prevent clashes with PyTorch/MKL on HPC
 os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
 
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List
 
 import yaml
 import wandb
@@ -26,7 +26,7 @@ from script.boxplot_helpers import (
 )
 
 
-def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
+def _resolve_relative(path: str, source_path=None) -> str:
     if not path:
         raise ValueError("_resolve_relative received empty path")
     if os.path.isabs(path):

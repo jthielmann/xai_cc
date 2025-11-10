@@ -3,7 +3,7 @@ import lightning as L
 import numpy as np
 import torch
 import torch.nn as nn
-from typing import Optional, Tuple
+from typing import Tuple
 import wandb
 from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
@@ -75,7 +75,7 @@ class WandbMetricCallback(Callback):
 
 
 class SAETrainerPipeline:
-    def __init__(self, config: dict, run: wandb.sdk.wandb_run.Run, *, encoder: nn.Module, gene_head: Optional[nn.Module] = None):
+    def __init__(self, config: dict, run: wandb.sdk.wandb_run.Run, *, encoder: nn.Module, gene_head=None):
         self.config = config
         self.wandb_run = run
         self.encoder = encoder

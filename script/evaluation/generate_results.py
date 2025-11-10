@@ -23,7 +23,7 @@ def generate_results(
     make_hists=False,
     wandb_run=None,
     image_size: int = 224,
-    max_len: int | None = None,
+    max_len: int = None,
     forward_batch_size: int = 32,
     forward_num_workers: int = 0,
 ):

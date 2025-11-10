@@ -1,7 +1,7 @@
 import argparse
 import json
 import os
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Dict, Tuple, List
 from pathlib import Path
 
 import lightning as L
@@ -107,7 +107,7 @@ class LitSparseAutoencoder(L.LightningModule):
     def forward(self, x):
         return self.sae(x)
 
-    def _step(self, batch: tuple | list):
+    def _step(self, batch):
         if isinstance(batch, torch.Tensor):
             x = batch
         else:

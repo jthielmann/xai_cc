@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Tuple
 
 class MultiGeneWeightedMSE(nn.Module):
     """Weighted MSE for multi-gene regression with robust shape/broadcast handling."""
@@ -13,7 +13,7 @@ class MultiGeneWeightedMSE(nn.Module):
         eps: float = 1e-8,
         reduction: str = "mean",
         normalize: str = "global",
-        clip_weights: Optional[float] = None,
+        clip_weights = None,
         check_finite: bool = True,
     ):
         super().__init__()
@@ -86,7 +86,7 @@ class MultiGeneWeightedMSE(nn.Module):
         w32: torch.Tensor,
         *,
         return_stats: bool,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Dict[str, torch.Tensor]]]:
+    ):
         stats: Dict[str, torch.Tensor] = {
             "weight_mean": w32.mean().detach(),
             "weight_max": w32.max().detach(),
@@ -126,7 +126,7 @@ class MultiGeneWeightedMSE(nn.Module):
         sample_weights: torch.Tensor,
         *,
         return_stats: bool = False,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Dict[str, torch.Tensor]]]:
+    ):
         if sample_weights is None:
             raise ValueError("sample_weights must be provided for MultiGeneWeightedMSE.")
 

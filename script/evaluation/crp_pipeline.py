@@ -1,7 +1,7 @@
 import itertools
 import os
 import torch
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from script.evaluation.crp_plotting import plot_crp_zennit, plot_crp
 from script.evaluation.pcx_plotting import plot_pcx

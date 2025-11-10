@@ -79,7 +79,7 @@ def plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=Fals
     log.info("Saved spatial plot: %s", out_file)
 
 
-def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path: str, *, max_items: int | None = None, is_online=False, wandb_run=None):
+def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path: str, *, max_items: int = None, is_online=False, wandb_run=None):
     data_dir = cfg.get("data_dir")
     if not data_dir:
         raise ValueError("Missing 'data_dir' in config; cannot build spatial dataset for triptych.")

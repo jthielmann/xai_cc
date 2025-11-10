@@ -7,7 +7,7 @@ sys.path.insert(0, '..')
 # Make numba avoid OpenMP/TBB to prevent clashes with PyTorch/MKL on HPC
 os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import yaml
 import wandb
@@ -19,7 +19,7 @@ from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_con
     read_config_parameter, compute_genes_id
 
 
-def _resolve_relative(path: str, source_path: Optional[str] = None) -> str:
+def _resolve_relative(path: str, source_path=None) -> str:
     if not path:
         raise ValueError("_resolve_relative received empty path")
     if os.path.isabs(path):

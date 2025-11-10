@@ -19,7 +19,7 @@ sys.path.insert(0, '..')
 
 from script.gene_list_helpers import prepare_gene_list, get_full_gene_list, had_split_genes
 from script.train.lit_train_sae import SAETrainerPipeline
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List
 from script.configs.dataset_config import get_dataset_cfg
 from script.train.lit_train import TrainerPipeline
 from main_utils import (
@@ -37,7 +37,7 @@ from main_utils import (
 
 import os, glob
 import pandas as pd
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List
 
 _GENE_SETS: Dict[str, List[str]] = {
     "hvg": [
@@ -233,7 +233,7 @@ def _flatten_params(raw: Dict[str, Any]) -> Dict[str, Any]:
         cfg[pk] = pv["value"]
     return cfg
 
-def _build_sweep_config(raw_cfg: Dict[str, Any], config_basename: Optional[str] = None) -> Dict[str, Any]:
+def _build_sweep_config(raw_cfg: Dict[str, Any], config_basename: str = None) -> Dict[str, Any]:
     """Build a W&B sweep spec from a raw config with a 'parameters' section."""
     params_dict = (raw_cfg.get("parameters", {})) if isinstance(raw_cfg, dict) else {}
     hyper_params = _extract_hyperparams(params_dict)

@@ -52,10 +52,10 @@ def _load_forward_metrics_recursive(scan_root: str) -> pd.DataFrame:
 
 def _apply_filters(
     df: pd.DataFrame,
-    include_projects: List[str] | None,
-    include_encoders: List[str] | None,
-    include_run_name_regex: str | None,
-    exclude_run_name_regex: str | None,
+    include_projects: List[str] = None,
+    include_encoders: List[str] = None,
+    include_run_name_regex: str = None,
+    exclude_run_name_regex: str = None,
 ) -> pd.DataFrame:
     out = df
     if include_projects:
@@ -263,4 +263,3 @@ def _plot_all_sets(
     if not saved_paths:
         raise RuntimeError("no plots saved")
     return saved_paths
-from __future__ import annotations

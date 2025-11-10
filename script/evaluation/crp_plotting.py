@@ -32,10 +32,7 @@ def _get_composite_and_layer(encoder):
         layer_name = _get_layer_names(encoder, [layer_type])[-1]
     return composite, layer_name
 
-from typing import Optional
-
-
-def plot_crp_zennit(model, dataset, run=None, layer_name: Optional[str] = None, max_items: Optional[int] = None, out_dir: Optional[str] = None):
+def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items: int = None, out_dir: str = None):
     """CRP using zennit-crp CondAttribution on a small dataset subset."""
     model.eval()
     device = next(model.parameters()).device
@@ -239,7 +236,7 @@ def plot_crp(
     top_k: int = 5,
     abs_norm: bool = True,
     cmap: str = "bwr",
-    out_dir: Optional[str] = None,
+    out_dir: str = None,
 ):
     """
     CRP-like conditional attribution reimplemented with pure PyTorch hooks.

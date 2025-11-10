@@ -1,6 +1,6 @@
 import os
 import hashlib
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 import numpy as np
 import torch
 from umap import UMAP
