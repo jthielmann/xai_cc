@@ -106,16 +106,13 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
 
 class EvalPipeline:
     def __init__(self, config, run):
-        # Avoid double-prep: eval_main prepares cfg (merges dataset cfg, sets eval_path, writes config)
         self.config = dict(config)
         self.wandb_run = run
-        # Single source of truth for run_name: require it in config
         self.run_name = self.config.get("run_name")
         if not self.run_name:
-            raise ValueError("Config must provide 'run_name' (single source of truth).")
+            raise ValueError("Config must provide run_name")
         self.model_src = self.config.get("model_config_path")
         self.model = self._load_model()
-        # Force evaluation on an accelerator; require GPU availability
         if torch.cuda.is_available():
             device = torch.device("cuda")
         elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():

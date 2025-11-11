@@ -1,0 +1,35 @@
+project: eval_all
+name: eval_all
+xai_pipeline: manual
+lrp: false
+lxt: false
+scatter: false
+diff: false
+sae: false
+umap: false
+forward_to_csv: true
+boxplots: false
+plot_violin: false
+
+run_name: eval
+group: eval
+job_type: eval
+tags: [eval]
+debug: false
+log_to_wandb: false
+
+# When true, treat model_state_path as a base project directory and
+# evaluate every subdir containing {config,best_model.pth}.
+# When false, evaluate a single run at model_state_path.
+is_sweep: true
+
+# Model configuration to inherit architecture/dataset details from
+dataset: coad
+#meta_data_dir: metadata
+#gene_data_filename: gene_log1p.csv
+# Set one of the following to point at trained weights
+model_state_path: hvg
+encoder_state_path: null
+gene_head_state_path: null
+sae_state_path: null
+

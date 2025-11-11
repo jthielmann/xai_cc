@@ -218,7 +218,6 @@ def _run_single(raw_cfg: Dict[str, Any], run=None) -> None:
 
 
 def _find_model_run_dirs(base_dir: str) -> List[str]:
-    """Recursively find run dirs under base_dir containing 'config' + 'best_model.pth'."""
     if not os.path.isdir(base_dir):
         raise FileNotFoundError(
             f"Base directory not found or not a directory: {base_dir}"
@@ -351,13 +350,7 @@ def _run_boxplots(root: str, cfg: Dict[str, Any]) -> None:
 def main() -> None:
     args = parse_args()
     raw_cfg = parse_yaml_config(args.config)
-    if "boxplots" not in raw_cfg:
-        raise ValueError("Missing required parameter 'boxplots' in config")
-    if "debug" not in raw_cfg:
-        raise ValueError("Missing required parameter 'debug' in config")
 
-    # Project-scope eval: when 'is_sweep' is true, treat model_state_path as a base
-    # directory and run eval for each subdir that looks like a model run.
     if bool(raw_cfg.get("is_sweep", False)):
         base_val = read_config_parameter(raw_cfg, "model_state_path")
         if not base_val or not isinstance(base_val, (str, list)):
