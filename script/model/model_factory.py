@@ -48,7 +48,6 @@ import timm
 from typing import Tuple
 
 from typing import Iterable, Sequence, Callable
-from script.model.dinov3_local import load_dinov3_local
 
 # resolver.py (or inline in your loader code)
 from pathlib import Path
@@ -92,7 +91,7 @@ def get_encoder(encoder_type: str) -> nn.Module:
     if t == "dino": return torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
     if t.startswith("dinov3"):
         weights = resolve_unique_model_file(encoder_type)
-        return load_dinov3_local(t, str(weights))
+        return torch.hub.load("../encoders/", t, source="local", weights=str(weights))
     if t == "resnet50random": return models.resnet50(weights=False)
     if t == "resnet50imagenet": return models.resnet50(weights="IMAGENET1K_V2")
     # Fix logic: ensure we only match UNI variants explicitly
