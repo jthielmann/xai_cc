@@ -48,11 +48,28 @@ def test_load_all_dinov3_cpu(encoders_dir: str = "../encoders") -> None:
                 out = model(x)
         if isinstance(out, (list, tuple)) and len(out):
             out = out[0]
+        if isinstance(out, dict):
+            pref = ("x_features", "x_norm_patchtokens", "x_prenorm")
+            picked_key = None
+            picked_val = None
+            for k in pref:
+                v = out.get(k)
+                if isinstance(v, torch.Tensor):
+                    picked_key = k
+                    picked_val = v
+                    break
+            if picked_val is None:
+                first_item = next(((k, v) for k, v in out.items() if isinstance(v, torch.Tensor)), None)
+                if first_item is None:
+                    raise RuntimeError(
+                        f"no tensor values in dict output for {name}: keys={list(out.keys())}"
+                    )
+                picked_key, picked_val = first_item
+            log.debug("dict output for %s; picked key=%s shape=%s", name, picked_key, tuple(picked_val.shape))
+            out = picked_val
         if hasattr(out, "last_hidden_state"):
             out = out.last_hidden_state
         if not isinstance(out, torch.Tensor):
-            if type(out) == dict:
-                out = out.keys()
             raise RuntimeError(f"unexpected forward output type for {name}: {type(out)}, value: {out}")
         log.debug("forward %s ok; out shape=%s", name, tuple(out.shape))
 
