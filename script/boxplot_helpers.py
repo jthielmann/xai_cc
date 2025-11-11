@@ -122,7 +122,7 @@ def _ensure_out_path(path_no_ext: str, ext: str) -> str:
     base = f"{path_no_ext}.{ext}"
     if not os.path.exists(base):
         return base
-    i = 2  # e.g. hvg2.png
+    i = 1  # e.g. hvg2.png
     while True:
         cand = f"{path_no_ext}{i}.{ext}"
         if not os.path.exists(cand):
@@ -150,7 +150,7 @@ def _plot_box(values: Dict[str, List[float]], title: str, out_path: str) -> None
     plt.close(fig)
 
 
-def _plot_violin(values: Dict[str, List[float]], title: str, out_path: str) -> None:
+"""def _plot_violin(values: Dict[str, List[float]], title: str, out_path: str) -> None:
     encoders = sorted(values.keys())
     if not encoders:
         raise RuntimeError("no encoder groups to plot")
@@ -169,7 +169,59 @@ def _plot_violin(values: Dict[str, List[float]], title: str, out_path: str) -> N
     fig.tight_layout()
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     fig.savefig(out_path, dpi=200)
+    plt.close(fig)"""
+
+def _plot_violin(values, title, out_path, y_lim=(-1, 1), y_label="Pearson r", x_label="Group"):
+    # Normalize input
+    if isinstance(values, dict):
+        labels = sorted(values)
+        data = [values[k] for k in labels]
+    else:
+        data = values if values and isinstance(values[0], (list, tuple, np.ndarray)) else [values]
+        labels = [f"G{i+1}" for i in range(len(data))]
+
+    means = [float(np.nanmean(v)) if len(v) else float("nan") for v in data]
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.violinplot(data, showmeans=False, showextrema=True, showmedians=False)
+    ax.set_xticks(range(1, len(labels) + 1)); ax.set_xticklabels(labels)
+    ax.scatter(range(1, len(labels) + 1), means, color="black", s=20, zorder=3)
+    ax.set_ylim(*y_lim); ax.set_ylabel(y_label); ax.set_xlabel(x_label); ax.set_title(title)
+    fig.tight_layout()
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    fig.savefig(out_path, dpi=200); plt.close(fig)
+
+def _plot_violin_seaborn(values, title, out_path, y_lim=(-1, 1), y_label="Pearson r", x_label="Group"):
+    import os, numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
+
+    # Normalize input → labels + list of arrays
+    if isinstance(values, dict):
+        labels = sorted(values)
+        groups = [np.asarray(values[k], dtype=float) for k in labels]
+    else:
+        groups = values if values and isinstance(values[0], (list, tuple, np.ndarray)) else [values]
+        groups = [np.asarray(g, dtype=float) for g in groups]
+        labels = [f"G{i+1}" for i in range(len(groups))]
+
+    # Long-form DataFrame for seaborn (drop NaNs)
+    df = pd.DataFrame(
+        [(lab, v) for lab, arr in zip(labels, groups) for v in np.asarray(arr, float) if not np.isnan(v)],
+        columns=["Group", "Value"]
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    sns.violinplot(data=df, x="Group", y="Value", inner=None, cut=0, ax=ax)
+
+    # Overlay group means
+    means = df.groupby("Group")["Value"].mean().reindex(labels)
+    ax.scatter(range(len(labels)), means.values, s=20, color="black", zorder=3)
+
+    ax.set_ylim(*y_lim); ax.set_ylabel(y_label); ax.set_xlabel(x_label); ax.set_title(title)
+    fig.tight_layout()
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    fig.savefig(out_path, dpi=200)
     plt.close(fig)
+
 
 
 __all__ = [

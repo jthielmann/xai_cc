@@ -7,5 +7,5 @@ tags: [boxplot, violin]
 debug: false
 plot_box: true
 plot_violin: true
-gene_sets: "all"
+gene_sets: "hvg"
 model_state_path: "dino"
