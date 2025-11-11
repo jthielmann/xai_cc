@@ -30,7 +30,6 @@ from difflib import get_close_matches
 # -----------------------
 
 def _load_local_state_dict(weights: Optional[str]):
-    """Load a local checkpoint path into a state_dict. Returns None if weights is falsy."""
     if not weights:
         return None
     if not os.path.isfile(weights):
@@ -39,8 +38,8 @@ def _load_local_state_dict(weights: Optional[str]):
     if isinstance(obj, dict):
         for k in ("model_ema", "model", "state_dict", "params"):
             if k in obj and isinstance(obj[k], dict):
+                print(f"[hubconf] using subkey='{k}' from checkpoint")
                 return obj[k]
-    # Fallback: assume it's already a state_dict
     return obj
 
 def _build_timm_backbone(model_name: str, **kwargs):
@@ -66,7 +65,17 @@ def _load_model(timm_name: str, weights: Optional[str], *, img_size: int = 224, 
     sd = _load_local_state_dict(weights)
     if sd is not None:
         missing, unexpected = model.load_state_dict(sd, strict=False)
-        print(f"[hubconf] loaded weights into {timm_name} | missing={len(missing)}, unexpected={len(unexpected)}")
+        msg1 = f"[hubconf] loaded weights into {timm_name} | "
+        msg2 = f"missing={len(missing)}, unexpected={len(unexpected)}"
+        print(msg1 + msg2)
+        if missing:
+            print("[hubconf] missing keys:")
+            for k in sorted(missing):
+                print(f"  - {k}")
+        if unexpected:
+            print("[hubconf] unexpected keys:")
+            for k in sorted(unexpected):
+                print(f"  - {k}")
     return model
 
 # -----------------------
