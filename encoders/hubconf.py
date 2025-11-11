@@ -76,6 +76,25 @@ def _load_model(timm_name: str, weights: Optional[str], *, img_size: int = 224, 
             print("[hubconf] unexpected keys:")
             for k in sorted(unexpected):
                 print(f"  - {k}")
+        # Heuristic guard: backbone-architecture mismatch (e.g., RoPE/LayerScale vs abs pos_embed)
+        miss_set = set(missing)
+        if (
+            "pos_embed" in miss_set and any(
+                (
+                    k.startswith("rope_embed")
+                    or k.endswith(".ls1.gamma")
+                    or k.endswith(".ls2.gamma")
+                    or k.endswith("attn.qkv.bias_mask")
+                    or k == "mask_token"
+                    or k == "storage_tokens"
+                )
+                for k in unexpected
+            )
+        ):
+            raise RuntimeError(
+                f"Checkpoint incompatible with {timm_name}: missing pos_embed and found RoPE/LayerScale/MAE tokens. "
+                f"weights={weights}, missing={len(missing)}, unexpected={len(unexpected)}"
+            )
     return model
 
 # -----------------------
