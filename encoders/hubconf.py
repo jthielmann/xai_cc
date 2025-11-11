@@ -3,11 +3,9 @@ import os
 import torch
 from difflib import get_close_matches
 
-def _resolve_official_repo_dir(repo_dir: Optional[str] = None) -> str:
-    cand = repo_dir or os.environ.get("DINOV3_REPO") or os.environ.get("DINOV3_LOCATION")
-    if not cand:
-        raise FileNotFoundError("Please set DINOV3_REPO or pass repo_dir='...'.")
-    hub_path = os.path.join(cand, "hubconf.py")
+def _resolve_official_repo_dir() -> str:
+    repo_dir = "../encoders"
+    hub_path = os.path.join(repo_dir, "hubconf.py")
     if not os.path.isfile(hub_path):
         raise FileNotFoundError(f"Official DINOv3 hubconf.py not found at: {hub_path}")
     this_dir = os.path.dirname(os.path.abspath(__file__))
