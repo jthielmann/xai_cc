@@ -51,6 +51,8 @@ def test_load_all_dinov3_cpu(encoders_dir: str = "../encoders") -> None:
         if hasattr(out, "last_hidden_state"):
             out = out.last_hidden_state
         if not isinstance(out, torch.Tensor):
+            if type(out) == dict:
+                out = out.keys()
             raise RuntimeError(f"unexpected forward output type for {name}: {type(out)}, value: {out}")
         log.debug("forward %s ok; out shape=%s", name, tuple(out.shape))
 
