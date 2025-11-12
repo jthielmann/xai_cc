@@ -615,7 +615,7 @@ class GeneExpressionRegressor(L.LightningModule):
         out_path = self.config.get("out_path")
         if not isinstance(out_path, str) or not out_path.strip():
             raise ValueError("config['out_path'] missing or empty")
-        best_path = self.best_model_path or os.path.join(out_path, "best_model.pth")
+        best_path = self.best_model_path
         base_dir = os.path.dirname(best_path) if best_path else out_path
         os.makedirs(base_dir, exist_ok=True)
 
@@ -803,7 +803,7 @@ class GeneExpressionRegressor(L.LightningModule):
             "best_epoch": int(self.best_epoch) if getattr(self, "best_epoch", None) is not None else int(self.current_epoch),
             "best_loss": float(self.best_loss),
             "pearson_mean": best_pearson_mean,
-            "best_model_path": self.best_model_path or os.path.join(self.config["out_path"], "best_model.pth"),
+            "best_model_path": self.best_model_path,
             "wandb_url": wandb.run.url if self.is_online and wandb.run else "",
             "best_pearson_epoch": int(self.best_pearson_epoch) if getattr(self, "best_pearson_epoch", None) is not None else None,
         }

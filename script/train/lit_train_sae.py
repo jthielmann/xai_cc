@@ -246,9 +246,9 @@ class SAETrainerPipeline:
         unique_patients = sorted(list(set(patient_ids)))
         cmap = plt.get_cmap('tab20', len(unique_patients))
         patient_to_color = {p: cmap(i) for i, p in enumerate(unique_patients)}
-        out_dir = self.config.get("out_path") or self.config.get("sweep_dir") or self.config.get("model_dir") or "."
-        if self.config.get("umap") and out_dir == ".":
-            raise ValueError("UMAP enabled but no out_path/sweep_dir/model_dir set")
+        out_dir = self.config.get("out_path")
+        if not isinstance(out_dir, str) or not out_dir.strip():
+            raise ValueError("UMAP enabled but config['out_path'] missing or empty")
         os.makedirs(out_dir, exist_ok=True)
 
         for n_neighbors in n_neighbors_list:

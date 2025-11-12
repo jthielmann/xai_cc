@@ -55,6 +55,7 @@ def _temp_cwd(path):
 def _validate_config_and_shapes(cfg, model, loader):
     # run a single forward preferably on GPU, then restore model device
     # why: big encoders are slow on CPU; still let Lightning own final placement
+    # additionally avoid FDS/training path during shape/config probe
 
     # select check device
     if torch.cuda.is_available():
@@ -64,19 +65,27 @@ def _validate_config_and_shapes(cfg, model, loader):
     else:
         check_device = next(model.parameters()).device
 
-    # capture original device to restore after probing
+    # capture original states to restore
     orig_device = next(model.parameters()).device
+    orig_training = bool(model.training)
+    orig_use_fds = getattr(model, "use_fds", None)
 
     dummy_batch = next(iter(loader))
     x, y = dummy_batch[:2]
 
-    # forward on preferred device
+    # forward on preferred device in eval mode with FDS disabled
+    model.eval()
+    if isinstance(orig_use_fds, bool) and orig_use_fds:
+        model.use_fds = False
     model.to(check_device)
     x = x.to(check_device, non_blocking=True) if torch.is_tensor(x) else x
     y_hat = model(x)
     y_hat_shape = tuple(y_hat.shape)
 
-    # restore model and clear device memory to hand control to Lightning
+    # restore model mode/flags/device and clear device memory
+    if isinstance(orig_use_fds, bool):
+        model.use_fds = orig_use_fds
+    model.train(orig_training)
     model.to(orig_device)
     del x, y_hat, dummy_batch
     gc.collect()
@@ -404,6 +413,9 @@ class TrainerPipeline:
 
         self.device  = _determine_device()
         self.out_path = self._prepare_output_dir()
+        preexisting_best = os.path.join(self.out_path, "best_model.pth")
+        if os.path.exists(preexisting_best):
+            raise RuntimeError(f"best_model.pth already exists in out_path: {preexisting_best}")
         # Normalize: capture stats without logging panels to W&B
         stats = resolve_norm(self.config.get("encoder_type", ""))
         norm_meta = {
@@ -821,9 +833,8 @@ class TrainerPipeline:
             trainer.fit(model, train_loader, val_loader)
 
             if has_test_split:
-                # Load best checkpoint (by validation) before evaluating on test
-                best = getattr(model, "best_model_path", None) or os.path.join(self.out_path, "best_model.pth")
-                if os.path.exists(best):
+                best = getattr(model, "best_model_path", None)
+                if isinstance(best, str) and os.path.exists(best):
                     state = torch.load(best, map_location="cpu")
                     model.load_state_dict(state)
                     model.to(self.device)

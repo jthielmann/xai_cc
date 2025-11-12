@@ -187,6 +187,7 @@ def _sweep_run():
     merged = dict(base_fixed)
     merged.update({k: v for k, v in run_config.items() if k != "config_name"})
     merged["name"] = auto_name
+    merged["sweep_parameter_names"] = list(parameter_names)
 
     project = merged.get("project") or read_config_parameter(base_config, "project")
     base_model_dir = "../models/"

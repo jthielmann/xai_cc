@@ -188,7 +188,10 @@ def _plot_violin(values, title, out_path, y_lim=(-1, 1), y_label="Pearson r", x_
     ax.scatter(range(1, len(labels) + 1), means, color="black", s=20, zorder=3)
     ax.set_ylim(*y_lim); ax.set_ylabel(y_label); ax.set_xlabel(x_label); ax.set_title(title)
     fig.tight_layout()
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    d = os.path.dirname(out_path)
+    if not isinstance(d, str) or not d.strip():
+        raise ValueError("out_path missing directory component for _plot_box")
+    os.makedirs(d, exist_ok=True)
     fig.savefig(out_path, dpi=200); plt.close(fig)
 
 def _plot_violin_seaborn(values, title, out_path, y_lim=(-1, 1), y_label="Pearson r", x_label="Group"):
@@ -218,7 +221,10 @@ def _plot_violin_seaborn(values, title, out_path, y_lim=(-1, 1), y_label="Pearso
 
     ax.set_ylim(*y_lim); ax.set_ylabel(y_label); ax.set_xlabel(x_label); ax.set_title(title)
     fig.tight_layout()
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    d = os.path.dirname(out_path)
+    if not isinstance(d, str) or not d.strip():
+        raise ValueError("out_path missing directory component for _plot_violin_seaborn")
+    os.makedirs(d, exist_ok=True)
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
 
