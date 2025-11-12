@@ -143,6 +143,7 @@ def gather_forward_metrics(eval_root: str, output_csv: str = None) -> str:
     project = mc.get("project")
     if not isinstance(project, str) or not project.strip():
         raise RuntimeError("project missing in model_config (eval config)")
+    wmse_flag = str(mc.get("loss_fn_switch", "")).strip().lower() in {"wmse", "weighted mse"}
 
     rows: List[Dict[str, object]] = []
     existing_df = None
@@ -189,6 +190,7 @@ def gather_forward_metrics(eval_root: str, output_csv: str = None) -> str:
             "run_name": run_name,
             "metric_name": train_metric,
             "loss_name": loss_name,
+            "wmse": bool(wmse_flag),
             "gene_set": gene_set,
             "genes_id": genes_id,
             "pearson_mean": _weighted_mean(pearson_vals, counts),

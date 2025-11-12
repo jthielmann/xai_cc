@@ -69,6 +69,7 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
     if not isinstance(enc, str) or not enc.strip():
         raise RuntimeError("encoder_type missing in model config")
     loss_name = mc.get("loss_fn_switch")
+    wmse_flag = str(loss_name).strip().lower() in {"wmse", "weighted mse"}
     row = {
         "encoder_type": str(enc),
         "project": str(project),
@@ -76,6 +77,7 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
         "model_path": str(model_path),
         "metric_name": "mse",
         "loss_name": loss_name,
+        "wmse": bool(wmse_flag),
         "pearson_mean": _weighted_mean(pearson_vals, counts),
         "mse_mean": _weighted_mean(mse_vals, counts),
     }
@@ -470,6 +472,7 @@ class EvalPipeline:
             row.update({f"count_{g}": counts[g] for g in counts})
             row["pearson_mean"] = _weighted_mean(pearson_vals, counts)
             row["mse_mean"] = _weighted_mean(mse_vals, counts)
+            row["wmse"] = bool(use_wmse)
             os.makedirs(results_dir, exist_ok=True)
             pd.DataFrame([row]).to_csv(os.path.join(results_dir, "metrics_summary.csv"), index=False)
             if not bool(self.config.get("debug", False)):
