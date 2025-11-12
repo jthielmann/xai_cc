@@ -3,18 +3,22 @@ import os
 import torch
 from difflib import get_close_matches
 
-def _resolve_official_repo_dir() -> str:
-    repo_dir = "../encoders"
-    hub_path = os.path.join(repo_dir, "hubconf.py")
-    if not os.path.isfile(hub_path):
-        raise FileNotFoundError(f"Official DINOv3 hubconf.py not found at: {hub_path}")
+
+def _resolve_official_repo_dir(repo_dir: Optional[str] = None) -> str:
     this_dir = os.path.dirname(os.path.abspath(__file__))
-    try:
-        if os.path.samefile(os.path.abspath(cand), this_dir):
-            raise RuntimeError("repo_dir points to this wrapper; provide the official repo path.")
-    except FileNotFoundError:
-        pass
-    return cand
+    candidate = os.path.abspath(repo_dir) if repo_dir else os.path.abspath(
+        os.path.join(this_dir, "..", "repos", "dinov3")
+    )
+    hub_path = os.path.join(candidate, "hubconf.py")
+    if not os.path.isfile(hub_path):
+        raise FileNotFoundError(
+            f"Official DINOv3 hubconf.py not found at: {hub_path}"
+        )
+    if os.path.samefile(candidate, this_dir):
+        raise RuntimeError(
+            "repo_dir points to this wrapper; provide the official DINOv3 repo path"
+        )
+    return candidate
 
 def _load_state_dict(weights: Optional[str]) -> Optional[dict]:
     if not weights:
@@ -35,7 +39,7 @@ def _load_state_dict(weights: Optional[str]) -> Optional[dict]:
 
 def _build(entrypoint: str, weights: Optional[str] = None, *, repo_dir: Optional[str] = None, **kwargs):
     repo = _resolve_official_repo_dir(repo_dir)
-    model = torch.hub.load(repo, entrypoint, source="local", weights=None, **kwargs)
+    model = torch.hub.load(repo, entrypoint, source="local", pretrained=False, **kwargs)
     sd = _load_state_dict(weights)
     if sd is not None:
         model.load_state_dict(sd, strict=True)

@@ -45,6 +45,7 @@ from script.configs.normalization import IMAGENET_MEAN, IMAGENET_STD
 
 from script.configs.config_factory import get_dataset_cfg
 import timm
+from script.model.dinov3_local import load_dinov3_local
 from typing import Tuple
 
 from typing import Iterable, Sequence, Callable
@@ -90,8 +91,7 @@ def get_encoder(encoder_type: str) -> nn.Module:
     t = encoder_type.lower()  # keep encoder_type var for logging on error later
     if t == "dino": return torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
     if t.startswith("dinov3"):
-        weights = resolve_unique_model_file(encoder_type)
-        return torch.hub.load("../encoders/", t, source="local", weights=str(weights))
+        return load_dinov3_local(t, "../encoders")
     if t == "resnet50random": return models.resnet50(weights=False)
     if t == "resnet50imagenet": return models.resnet50(weights="IMAGENET1K_V2")
     # Fix logic: ensure we only match UNI variants explicitly
