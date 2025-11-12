@@ -72,9 +72,6 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
     loss_name = mc.get("loss_fn_switch")
     freeze_encoder_cfg = bool(mc.get("freeze_encoder", False))
     efl = int(mc.get("encoder_finetune_layers", 0) or 0)
-    efln = mc.get("encoder_finetune_layer_names")
-    if isinstance(efln, str):
-        efln = [efln]
     wmse_flag = str(loss_name).strip().lower() in {"wmse", "weighted mse"}
     row = {
         "encoder_type": str(enc),
@@ -86,9 +83,6 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
         "wmse": bool(wmse_flag),
         "freeze_encoder": bool(freeze_encoder_cfg),
         "encoder_finetune_layers": int(efl),
-        "encoder_finetune_layer_names": (
-            list(efln) if isinstance(efln, (list, tuple)) else []
-        ),
         "pearson_mean": _weighted_mean(pearson_vals, counts),
         "mse_mean": _weighted_mean(mse_vals, counts),
     }
@@ -603,14 +597,8 @@ class EvalPipeline:
             mc = self.config.get("model_config") or {}
             freeze_encoder_cfg = bool(mc.get("freeze_encoder", False))
             efl = int(mc.get("encoder_finetune_layers", 0) or 0)
-            efln = mc.get("encoder_finetune_layer_names")
-            if isinstance(efln, str):
-                efln = [efln]
             row["freeze_encoder"] = bool(freeze_encoder_cfg)
             row["encoder_finetune_layers"] = int(efl)
-            row["encoder_finetune_layer_names"] = (
-                list(efln) if isinstance(efln, (list, tuple)) else []
-            )
             os.makedirs(results_dir, exist_ok=True)
             pd.DataFrame([row]).to_csv(os.path.join(results_dir, "metrics_summary.csv"), index=False)
             if not bool(self.config.get("debug", False)):
