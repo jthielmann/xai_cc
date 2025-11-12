@@ -26,6 +26,7 @@ clear_all: true
 
 # Model configuration to inherit architecture/dataset details from
 dataset: coad
+gene_set: cmmn
 #meta_data_dir: metadata
 #gene_data_filename: gene_log1p.csv
 # Set one of the following to point at trained weights
