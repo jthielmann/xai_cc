@@ -313,41 +313,39 @@ class GeneExpressionRegressor(L.LightningModule):
         self.val_loss_weight_sum = 0.0
         self.y_hats, self.ys = [], []
 
-def forward(self, x):
-    freeze_context = getattr(self, "encoder_is_fully_frozen", False)
-    cm = torch.no_grad if freeze_context else nullcontext
-    with cm():
-        enc = self.encoder
-        # NEW: prefer forward_features for DINOv3; fallback to your existing extractor
-        z = enc.forward_features(x) if hasattr(enc, "forward_features") else _extract_features(enc, x)
+    def forward(self, x):
+        freeze_context = getattr(self, "encoder_is_fully_frozen", False)
+        cm = torch.no_grad if freeze_context else nullcontext
+        with cm():
+            enc = self.encoder
+            # NEW: prefer forward_features for DINOv3; fallback to your existing extractor
+            z = enc.forward_features(x) if hasattr(enc, "forward_features") else _extract_features(enc, x)
 
-    vit_pooling = str(self.config.get("vit_token_pooling", "mean_patch"))
+        vit_pooling = str(self.config.get("vit_token_pooling", "mean_patch"))
 
-    # handle DINOv3 dict outputs
-    if isinstance(z, dict):
-        if vit_pooling in {"cls", "cls_token", "global"}:
-            # single vector per image
-            z = z.get("x_features") or z.get("x_norm_clstoken") or z["x_norm_patchtokens"].mean(dim=1)
-        else:
-            # pass patch tokens to your normalizer so it can pool as configured
-            z = z.get("x_norm_patchtokens") or z.get("x_features") or z.get("x_norm_clstoken")
+        # handle DINOv3 dict outputs
+        if isinstance(z, dict):
+            if vit_pooling in {"cls", "cls_token", "global"}:
+                # single vector per image
+                z = z.get("x_features") or z.get("x_norm_clstoken") or z["x_norm_patchtokens"].mean(dim=1)
+            else:
+                # pass patch tokens to your normalizer so it can pool as configured
+                z = z.get("x_norm_patchtokens") or z.get("x_features") or z.get("x_norm_clstoken")
 
-    if isinstance(z, (list, tuple)):
-        z = z[0]
-    if hasattr(z, "last_hidden_state"):
-        z = z.last_hidden_state
+        if isinstance(z, (list, tuple)):
+            z = z[0]
+        if hasattr(z, "last_hidden_state"):
+            z = z.last_hidden_state
 
-    z = normalize_encoder_out(z, vit_pooling=vit_pooling)
-    if z.ndim != 2:
-        raise RuntimeError(f"Normalized encoder output must be 2D, got {tuple(z.shape)}")
-    if self.sae:
-        z = self.sae(z)
+        z = normalize_encoder_out(z, vit_pooling=vit_pooling)
+        if z.ndim != 2:
+            raise RuntimeError(f"Normalized encoder output must be 2D, got {tuple(z.shape)}")
+        if self.sae:
+            z = self.sae(z)
 
-    outs = [getattr(self, g)(z) for g in self.genes]
-    out = torch.cat(outs, dim=1)
-    return out
-
-
+        outs = [getattr(self, g)(z) for g in self.genes]
+        out = torch.cat(outs, dim=1)
+        return out
 
     def training_step(self, batch, batch_idx):
         loss, _, _, stats = self._step(batch)
