@@ -144,6 +144,11 @@ def gather_forward_metrics(eval_root: str, output_csv: str = None) -> str:
     if not isinstance(project, str) or not project.strip():
         raise RuntimeError("project missing in model_config (eval config)")
     wmse_flag = str(mc.get("loss_fn_switch", "")).strip().lower() in {"wmse", "weighted mse"}
+    freeze_encoder_cfg = bool(mc.get("freeze_encoder", False))
+    efl = int(mc.get("encoder_finetune_layers", 0) or 0)
+    efln = mc.get("encoder_finetune_layer_names")
+    if isinstance(efln, str):
+        efln = [efln]
 
     rows: List[Dict[str, object]] = []
     existing_df = None
@@ -191,6 +196,11 @@ def gather_forward_metrics(eval_root: str, output_csv: str = None) -> str:
             "metric_name": train_metric,
             "loss_name": loss_name,
             "wmse": bool(wmse_flag),
+            "freeze_encoder": bool(freeze_encoder_cfg),
+            "encoder_finetune_layers": int(efl),
+            "encoder_finetune_layer_names": (
+                list(efln) if isinstance(efln, (list, tuple)) else []
+            ),
             "gene_set": gene_set,
             "genes_id": genes_id,
             "pearson_mean": _weighted_mean(pearson_vals, counts),

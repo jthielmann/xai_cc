@@ -32,6 +32,7 @@ from script.evaluation.eval_helpers import (
     collect_state_dicts,
 )
 from script.evaluation.tri_plotting import plot_triptych_from_model
+from script.main_utils import compute_genes_id
 
 def update_forward_metrics_global(eval_path: str, results_csv: str, project: str,
                                   run_name: str, model_path: str, debug: bool) -> str:
@@ -69,6 +70,11 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
     if not isinstance(enc, str) or not enc.strip():
         raise RuntimeError("encoder_type missing in model config")
     loss_name = mc.get("loss_fn_switch")
+    freeze_encoder_cfg = bool(mc.get("freeze_encoder", False))
+    efl = int(mc.get("encoder_finetune_layers", 0) or 0)
+    efln = mc.get("encoder_finetune_layer_names")
+    if isinstance(efln, str):
+        efln = [efln]
     wmse_flag = str(loss_name).strip().lower() in {"wmse", "weighted mse"}
     row = {
         "encoder_type": str(enc),
@@ -78,6 +84,11 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
         "metric_name": "mse",
         "loss_name": loss_name,
         "wmse": bool(wmse_flag),
+        "freeze_encoder": bool(freeze_encoder_cfg),
+        "encoder_finetune_layers": int(efl),
+        "encoder_finetune_layer_names": (
+            list(efln) if isinstance(efln, (list, tuple)) else []
+        ),
         "pearson_mean": _weighted_mean(pearson_vals, counts),
         "mse_mean": _weighted_mean(mse_vals, counts),
     }
@@ -105,6 +116,110 @@ def update_forward_metrics_global(eval_path: str, results_csv: str, project: str
         return agg_csv
     pd.DataFrame([row]).to_csv(agg_csv, index=False)
     return agg_csv
+
+def append_geneset_predictions_global(eval_path: str, results_csv: str, cfg: Dict[str, Any],
+                                      run_name: str, epsilon: float = 0.1) -> str:
+    if not eval_path:
+        raise ValueError("eval_path required")
+    if not results_csv or not os.path.isfile(results_csv):
+        raise FileNotFoundError(f"results_csv missing: {results_csv}")
+    if bool(cfg.get("debug", False)):
+        return ""
+    p = os.path.abspath(eval_path)
+    while os.path.basename(p) != "evaluation":
+        np_ = os.path.dirname(p)
+        if np_ == p:
+            raise RuntimeError(f"cannot locate evaluation root from eval_path: {eval_path}")
+        p = np_
+    out_dir = os.path.join(p, "results", "genesets")
+    os.makedirs(out_dir, exist_ok=True)
+    out_csv_all = os.path.join(out_dir, "predictions.csv")
+
+    mc = (cfg or {}).get("model_config") or {}
+    enc = mc.get("encoder_type")
+    if not isinstance(enc, str) or not enc.strip():
+        raise RuntimeError("encoder_type missing in model config")
+    project = cfg.get("project") or mc.get("project")
+    if not project:
+        raise RuntimeError("project missing in config for predictions aggregation")
+    loss_name = mc.get("loss_fn_switch")
+    wmse_flag = str(loss_name).strip().lower() in {"wmse", "weighted mse"}
+    freeze_encoder_cfg = bool(mc.get("freeze_encoder", False))
+    efl = int(mc.get("encoder_finetune_layers", 0) or 0)
+    gene_set = str(mc.get("gene_set", "custom"))
+    genes = mc.get("genes")
+    if genes is None:
+        raise RuntimeError("model_config.genes missing; required for genes_id")
+    genes_id = compute_genes_id(genes)
+    model_path = cfg.get("model_state_path") or ""
+
+    df = pd.read_csv(results_csv)
+    if "path" not in df.columns or "patient" not in df.columns:
+        raise RuntimeError("results.csv missing required columns 'path' and 'patient'")
+    df = df.rename(columns={"path": "tile_path"})
+    df["encoder_type"] = str(enc)
+    df["loss_name"] = loss_name
+    df["project"] = str(project)
+    df["run_name"] = str(run_name)
+    df["model_path"] = str(model_path)
+    df["gene_set"] = gene_set
+    df["genes_id"] = genes_id
+    df["wmse"] = bool(wmse_flag)
+    df["freeze_encoder"] = bool(freeze_encoder_cfg)
+    df["encoder_finetune_layers"] = int(efl)
+
+    pk = [
+        "project",
+        "gene_set",
+        "model_path",
+        "run_name",
+        "patient",
+        "tile_path",
+        "wmse",
+        "encoder_finetune_layers",
+        "freeze_encoder",
+    ]
+
+    def _append_with_conflict_check(target_csv: str, batch_df: pd.DataFrame) -> str:
+        if os.path.exists(target_csv):
+            cur = pd.read_csv(target_csv)
+            shared = [c for c in cur.columns if c in batch_df.columns]
+            if not shared:
+                out = pd.concat([cur, batch_df], ignore_index=True, sort=False)
+                out.to_csv(target_csv, index=False)
+                return target_csv
+            j = cur[shared].merge(batch_df[shared], on=pk, how="inner", suffixes=("_old", "_new"))
+            num_cols = [
+                c for c in shared
+                if c not in pk and (c.startswith("pred_") or c.startswith("label_"))
+            ]
+            if num_cols and not j.empty:
+                for c in num_cols:
+                    co = f"{c}_old"
+                    cn = f"{c}_new"
+                    if co in j.columns and cn in j.columns:
+                        xo = pd.to_numeric(j[co], errors="coerce")
+                        xn = pd.to_numeric(j[cn], errors="coerce")
+                        both_nan = xo.isna() & xn.isna()
+                        diff = (xo - xn).abs()
+                        conflict = (~both_nan) & diff.gt(float(epsilon))
+                        if bool(conflict.any()):
+                            raise RuntimeError(
+                                f"predictions.csv conflict for key={pk}; column={c}; epsilon={epsilon}"
+                            )
+            cur_keys = cur.set_index(pk).index
+            new_keys = batch_df.set_index(pk).index
+            cur_keep = cur.loc[~cur_keys.isin(new_keys)].copy()
+            out = pd.concat([cur_keep, batch_df], ignore_index=True, sort=False)
+            out.to_csv(target_csv, index=False)
+            return target_csv
+        batch_df.to_csv(target_csv, index=False)
+        return target_csv
+
+    path_all = _append_with_conflict_check(out_csv_all, df)
+    gene_csv_path = os.path.join(out_dir, f"{gene_set}.csv")
+    path_set = _append_with_conflict_check(gene_csv_path, df)
+    return path_set or path_all
 
 class EvalPipeline:
     def __init__(self, config, run):
@@ -434,6 +549,10 @@ class EvalPipeline:
                     self.config["eval_path"], results_csv, project, self.run_name,
                     self.config.get("model_state_path") or self.model_name, bool(self.config.get("debug", False))
                 )
+                if not bool(self.config.get("debug", False)):
+                    append_geneset_predictions_global(
+                        self.config["eval_path"], results_csv, self.config, self.run_name, epsilon=0.1
+                    )
             else:
                 for p in patients:
                     print(f"[Eval] Starting forward_to_csv for patient={p} -> {results_dir}")
@@ -457,11 +576,19 @@ class EvalPipeline:
                             self.config["eval_path"], results_csv, project, self.run_name,
                             self.config.get("model_state_path") or self.model_name, bool(self.config.get("debug", False))
                         )
+                        if not bool(self.config.get("debug", False)):
+                            append_geneset_predictions_global(
+                                self.config["eval_path"], results_csv, self.config, self.run_name, epsilon=0.1
+                            )
                 if not per_patient:
                     update_forward_metrics_global(
                         self.config["eval_path"], results_csv, project, self.run_name,
                         self.config.get("model_state_path") or self.model_name, bool(self.config.get("debug", False))
                     )
+                    if not bool(self.config.get("debug", False)):
+                        append_geneset_predictions_global(
+                            self.config["eval_path"], results_csv, self.config, self.run_name, epsilon=0.1
+                        )
             # Write per-run metrics summary and update aggregated forward_metrics.csv (non-debug)
             if not os.path.exists(results_csv):
                 raise RuntimeError(f"results.csv not found at {results_csv}")
@@ -473,6 +600,17 @@ class EvalPipeline:
             row["pearson_mean"] = _weighted_mean(pearson_vals, counts)
             row["mse_mean"] = _weighted_mean(mse_vals, counts)
             row["wmse"] = bool(use_wmse)
+            mc = self.config.get("model_config") or {}
+            freeze_encoder_cfg = bool(mc.get("freeze_encoder", False))
+            efl = int(mc.get("encoder_finetune_layers", 0) or 0)
+            efln = mc.get("encoder_finetune_layer_names")
+            if isinstance(efln, str):
+                efln = [efln]
+            row["freeze_encoder"] = bool(freeze_encoder_cfg)
+            row["encoder_finetune_layers"] = int(efl)
+            row["encoder_finetune_layer_names"] = (
+                list(efln) if isinstance(efln, (list, tuple)) else []
+            )
             os.makedirs(results_dir, exist_ok=True)
             pd.DataFrame([row]).to_csv(os.path.join(results_dir, "metrics_summary.csv"), index=False)
             if not bool(self.config.get("debug", False)):
