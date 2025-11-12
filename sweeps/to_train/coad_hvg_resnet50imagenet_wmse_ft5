@@ -1,0 +1,71 @@
+project: coad_hvg_resnet50imagenet_wmse_ft5
+name: coad_hvg_resnet50imagenet_wmse_ft5
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  run_name:
+    value: coad_hvg_resnet50imagenet_wmse_ft5
+  group:
+    value: coad_hvg_resnet50imagenet_wmse_ft5
+  job_type:
+    value: train
+  tags:
+    value: [coad, hvg, wmse, ft5, ep32, enc-resnet50imagenet]
+  log_to_wandb:
+    value: true
+  debug:
+    value: false
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: true
+  dataset:
+    value: coad
+  gene_set:
+    value: hvg
+  split_genes_by:
+    value: 50
+  gene_data_filename:
+    value: gene_log1p.csv
+  meta_data_dir:
+    value: metadata
+  image_size:
+    value: 224
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+  encoder_type:
+    value: resnet50imagenet
+  freeze_encoder:
+    value: true
+  encoder_finetune_layers:
+    value: 5
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 256
+  epochs:
+    value: 32
+  optimizer:
+    value: adamw
+  global_fix_learning_rate:
+    value: 0.01
+  loss_fn_switch:
+    value: WMSE
+  lds_weight_csv:
+    value: ../weights/wmse/coad/best_smoothings_tuned.csv
+  lds_bin_edge_strategy:
+    value: quantile
+  lds_bin_edge_clip:
+    value: 0.0
+  lds_share_bin_edges:
+    value: true
+  precision_auto:
+    value: true
+  strategy:
+    value: "auto"
+
