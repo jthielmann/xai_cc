@@ -2,6 +2,14 @@ project: eval all
 name: eval all
 xai_pipeline: auto
 
+lrp: true
+lxt: true
+scatter: true
+diff: true
+sae: true
+umap: true
+forward_to_csv: true
+
 
 run_name: eval
 group: eval

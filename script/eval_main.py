@@ -377,6 +377,9 @@ def main() -> None:
         # out_base is computed per-run below since it depends on encoder_type
         bases_to_aggregate = set()
         boxplot_roots = set()
+        for _flag in ("forward_to_csv", "scatter", "diff", "umap", "lxt", "lrp", "log_to_wandb", "boxplots"):
+            if _flag not in raw_cfg:
+                raise KeyError(f"Missing required flag '{_flag}' in config for sweep mode")
         for rd, label in pairs:
             model_cfg_path = os.path.join(rd, "config")
             if not os.path.exists(model_cfg_path):
@@ -397,26 +400,34 @@ def main() -> None:
             rel_model = os.path.relpath(rd, models_root)
             tgt = os.path.join(out_base, rel_model)
             enc_l = enc.lower()
-            cases = ["scatter", "diff", "forward_to_csv", "umap"]
-            if "vit" in enc_l:
-                cases.append("lxt")
-            if "resnet" in enc_l:
-                cases.append("lrp")
+            requested = {
+                "forward_to_csv": bool(raw_cfg["forward_to_csv"]),
+                "scatter": bool(raw_cfg["scatter"]),
+                "diff": bool(raw_cfg["diff"]),
+                "umap": bool(raw_cfg["umap"]),
+                "lxt": (bool(raw_cfg["lxt"]) and ("vit" in enc_l)),
+                "lrp": (bool(raw_cfg["lrp"]) and ("resnet" in enc_l)),
+            }
+            cases = [k for k, v in requested.items() if v]
             # Determine which cases will actually run to avoid empty W&B runs
             planned = []
             for k in cases:
                 sub = "predictions" if k == "forward_to_csv" else k
                 case_dir = os.path.join(tgt, sub)
-                if os.path.exists(case_dir) and not bool(raw_cfg.get("clear_all", False)):
-                    continue
-                planned.append((k, case_dir))
+                if os.path.exists(case_dir):
+                    if ("clear_all" in raw_cfg) and bool(raw_cfg["clear_all"]):
+                        planned.append((k, case_dir))
+                    else:
+                        continue
+                else:
+                    planned.append((k, case_dir))
 
             per_model_run = None
             per_model_run_name = (base_run_name_cfg or f"eval_all_{gs_token}")
             token = _sanitize_token(rel_model)
             per_model_run_name = f"{per_model_run_name}__{token}"[:128]
 
-            if planned and bool(raw_cfg.get("log_to_wandb")):
+            if planned and bool(raw_cfg["log_to_wandb"]):
                 for key in ("group", "job_type", "tags"):
                     if key not in raw_cfg:
                         raise ValueError(f"Missing required parameter '{key}' in config for sweep run")
@@ -431,8 +442,11 @@ def main() -> None:
                 )
 
             for k, case_dir in planned:
-                if os.path.exists(case_dir) and bool(raw_cfg.get("clear_all", False)):
-                    shutil.rmtree(case_dir)
+                if os.path.exists(case_dir):
+                    if ("clear_all" in raw_cfg) and bool(raw_cfg["clear_all"]):
+                        shutil.rmtree(case_dir)
+                    else:
+                        continue
                 per_cfg = dict(raw_cfg)
                 per_cfg["xai_pipeline"] = "manual"
                 for kk in ("lrp", "lxt", "scatter", "diff", "sae", "umap", "forward_to_csv"):
@@ -449,9 +463,10 @@ def main() -> None:
                 per_model_run.finish()
         # Skip aggregation in debug runs: aggregator ignores '/debug/' trees
         if not debug_flag:
-            for b in sorted(bases_to_aggregate):
-                gather_forward_metrics(b)
-            if raw_cfg["boxplots"]:
+            if raw_cfg["forward_to_csv"]:
+                for b in sorted(bases_to_aggregate):
+                    gather_forward_metrics(b)
+            if raw_cfg["boxplots"] and raw_cfg["forward_to_csv"]:
                 for r in sorted(boxplot_roots):
                     _run_boxplots(r, raw_cfg)
         return

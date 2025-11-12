@@ -59,6 +59,73 @@ def load_lit_regressor(config, state_dicts: Dict[str, Any]):
 
     return model
 
+import torch
+import torch.nn as nn
+
+class FDS(nn.Module):
+    def __init__(self, feature_dim: int, edges: torch.Tensor,
+                 kernel_size: int = 5, sigma: float = 2, momentum: float = 0.9):
+        super().__init__()
+        if edges.ndim != 1 or edges.numel() < 2:
+            raise ValueError("edges must be 1D with length >=2")
+        self.feature_dim = int(feature_dim)
+        self.register_buffer("edges", edges.to(torch.float32))
+        self.num_bins = int(self.edges.numel() - 1)
+        self.momentum = float(momentum)
+
+        kernel = self._compute_gaussian_kernel(self.num_bins, int(kernel_size), float(sigma))
+        self.register_buffer("kernel", kernel)
+
+        self.register_buffer("running_mean", torch.zeros(self.num_bins, self.feature_dim))
+        self.register_buffer("running_var", torch.ones(self.num_bins, self.feature_dim))
+        self.register_buffer("smoothed_mean", torch.zeros(self.num_bins, self.feature_dim))
+        self.register_buffer("smoothed_var", torch.ones(self.num_bins, self.feature_dim))
+
+    def _compute_gaussian_kernel(self, num_bins: int, kernel_size: int, sigma: float) -> torch.Tensor:
+        idx = torch.arange(num_bins, dtype=torch.float32)
+        dist = (idx.view(-1, 1) - idx.view(1, -1)).abs()
+        k = torch.exp(-0.5 * (dist / max(sigma, 1e-6)) ** 2)
+        k[dist > float(kernel_size)] = 0
+        k = k / (k.sum(dim=1, keepdim=True) + 1e-6)
+        return k
+
+    def _get_bin_indices(self, y_gene: torch.Tensor) -> torch.Tensor:
+        idx = torch.bucketize(y_gene.to(torch.float32), self.edges, right=True) - 1
+        return idx.clamp_(0, self.num_bins - 1)
+
+    def calibrate(self, z: torch.Tensor, y_gene: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+        self.train()
+        y_bins = self._get_bin_indices(y_gene)
+        mean_run = self.running_mean[y_bins]
+        var_run = self.running_var[y_bins]
+        mean_s = self.smoothed_mean[y_bins]
+        var_s = self.smoothed_var[y_bins]
+        std_run = (var_run + eps).sqrt()
+        std_s = (var_s + eps).sqrt()
+        z_whitened = (z - mean_run) / std_run
+        return (z_whitened * std_s) + mean_s
+
+    @torch.no_grad()
+    def update_statistics(self, features: torch.Tensor, targets: torch.Tensor):
+        self.eval()
+        bins = self._get_bin_indices(targets)
+        cur_mean = torch.zeros_like(self.running_mean)
+        cur_var = torch.zeros_like(self.running_var)
+        for b in range(self.num_bins):
+            m = (bins == b)
+            if m.any():
+                f = features[m]
+                cur_mean[b] = f.mean(dim=0)
+                cur_var[b] = f.var(dim=0, unbiased=True if f.size(0) > 1 else False)
+            else:
+                cur_mean[b] = self.running_mean[b]
+                cur_var[b] = self.running_var[b]
+        cur_var = torch.nan_to_num(cur_var, nan=0.0)
+        self.running_mean.data = (self.momentum * self.running_mean) + ((1 - self.momentum) * cur_mean)
+        self.running_var.data = (self.momentum * self.running_var) + ((1 - self.momentum) * cur_var)
+        self.smoothed_mean.data = self.kernel @ self.running_mean
+        self.smoothed_var.data = self.kernel @ self.running_var
+
 # Backward compatibility alias; prefer load_lit_regressor in new code
 def load_model(config, state_dicts: Dict[str, Any]):
     return load_lit_regressor(config, state_dicts)
@@ -118,6 +185,39 @@ class GeneExpressionRegressor(L.LightningModule):
         self.gene_to_idx = {g: i for i, g in enumerate(self.genes)}
         if not self.gene_to_idx == {g: i for i, g in enumerate(self.genes)}:
             raise RuntimeError("Gene/index mapping drifted!")
+
+        self.use_fds = self.config.get("use_fds", False)
+        if self.use_fds:
+            log.info("FDS is enabled")
+            if self.encoder_is_fully_frozen:
+                raise RuntimeError(
+                    "FDS is enabled but the encoder is fully frozen. This will cause a train-test mismatch."
+                    " You must unfreeze the encoder (e.g., set 'freeze_encoder: False' or 'encoder_finetune_layers: 5')."
+                )
+
+            edges_map = self.config.get("fds_bin_edges")
+            if not isinstance(edges_map, dict):
+                raise ValueError("use_fds enabled but fds_bin_edges missing; provide LDS edges from datamodule")
+
+            self.fds_modules = nn.ModuleDict()
+            ks = int(self.config.get("fds_kernel_size", 5))
+            sigma = float(self.config.get("fds_kernel_sigma", 2))
+            momentum = float(self.config.get("fds_momentum", 0.9))
+            for gene in self.genes:
+                if gene not in edges_map:
+                    raise KeyError(f"Missing edges for gene {gene}")
+                e = torch.tensor(edges_map[gene], dtype=torch.float32)
+                self.fds_modules[gene] = FDS(
+                    feature_dim=self.encoder_dim,
+                    edges=e,
+                    kernel_size=ks,
+                    sigma=sigma,
+                    momentum=momentum,
+                )
+
+            # Accumulators for end-of-epoch update
+            self.epoch_features = []
+            self.epoch_targets = []
 
         # per-gene LRs configured below
         loss_switch = str(self.config["loss_fn_switch"]).lower()
@@ -313,7 +413,25 @@ class GeneExpressionRegressor(L.LightningModule):
         self.val_loss_weight_sum = 0.0
         self.y_hats, self.ys = [], []
 
+    def run_heads(self, z: torch.Tensor, gene_idx: int) -> torch.Tensor:
+        """Runs a single gene head on its corresponding features."""
+        gene = self.genes[gene_idx]
+        head = getattr(self, gene)
+        return head(z)
+
     def forward(self, x):
+        z = self.extract_features(x)
+
+        if self.use_fds and self.training:
+            # This should not be called during training (use _step)
+            raise RuntimeError("Use _step for training when FDS is enabled.")
+
+        outs = [getattr(self, g)(z) for g in self.genes]
+        out = torch.cat(outs, dim=1)
+        return out
+
+    def extract_features(self, x):
+        """Runs the encoder and feature normalization."""
         freeze_context = getattr(self, "encoder_is_fully_frozen", False)
         cm = torch.no_grad if freeze_context else nullcontext
         with cm():
@@ -346,9 +464,9 @@ class GeneExpressionRegressor(L.LightningModule):
         if self.sae:
             z = self.sae(z)
 
-        outs = [getattr(self, g)(z) for g in self.genes]
-        out = torch.cat(outs, dim=1)
-        return out
+        return z
+
+
 
     def training_step(self, batch, batch_idx):
         loss, _, _, stats = self._step(batch)
@@ -430,10 +548,37 @@ class GeneExpressionRegressor(L.LightningModule):
                     f"Expected batch to be tuple/list, got type {type(batch).__name__} for loss '{self.config.get('loss_fn_switch')}'."
                 )
 
-        y_hat = self(x)
+        if y.dim() == 1:
+            y = y.unsqueeze(1)
+
+        z = self.extract_features(x)
 
         if y.dim() == 1:
             y = y.unsqueeze(1)
+
+        if self.use_fds and self.training:
+            # FDS Training Path: Calibrate per-gene
+            outs = []
+            for i, gene in enumerate(self.genes):
+                y_gene = y[:, i] # Targets for this gene
+                fds_module = self.fds_modules[gene]
+
+                # Calibrate features using this gene's targets [cite: 186]
+                z_calibrated = fds_module.calibrate(z, y_gene)
+
+                # Run head on calibrated features
+                out_gene = self.run_heads(z_calibrated, i)
+                outs.append(out_gene)
+            y_hat = torch.cat(outs, dim=1)
+
+            # Store for epoch-end update [cite: 189]
+            self.epoch_features.append(z.detach())
+            self.epoch_targets.append(y.detach())
+
+        else:
+            # Original Path (Inference or FDS disabled)
+            outs = [getattr(self, g)(z) for g in self.genes]
+            y_hat = torch.cat(outs, dim=1)
 
         if y_hat.shape != y.shape:
             raise ValueError(f"Shape mismatch: {y_hat.shape} vs {y.shape}")
@@ -603,28 +748,28 @@ class GeneExpressionRegressor(L.LightningModule):
         self.test_ys.append(y.detach().float().cpu())
         return loss
 
-    def on_test_epoch_end(self):
-        if not self.test_y_hats or not self.test_ys:
-            return
-        y_hat = torch.cat(self.test_y_hats, dim=0).float()
-        y_true = torch.cat(self.test_ys, dim=0).float()
-        # Compute and log aggregate test Pearson metrics
-        per_gene_r = compute_per_gene_pearson(y_hat, y_true)
-        r_mean = float(np.nanmean(per_gene_r)) if per_gene_r else float("nan")
-        self.log("test_pearson_mean", r_mean, prog_bar=True)
-        if self.is_online and wandb.run:
-            wandb.run.summary.update({"test_pearson_mean": r_mean})
-            for g, r in zip(self.genes, per_gene_r):
-                wandb.run.summary[f"test_pearson_{g}"] = float(r)
-        # Always write test outputs if test is run; does not imply best update here
-        self._save_outputs_csv(y_hat, y_true, split="test")
-        self.test_y_hats.clear()
-        self.test_ys.clear()
-
     def on_train_epoch_end(self):
+        if self.use_fds:
+            if not self.epoch_features:
+                log.warning("FDS: No features collected in epoch, skipping stats update.")
+            else:
+                # Collate all features and targets from the epoch
+                all_features = torch.cat(self.epoch_features).to(self.device)
+                all_targets = torch.cat(self.epoch_targets).to(self.device)
+
+                for i, gene in enumerate(self.genes):
+                    fds_module = self.fds_modules[gene]
+                    y_gene = all_targets[:, i]
+
+                    # Tell the module to update its internal stats [cite: 189-191]
+                    fds_module.update_statistics(all_features, y_gene)
+
+            # Clear accumulators for next epoch
+            self.epoch_features.clear()
+            self.epoch_targets.clear()
+
         lrs = [g["lr"] for g in self.trainer.optimizers[0].param_groups]
         for idx, lr in enumerate(lrs):
-            # Logs: lr_group_0, lr_group_1, …
             self.log(f"lr_group_{idx}", lr, on_epoch=True, prog_bar=False)
 
         for g in self.genes:

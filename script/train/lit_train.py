@@ -783,6 +783,11 @@ class TrainerPipeline:
                              train=train_loader, val=val_loader,
                              test=test_loader if has_test_split else None)
             self.config["out_path"] = self.out_path
+            if self.config.get("use_fds", False):
+                edges = getattr(data_module, "_lds_bin_edges", None)
+                if edges is None:
+                    raise ValueError("use_fds requires LDS bin edges; set lds_weight_csv and lds_share_bin_edges=True")
+                self.config["fds_bin_edges"] = {k: np.asarray(v).tolist() for k, v in edges.items()}
             model = get_model(self.config)
 
             # better save than sorry, also count and log trainable param
