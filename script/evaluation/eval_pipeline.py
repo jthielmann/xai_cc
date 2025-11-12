@@ -412,7 +412,9 @@ class EvalPipeline:
         if self.config.get("forward_to_csv"):
             patients = list(self.config.get("test_samples", []))
             genes = self.config["model_config"]["genes"]
-            run_name = self.model_name
+            loss_switch = str((self.config.get("model_config") or {}).get("loss_fn_switch", "")).strip().lower()
+            use_wmse = loss_switch in {"wmse", "weighted mse"}
+            run_name = "wmse" if use_wmse else "wmse_off"
             image_size = int(self.config["model_config"].get("image_size", 224))
             results_dir = os.path.join(self.config["eval_path"], run_name, "predictions")
             results_csv = os.path.join(results_dir, "results.csv")

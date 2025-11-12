@@ -134,10 +134,15 @@ def gather_forward_metrics(eval_root: str, output_csv: str = None) -> str:
     if not output_csv:
         output_csv = os.path.join(eval_root, "forward_metrics.csv")
     cfg = _read_eval_config(eval_root)
-    enc_global = cfg.get("encoder_type") or (cfg.get("model_config") or {}).get("encoder_type")
-    if not isinstance(enc_global, str) or not enc_global.strip():
-        raise RuntimeError("encoder_type missing in eval config")
-    models_root = os.path.normpath(os.path.join("..", "models"))
+    mc = cfg.get("model_config")
+    if not isinstance(mc, dict):
+        raise RuntimeError("eval config missing nested model_config")
+    enc = mc.get("encoder_type")
+    if not isinstance(enc, str) or not enc.strip():
+        raise RuntimeError("encoder_type missing in model_config (eval config)")
+    project = mc.get("project")
+    if not isinstance(project, str) or not project.strip():
+        raise RuntimeError("project missing in model_config (eval config)")
 
     rows: List[Dict[str, object]] = []
     existing_df = None
@@ -163,17 +168,9 @@ def gather_forward_metrics(eval_root: str, output_csv: str = None) -> str:
         metrics, counts = _compute_metrics_for_csv(csv_path)
         pearson_vals = {k[len("pearson_"):]: v for k, v in metrics.items() if k.startswith("pearson_")}
         mse_vals = {k[len("mse_"):]: v for k, v in metrics.items() if k.startswith("mse_")}
-        mc = _read_model_config(models_root, rel_run_dir)
-        enc = mc.get("encoder_type") or enc_global
-        if not isinstance(enc, str) or not enc.strip():
-            raise RuntimeError("encoder_type missing in model config")
         train_metric = _infer_training_metric({"model_config": mc})
         loss_name = str(mc.get("loss_fn_switch", "")).strip().lower() or "unknown"
         train_vals = mse_vals if train_metric == "mse" else pearson_vals
-        project = mc.get("project")
-        if not isinstance(project, str) or not project.strip():
-            parts = os.path.normpath(rel_run_dir).split(os.sep)
-            project = parts[0] if parts else "project"
         gene_set = str(mc.get("gene_set", "custom"))
         genes_id = mc.get("genes_id")
         if not genes_id:
