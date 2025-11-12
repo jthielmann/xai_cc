@@ -326,11 +326,14 @@ class GeneExpressionRegressor(L.LightningModule):
         # handle DINOv3 dict outputs
         if isinstance(z, dict):
             if vit_pooling in {"cls", "cls_token", "global"}:
-                # single vector per image
-                z = z.get("x_features") or z.get("x_norm_clstoken") or z["x_norm_patchtokens"].mean(dim=1)
+                # prefer a single vector
+                z = z["x_features"] if "x_features" in z else z["x_norm_clstoken"]
             else:
-                # pass patch tokens to your normalizer so it can pool as configured
-                z = z.get("x_norm_patchtokens") or z.get("x_features") or z.get("x_norm_clstoken")
+                # patch tokens (fallback to a global vector if patches missing)
+                z = (z["x_norm_patchtokens"] if "x_norm_patchtokens" in z
+                     else (z["x_features"] if "x_features" in z
+                           else z["x_norm_clstoken"]))
+
 
         if isinstance(z, (list, tuple)):
             z = z[0]
