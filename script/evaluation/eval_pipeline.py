@@ -127,7 +127,7 @@ def append_geneset_predictions_global(eval_path: str, results_csv: str, cfg: Dic
         p = np_
     out_dir = os.path.join(p, "results", "genesets")
     os.makedirs(out_dir, exist_ok=True)
-    out_csv_all = os.path.join(out_dir, "predictions.csv")
+    
 
     mc = (cfg or {}).get("model_config") or {}
     enc = mc.get("encoder_type")
@@ -140,7 +140,10 @@ def append_geneset_predictions_global(eval_path: str, results_csv: str, cfg: Dic
     wmse_flag = str(loss_name).strip().lower() in {"wmse", "weighted mse"}
     freeze_encoder_cfg = bool(mc.get("freeze_encoder", False))
     efl = int(mc.get("encoder_finetune_layers", 0) or 0)
-    gene_set = str(mc.get("gene_set", "custom"))
+    gene_set_val = cfg.get("gene_set")
+    if not isinstance(gene_set_val, str) or not gene_set_val.strip():
+        raise RuntimeError(f"gene_set missing in eval config; cfg_keys={cfg.keys()}")
+    gene_set = gene_set_val
     genes = mc.get("genes")
     if genes is None:
         raise RuntimeError("model_config.genes missing; required for genes_id")
@@ -174,9 +177,31 @@ def append_geneset_predictions_global(eval_path: str, results_csv: str, cfg: Dic
         "freeze_encoder",
     ]
 
-    def _append_with_conflict_check(target_csv: str, batch_df: pd.DataFrame) -> str:
+    def _coerce_schema(df_in: pd.DataFrame) -> pd.DataFrame:
+        df_out = df_in.copy()
+        str_cols = [
+            "project", "gene_set", "model_path", "run_name", "patient", "tile_path",
+            "encoder_type", "loss_name", "genes_id",
+        ]
+        for c in str_cols:
+            if c in df_out.columns:
+                df_out[c] = df_out[c].astype(str)
+        if "encoder_finetune_layers" in df_out.columns:
+            df_out["encoder_finetune_layers"] = (
+                pd.to_numeric(df_out["encoder_finetune_layers"], errors="coerce").fillna(0).astype(int)
+            )
+        def _as_bool(sr: pd.Series) -> pd.Series:
+            return sr.map(lambda x: str(x).strip().lower() in {"1","true","t","yes","y"})
+        for c in ("wmse", "freeze_encoder"):
+            if c in df_out.columns:
+                df_out[c] = _as_bool(df_out[c])
+        return df_out
+
+    def _append_with_conflict_check(target_csv: str, batch_df_raw: pd.DataFrame) -> str:
+        batch_df = _coerce_schema(batch_df_raw)
         if os.path.exists(target_csv):
-            cur = pd.read_csv(target_csv)
+            cur = pd.read_csv(target_csv, low_memory=False)
+            cur = _coerce_schema(cur)
             shared = [c for c in cur.columns if c in batch_df.columns]
             if not shared:
                 out = pd.concat([cur, batch_df], ignore_index=True, sort=False)
@@ -210,10 +235,8 @@ def append_geneset_predictions_global(eval_path: str, results_csv: str, cfg: Dic
         batch_df.to_csv(target_csv, index=False)
         return target_csv
 
-    path_all = _append_with_conflict_check(out_csv_all, df)
     gene_csv_path = os.path.join(out_dir, f"{gene_set}.csv")
-    path_set = _append_with_conflict_check(gene_csv_path, df)
-    return path_set or path_all
+    return _append_with_conflict_check(gene_csv_path, df)
 
 class EvalPipeline:
     def __init__(self, config, run):

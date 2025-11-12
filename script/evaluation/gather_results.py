@@ -174,7 +174,11 @@ def gather_forward_metrics(eval_root: str, output_csv: str = None) -> str:
         train_metric = _infer_training_metric({"model_config": mc})
         loss_name = str(mc.get("loss_fn_switch", "")).strip().lower() or "unknown"
         train_vals = mse_vals if train_metric == "mse" else pearson_vals
-        gene_set = str(mc.get("gene_set", "custom"))
+        cfg_top = _read_eval_config(eval_root)
+        gene_set_val = cfg_top.get("gene_set")
+        if not isinstance(gene_set_val, str) or not gene_set_val.strip():
+            raise RuntimeError("gene_set missing in eval config")
+        gene_set = gene_set_val
         genes_id = mc.get("genes_id")
         if not genes_id:
             genes = mc.get("genes")
