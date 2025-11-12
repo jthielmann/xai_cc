@@ -22,6 +22,7 @@ log_to_wandb: false
 # evaluate every subdir containing {config,best_model.pth}.
 # When false, evaluate a single run at model_state_path.
 is_sweep: true
+clear_all: true
 
 # Model configuration to inherit architecture/dataset details from
 dataset: coad
@@ -32,4 +33,3 @@ model_state_path: hvg
 encoder_state_path: null
 gene_head_state_path: null
 sae_state_path: null
-

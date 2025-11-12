@@ -137,7 +137,7 @@ def gather_forward_metrics(eval_root: str, output_csv: str = None) -> str:
     enc_global = cfg.get("encoder_type") or (cfg.get("model_config") or {}).get("encoder_type")
     if not isinstance(enc_global, str) or not enc_global.strip():
         raise RuntimeError("encoder_type missing in eval config")
-    models_root = os.path.normpath(os.path.join(os.path.dirname(eval_root), "..", "models"))
+    models_root = os.path.normpath(os.path.join("..", "models"))
 
     rows: List[Dict[str, object]] = []
     existing_df = None

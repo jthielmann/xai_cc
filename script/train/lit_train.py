@@ -751,6 +751,9 @@ class TrainerPipeline:
     def run(self):
         seed_everything(42, workers=True)
         self._save_summary("started")
+        loss_switch = str(self.config.get("loss_fn_switch", "")).lower()
+        if loss_switch in {"wmse", "weighted mse"}:
+            self.config["use_fds"] = True
         data_module = get_data_module(self.config)
         try:
             data_module.setup("fit")

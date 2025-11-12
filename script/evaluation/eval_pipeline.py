@@ -167,6 +167,8 @@ class EvalPipeline:
 
     def _load_model(self):
         state_dicts = collect_state_dicts(self.config)
+        if isinstance(self.config.get("model_config"), dict):
+            self.config["model_config"]["use_fds"] = False
         return load_lit_regressor(self.config["model_config"], state_dicts)
 
     def _derive_model_name(self) -> str:
