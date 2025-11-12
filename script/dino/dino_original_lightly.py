@@ -18,6 +18,8 @@ from lightly.models.utils import deactivate_requires_grad, update_momentum
 from lightly.transforms.dino_transform import DINOTransform
 from lightly.utils.scheduler import cosine_schedule
 
+# Legacy example: keep Adam for historical consistency.
+
 
 class DINO(pl.LightningModule):
     def __init__(self):
