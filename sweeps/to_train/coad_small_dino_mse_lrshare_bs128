@@ -1,5 +1,5 @@
-project: coad_small_dinov3_vits16_wmse_lrshare
-name: coad_small_dinov3_vits16_wmse_lrshare
+project: coad_small_dino_mse_lrshare_bs128
+name: coad_small_dino_mse_lrshare_bs128
 method: grid
 metric:
   name: valid_loss
@@ -7,13 +7,13 @@ metric:
 
 parameters:
   run_name:
-    value: coad_small_dinov3_vits16_wmse_lrshare
+    value: coad_small_dino_mse_lrshare_bs128
   group:
     value: coad_small_lrshare
   job_type:
     value: train
   tags:
-    value: [coad, small, wmse, lrshare, enc-dinov3_vits16]
+    value: [coad, small, mse, lrshare, enc-dino, bs128]
   log_to_wandb:
     value: true
   debug:
@@ -35,12 +35,12 @@ parameters:
   image_size:
     value: 224
   batch_size:
-    value: 32
+    value: 128
   num_workers:
     value: 2
 
   encoder_type:
-    value: dinov3_vits16
+    value: dino
   freeze_encoder:
     value: false
   encoder_finetune_layers:
@@ -69,15 +69,7 @@ parameters:
     value: 0.01
 
   loss_fn_switch:
-    value: WMSE
-  lds_weight_csv:
-    value: ../weights/wmse/coad/best_smoothings_tuned.csv
-  lds_bin_edge_strategy:
-    value: quantile
-  lds_bin_edge_clip:
-    value: 0.0
-  lds_share_bin_edges:
-    value: true
+    value: MSE
 
   precision_auto:
     value: true
@@ -85,3 +77,4 @@ parameters:
     value: "auto"
   force_unique_outdir:
     value: true
+

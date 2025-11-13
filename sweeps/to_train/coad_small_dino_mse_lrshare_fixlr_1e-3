@@ -1,5 +1,5 @@
-project: coad_small_dinov3_vits16_mse_lrshare
-name: coad_small_dinov3_vits16_mse_lrshare
+project: coad_small_dino_mse_lrshare_fixlr_1e-3
+name: coad_small_dino_mse_lrshare_fixlr_1e-3
 method: grid
 metric:
   name: valid_loss
@@ -7,13 +7,13 @@ metric:
 
 parameters:
   run_name:
-    value: coad_small_dinov3_vits16_mse_lrshare
+    value: coad_small_dino_mse_lrshare_fixlr_1e-3
   group:
     value: coad_small_lrshare
   job_type:
     value: train
   tags:
-    value: [coad, small, mse, lrshare, enc-dinov3_vits16]
+    value: [coad, small, mse, lrshare, enc-dino, fixlr_1e-3]
   log_to_wandb:
     value: true
   debug:
@@ -40,7 +40,7 @@ parameters:
     value: 2
 
   encoder_type:
-    value: dinov3_vits16
+    value: dino
   freeze_encoder:
     value: false
   encoder_finetune_layers:
@@ -58,9 +58,9 @@ parameters:
 
   # LR sharing + finder
   use_lr_find:
-    value: true
+    value: false
   global_fix_learning_rate:
-    value: -1
+    value: 0.001
   lr_find_share_heads:
     value: true
   lr_find_head_strategy:
@@ -77,3 +77,4 @@ parameters:
     value: "auto"
   force_unique_outdir:
     value: true
+
