@@ -79,7 +79,8 @@ def _validate_config_and_shapes(cfg, model, loader):
         model.use_fds = False
     model.to(check_device)
     x = x.to(check_device, non_blocking=True) if torch.is_tensor(x) else x
-    y_hat = model(x)
+    with torch.no_grad():
+        y_hat = model(x)
     y_hat_shape = tuple(y_hat.shape)
 
     # restore model mode/flags/device and clear device memory
@@ -860,7 +861,7 @@ class TrainerPipeline:
                 encoder_finetune_layers=int(self.config.get("encoder_finetune_layers", 0) or 0),
                 encoder_finetune_layer_names=self.config.get("encoder_finetune_layer_names"),
             )
-            with torch.inference_mode():
+            with torch.no_grad():
                 _validate_config_and_shapes(self.config, model, train_loader)
             # learning rate tuning
             self.config.setdefault("learning_rate", 1e-3) # init learning rate
