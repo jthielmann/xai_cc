@@ -1,0 +1,79 @@
+project: coad_small_dinov3_convnext_tiny_mse_lrshare
+name: coad_small_dinov3_convnext_tiny_mse_lrshare
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  run_name:
+    value: coad_small_dinov3_convnext_tiny_mse_lrshare
+  group:
+    value: coad_small_lrshare
+  job_type:
+    value: train
+  tags:
+    value: [coad, small, mse, lrshare, enc-dinov3_convnext_tiny]
+  log_to_wandb:
+    value: true
+  debug:
+    value: false
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: true
+
+  dataset:
+    value: coad
+  gene_set:
+    value: icms2down
+  gene_data_filename:
+    value: gene_log1p.csv
+  meta_data_dir:
+    value: metadata
+
+  image_size:
+    value: 224
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+
+  encoder_type:
+    value: dinov3_convnext_tiny
+  freeze_encoder:
+    value: false
+  encoder_finetune_layers:
+    value: 0
+
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 256
+
+  epochs:
+    value: 20
+  optimizer:
+    value: adamw
+
+  # LR sharing + finder
+  use_lr_find:
+    value: true
+  global_fix_learning_rate:
+    value: -1
+  lr_find_share_heads:
+    value: true
+  lr_find_head_strategy:
+    value: first
+  encoder_lr_ratio:
+    value: 0.01
+
+  loss_fn_switch:
+    value: MSE
+
+  precision_auto:
+    value: true
+  strategy:
+    value: "auto"
+  force_unique_outdir:
+    value: true

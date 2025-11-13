@@ -462,12 +462,17 @@ class TrainerPipeline:
         gs = str(self.config.get("gene_set", "")).strip()
         base_dir = os.path.join("..", "models", gs, str(project)) if gs else os.path.join("..", "models", str(project))
 
-        # Only add a sweep subdir when running a sweep
-        subdir = "" if not self.is_sweep else self._run_name_to_dir(self.wandb_run.name)
+        # Always append a run-name-derived subdirectory for uniqueness
+        base_name = str(self.config.get("name", "run"))
+        gid = self.config.get("genes_id")
+        run_label = f"{base_name}, genes_id={gid}" if gid and "genes_id=" not in base_name else base_name
+        if self.is_online and getattr(self, "wandb_run", None) is not None and getattr(self.wandb_run, "name", None):
+            run_label = f"{run_label}, run_name={self.wandb_run.name}"
+        subdir = self._run_name_to_dir(run_label)
+        if not subdir:
+            subdir = re.sub(r"[^\w.\-]", "_", str(run_label).strip()) or "run"
 
-        # Avoid chaining when equal or empty
-        base_leaf = os.path.basename(os.path.normpath(base_dir))
-        out_path = base_dir if (not subdir or subdir == base_leaf) else os.path.join(base_dir, subdir)
+        out_path = os.path.join(base_dir, subdir)
 
         os.makedirs(out_path, exist_ok=True)
         log.info(
@@ -713,16 +718,23 @@ class TrainerPipeline:
         early_stop = self.config.get("early_stop_threshold", 4.0)
         debug = self.config.get("debug")
 
-        target_keys: List[str] = []
-        if not freeze_encoder:
-            target_keys.append("encoder")
-        for g in self.config["genes"]:
-            target_keys.append(g)
+        share_heads = bool(self.config.get("lr_find_share_heads", False))
+        head_strategy = str(self.config.get("lr_find_head_strategy", "first")).lower()
+        # encoder_lr_ratio
+        encoder_ratio = float(self.config.get("encoder_lr_ratio", 0.01))
+
+        genes: List[str] = list(self.config.get("genes", []))
+        if not isinstance(genes, list) or len(genes) == 0:
+            raise ValueError("genes empty; cannot tune learning rates")
+        if head_strategy not in {"first", "median"}:
+            raise ValueError(f"unsupported lr_find_head_strategy: {head_strategy}")
 
         if fixed_lr != -1.0:
-            return {k: fixed_lr for k in target_keys}
+            keys: List[str] = ([] if freeze_encoder else ["encoder"]) + genes
+            return {k: fixed_lr for k in keys}
         if debug:
-            return {k: 0.01 for k in target_keys}
+            keys: List[str] = ([] if freeze_encoder else ["encoder"]) + genes
+            return {k: 0.01 for k in keys}
 
         tmp_trainer = L.Trainer(
             accelerator="auto",
@@ -735,20 +747,55 @@ class TrainerPipeline:
         base_state = model.cpu().state_dict(keep_vars=True)
         orig_requires = [p.requires_grad for p in model.parameters()]
 
-        tuned_max_lrs: Dict[str, float] = {}
+        tuned_lrs: Dict[str, float] = {}
 
-        for key in target_keys:
-            model.load_state_dict(base_state)
-            for p in model.parameters():
-                p.requires_grad = False
-            for p in getattr(model, key).parameters():
-                p.requires_grad = True
+        if share_heads:
+            if head_strategy == "first":
+                ref_gene = genes[0]
+                model.load_state_dict(base_state)
+                for p in model.parameters():
+                    p.requires_grad = False
+                for p in getattr(model, ref_gene).parameters():
+                    p.requires_grad = True
+                head_lr = self.tune_component_lr(model, ref_gene, tmp_trainer, train_loader, steps, early_stop, use_lr_find)
+            else:  # median
+                per_head: list[float] = []
+                for g in genes:
+                    model.load_state_dict(base_state)
+                    for p in model.parameters():
+                        p.requires_grad = False
+                    for p in getattr(model, g).parameters():
+                        p.requires_grad = True
+                    lr_g = self.tune_component_lr(model, g, tmp_trainer, train_loader, steps, early_stop, use_lr_find)
+                    per_head.append(float(lr_g))
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                head_lr = float(np.median(np.array(per_head, dtype=float)))
 
-            tuned_max_lrs[key] = self.tune_component_lr(model, key, tmp_trainer, train_loader, steps, early_stop, use_lr_find)
+            for g in genes:
+                tuned_lrs[g] = float(head_lr)
+            if not freeze_encoder:
+                tuned_lrs["encoder"] = float(head_lr) * encoder_ratio
+        else:
+            target_keys: List[str] = []
+            if not freeze_encoder:
+                target_keys.append("encoder")
+            target_keys.extend(genes)
 
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            for key in target_keys:
+                model.load_state_dict(base_state)
+                for p in model.parameters():
+                    p.requires_grad = False
+                for p in getattr(model, key).parameters():
+                    p.requires_grad = True
+
+                tuned_lrs[key] = self.tune_component_lr(model, key, tmp_trainer, train_loader, steps, early_stop, use_lr_find)
+
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
         # restore model to train state
         model.load_state_dict(base_state)
         for p, req in zip(model.parameters(), orig_requires):
@@ -758,7 +805,7 @@ class TrainerPipeline:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         self._report_mem(f"finished tuning")
-        return tuned_max_lrs
+        return tuned_lrs
 
     def run(self):
         seed_everything(42, workers=True)

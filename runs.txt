@@ -129,6 +129,42 @@ Submit commands (to_train, even split):
 ./l40submit.sh to_train/coad_icms2down_cmmn_genes_dinov3_vitl16_hub_wmse
 ./a40submit.sh to_train/coad_icms2down_cmmn_genes_dinov3_vits16_hub
 ./l40submit.sh to_train/coad_icms2down_cmmn_genes_dinov3_vits16_hub_wmse
+
+./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_convnext_base_hub
+./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_convnext_base_hub_wmse
+./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_convnext_large_hub
+./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_convnext_large_hub_wmse
+./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vitb16_hub
+./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vitb16_hub_wmse
+./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vitl16_hub
+./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vitl16_hub_wmse
+./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vits16_hub
+./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vits16_hub_wmse
+
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_convnext_base_hub
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_convnext_base_hub_wmse
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_convnext_large_hub
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_convnext_large_hub_wmse
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vitb16_hub
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vitb16_hub_wmse
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vitl16_hub
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vitl16_hub_wmse
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vits16_hub
+./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vits16_hub_wmse
+
+./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_convnext_base_hub
+./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_convnext_base_hub_wmse
+./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_convnext_large_hub
+./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_convnext_large_hub_wmse
+./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vitb16_hub
+./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vitb16_hub_wmse
+./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vitl16_hub
+./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vitl16_hub_wmse
+./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vits16_hub
+./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vits16_hub_wmse
+
+train -------------------------------------------------
+
 ./a40submit.sh to_train/coad_icms2down_dino_wmse_ft5
 ./l40submit.sh to_train/coad_icms2down_dinov3_convnext_base_wmse_ft5
 ./a40submit.sh to_train/coad_icms2down_dinov3_convnext_large_wmse_ft5
@@ -143,64 +179,39 @@ Submit commands (to_train, even split):
 ./l40submit.sh to_train/coad_icms2down_resnet50imagenet_wmse_ft5
 ./a40submit.sh to_train/coad_icms2down_resnet50random_wmse_ft5
 ./l40submit.sh to_train/coad_icms2down_uni_wmse_ft5
-./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_convnext_base_hub
-./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_convnext_base_hub_wmse
-./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_convnext_large_hub
-./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_convnext_large_hub_wmse
-./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vitb16_hub
-./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vitb16_hub_wmse
-./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vitl16_hub
-./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vitl16_hub_wmse
-./a40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vits16_hub
-./l40submit.sh to_train/coad_icms2up_cmmn_genes_dinov3_vits16_hub_wmse
-./a40submit.sh to_train/coad_icms2up_dino_wmse_ft5
-./l40submit.sh to_train/coad_icms2up_dinov3_convnext_base_wmse_ft5
-./a40submit.sh to_train/coad_icms2up_dinov3_convnext_large_wmse_ft5
-./l40submit.sh to_train/coad_icms2up_dinov3_convnext_small_wmse_ft5
-./a40submit.sh to_train/coad_icms2up_dinov3_convnext_tiny_wmse_ft5
-./l40submit.sh to_train/coad_icms2up_dinov3_vit7b16_wmse_ft5
-./a40submit.sh to_train/coad_icms2up_dinov3_vitb16_wmse_ft5
-./l40submit.sh to_train/coad_icms2up_dinov3_vith16plus_wmse_ft5
-./a40submit.sh to_train/coad_icms2up_dinov3_vitl16_wmse_ft5
-./l40submit.sh to_train/coad_icms2up_dinov3_vits16_wmse_ft5
-./a40submit.sh to_train/coad_icms2up_dinov3_vits16plus_wmse_ft5
-./l40submit.sh to_train/coad_icms2up_resnet50imagenet_wmse_ft5
-./a40submit.sh to_train/coad_icms2up_resnet50random_wmse_ft5
-./l40submit.sh to_train/coad_icms2up_uni_wmse_ft5
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_convnext_base_hub
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_convnext_base_hub_wmse
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_convnext_large_hub
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_convnext_large_hub_wmse
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vitb16_hub
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vitb16_hub_wmse
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vitl16_hub
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vitl16_hub_wmse
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vits16_hub
-./submit.sh to_train/coad_icms3down_cmmn_genes_dinov3_vits16_hub_wmse
+
 ./submit.sh to_train/coad_icms3down_dino_wmse_ft5
 ./submit.sh to_train/coad_icms3down_dinov3_convnext_base_wmse_ft5
-./submit.sh to_train/coad_icms3down_dinov3_convnext_large_wmse_ft5
+./l40submit.sh to_train/coad_icms3down_dinov3_convnext_large_wmse_ft5
 ./submit.sh to_train/coad_icms3down_dinov3_convnext_small_wmse_ft5
 ./submit.sh to_train/coad_icms3down_dinov3_convnext_tiny_wmse_ft5
 ./submit.sh to_train/coad_icms3down_dinov3_vit7b16_wmse_ft5
-./submit.sh to_train/coad_icms3down_dinov3_vitb16_wmse_ft5
-./submit.sh to_train/coad_icms3down_dinov3_vith16plus_wmse_ft5
-./submit.sh to_train/coad_icms3down_dinov3_vitl16_wmse_ft5
+./l40submit.sh to_train/coad_icms3down_dinov3_vitb16_wmse_ft5
+./l40submit.sh to_train/coad_icms3down_dinov3_vith16plus_wmse_ft5
+./l40submit.sh to_train/coad_icms3down_dinov3_vitl16_wmse_ft5
 ./submit.sh to_train/coad_icms3down_dinov3_vits16_wmse_ft5
 ./submit.sh to_train/coad_icms3down_dinov3_vits16plus_wmse_ft5
 ./submit.sh to_train/coad_icms3down_resnet50imagenet_wmse_ft5
 ./submit.sh to_train/coad_icms3down_resnet50random_wmse_ft5
 ./submit.sh to_train/coad_icms3down_uni_wmse_ft5
-./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_convnext_base_hub
-./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_convnext_base_hub_wmse
-./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_convnext_large_hub
-./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_convnext_large_hub_wmse
-./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vitb16_hub
-./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vitb16_hub_wmse
-./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vitl16_hub
-./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vitl16_hub_wmse
-./a40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vits16_hub
-./l40submit.sh to_train/coad_icms3up_cmmn_genes_dinov3_vits16_hub_wmse
+
+done ----------------------------------------------------
+
+./submit.sh to_train/coad_icms2up_dino_wmse_ft5
+./submit.sh to_train/coad_icms2up_dinov3_convnext_base_wmse_ft5
+./l40submit.sh to_train/coad_icms2up_dinov3_convnext_large_wmse_ft5
+./submit.sh to_train/coad_icms2up_dinov3_convnext_small_wmse_ft5
+./submit.sh to_train/coad_icms2up_dinov3_convnext_tiny_wmse_ft5
+./l40submit.sh to_train/coad_icms2up_dinov3_vit7b16_wmse_ft5
+./l40submit.sh to_train/coad_icms2up_dinov3_vitb16_wmse_ft5
+./l40submit.sh to_train/coad_icms2up_dinov3_vith16plus_wmse_ft5
+./l40submit.sh to_train/coad_icms2up_dinov3_vitl16_wmse_ft5
+./submit.sh to_train/coad_icms2up_dinov3_vits16_wmse_ft5
+./submit.sh to_train/coad_icms2up_dinov3_vits16plus_wmse_ft5
+./submit.sh to_train/coad_icms2up_resnet50imagenet_wmse_ft5
+./submit.sh to_train/coad_icms2up_resnet50random_wmse_ft5
+./submit.sh to_train/coad_icms2up_uni_wmse_ft5
+
 ./a40submit.sh to_train/coad_icms3up_dino_wmse_ft5
 ./l40submit.sh to_train/coad_icms3up_dinov3_convnext_base_wmse_ft5
 ./a40submit.sh to_train/coad_icms3up_dinov3_convnext_large_wmse_ft5
@@ -217,3 +228,18 @@ Submit commands (to_train, even split):
 ./l40submit.sh to_train/coad_icms3up_uni_wmse_ft5
 
 
+
+
+
+
+---------------------------------------------------------
+
+train these
+
+
+./submit.sh to_train/coad_small_dino_mse_lrshare
+./submit.sh to_train/coad_small_dino_wmse_lrshare
+./submit.sh to_train/coad_small_dinov3_vits16_mse_lrshare
+./submit.sh to_train/coad_small_dinov3_vits16_wmse_lrshare
+./submit.sh to_train/coad_small_dinov3_convnext_tiny_mse_lrshare
+./submit.sh to_train/coad_small_dinov3_convnext_tiny_wmse_lrshare
