@@ -243,6 +243,13 @@ train these
 ./submit.sh to_train/coad_small_dinov3_vits16_wmse_lrshare
 ./submit.sh to_train/coad_small_dinov3_convnext_tiny_mse_lrshare
 ./submit.sh to_train/coad_small_dinov3_convnext_tiny_wmse_lrshare
+
+
+
+
 ./submit.sh to_train/coad_small_dino_mse_lrshare_fixlr_1e-3
 ./submit.sh to_train/coad_small_dino_mse_lrshare_headlr_median
 ./submit.sh to_train/coad_small_dino_mse_lrshare_bs128
+./submit.sh to_train/coad_small_dino_wmse_lrshare_fixlr_1e-3
+./submit.sh to_train/coad_small_dino_wmse_lrshare_headlr_median
+./submit.sh to_train/coad_small_dino_wmse_lrshare_bs128
