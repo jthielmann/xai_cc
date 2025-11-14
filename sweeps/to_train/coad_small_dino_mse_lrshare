@@ -57,7 +57,7 @@ parameters:
     value: adamw
 
   # LR sharing + finder
-use_lr_find:
+  use_lr_find:
     value: false
   global_fix_learning_rate:
     value: 0.0001
