@@ -731,8 +731,13 @@ class TrainerPipeline:
             raise ValueError(f"unsupported lr_find_head_strategy: {head_strategy}")
 
         if fixed_lr != -1.0:
-            keys: List[str] = ([] if freeze_encoder else ["encoder"]) + genes
-            return {k: fixed_lr for k in keys}
+            tuned_lrs: Dict[str, float] = {}
+            head_lr = float(fixed_lr)
+            for g in genes:
+                tuned_lrs[g] = head_lr
+            if not freeze_encoder:
+                tuned_lrs["encoder"] = head_lr * float(encoder_ratio)
+            return tuned_lrs
         if debug:
             keys: List[str] = ([] if freeze_encoder else ["encoder"]) + genes
             return {k: 0.01 for k in keys}
