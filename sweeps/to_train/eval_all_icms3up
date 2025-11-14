@@ -1,0 +1,31 @@
+project: eval all icms3up
+name: eval all icms3up
+xai_pipeline: manual
+
+lrp: true
+lxt: true
+scatter: true
+diff: true
+sae: false
+umap: true
+forward_to_csv: false
+is_sweep: true
+
+run_name: eval
+group: eval
+job_type: eval
+tags: [eval, icms3up]
+debug: false
+log_to_wandb: true
+
+dataset: coad
+meta_data_dir: metadata
+gene_data_filename: gene_log1p.csv
+model_state_path: icms3up
+encoder_state_path: null
+gene_head_state_path: null
+sae_state_path: null
+
+boxplots: false
+plot_violin: false
+
