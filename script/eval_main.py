@@ -58,6 +58,7 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("encoder_type missing; required to build eval output path")
     enc_token = _sanitize_token(enc)
     genes = (merged.get("model_config") or {}).get("genes")
+    project = merged.get("model_config").get("project")
     if not genes:
         raise ValueError("model_config.genes missing; required to build gene_set path")
     gs_token = _sanitize_token(compute_genes_id(genes))
@@ -68,7 +69,10 @@ def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     else:
         label = None
     base = os.path.join(base_root, label, gs_token, enc_token) if label else os.path.join(base_root, gs_token, enc_token)
-    eval_path = base
+    if isinstance(project, str) and project.strip():
+        eval_path = os.path.join(base, _sanitize_token(project.replace(" ", "")))
+    else:
+        raise ValueError("model_config.project missing; required for unique eval path")
     merged["eval_path"] = eval_path
     # Maintain legacy 'out_path' for downstream helpers that expect it
     merged["out_path"] = eval_path
@@ -211,7 +215,11 @@ def _run_single(raw_cfg: Dict[str, Any], run=None) -> None:
             cfg["run_name"] = original_run_name
     cfg = _prepare_cfg(cfg)
 
-    EvalPipeline(cfg, run=local_run).run()
+    pipeline = EvalPipeline(cfg, run=local_run)
+    try:
+        pipeline.run()
+    finally:
+        pipeline.cleanup()
 
     if created_run and local_run is not None:
         local_run.finish()

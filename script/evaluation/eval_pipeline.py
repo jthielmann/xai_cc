@@ -1,3 +1,4 @@
+import gc
 import os
 import hashlib
 from typing import Any, Dict
@@ -298,6 +299,19 @@ class EvalPipeline:
             test_samples = self.config.get("test_samples") or model_cfg.get("test_samples")
             if isinstance(test_samples, (list, tuple)) and len(test_samples) > 0:
                 self.config["patient"] = str(test_samples[0])
+
+    def cleanup(self):
+        model = getattr(self, "model", None)
+        if model is not None:
+            model.cpu()
+        self.model = None
+        self.config = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            ipc_collect = getattr(torch.cuda, "ipc_collect", None)
+            if callable(ipc_collect):
+                ipc_collect()
+        gc.collect()
 
     def _load_model(self):
         state_dicts = collect_state_dicts(self.config)
