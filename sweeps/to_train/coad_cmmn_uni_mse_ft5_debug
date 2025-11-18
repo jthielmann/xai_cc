@@ -1,0 +1,70 @@
+project: coad_cmmn_uni_mse_ft5_debug
+name: coad_cmmn_uni_mse_ft5_debug
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  run_name:
+    value: coad_cmmn_uni_mse_ft5_debug
+  group:
+    value: coad_cmmn_uni_mse_ft5_debug
+  job_type:
+    value: train
+  tags:
+    value: [coad, cmmn, mse, ft5, enc-uni]
+  log_to_wandb:
+    value: true
+  debug:
+    value: true
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: true
+  dataset:
+    value: coad
+  gene_set:
+    value: cmmn
+  gene_data_filename:
+    value: gene_log1p.csv
+  meta_data_dir:
+    value: metadata
+  image_size:
+    value: 224
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+  split_genes_by:
+    value: 50
+  encoder_type:
+    value: uni
+  freeze_encoder:
+    value: true
+  encoder_finetune_layers:
+    value: 5
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 256
+  epochs:
+    value: 20
+  optimizer:
+    value: adamw
+  use_lr_find:
+    value: false
+  global_fix_learning_rate:
+    value: 0.001
+  lr_find_share_heads:
+    value: true
+  lr_find_head_strategy:
+    value: first
+  encoder_lr_ratio:
+    value: 0.01
+  loss_fn_switch:
+    value: MSE
+  precision_auto:
+    value: true
+  strategy:
+    value: "auto"

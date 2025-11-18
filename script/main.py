@@ -54,10 +54,28 @@ def _apply_gene_set_inplace(cfg: Dict[str, Any]) -> None:
         raise ValueError(f"unknown gene_set {gs!r}")
     cfg["genes"] = list(_GENE_SETS[key])
 
+
+def _validate_learning_rates(cfg: Dict[str, Any]) -> None:
+    fixed = cfg.get("global_fix_learning_rate")
+    enc_lr = cfg.get("encoder_lr")
+    ratio = cfg.get("encoder_lr_ratio")
+    if enc_lr is None:
+        return
+    if ratio is not None:
+        raise ValueError(f"encoder_lr={enc_lr} conflicts with encoder_lr_ratio={ratio}; choose one")
+    if fixed is None:
+        return
+    fixed_val = float(fixed)
+    if fixed_val >= 0:
+        raise ValueError(
+            f"encoder_lr={enc_lr} conflicts with global_fix_learning_rate={fixed}; use encoder_lr_ratio"
+        )
+
 def _train(cfg: Dict[str, Any]) -> None:
     # Flatten only at handoff to training
     flat_cfg = _flatten_params(cfg)
     _apply_gene_set_inplace(flat_cfg)
+    _validate_learning_rates(flat_cfg)
 
     # Initialize W&B with flattened config
     log_to_wandb = bool(read_config_parameter(cfg, "log_to_wandb"))
