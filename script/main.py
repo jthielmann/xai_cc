@@ -48,7 +48,7 @@ def _apply_gene_set_inplace(cfg: Dict[str, Any]) -> None:
     if cfg.get("genes") is not None:
         raise ValueError("cannot set both 'genes' and 'gene_set'")
     key = str(gs).strip().lower()
-    if key == "common":
+    if key in {"common", "cmmn"}:
         return
     if key not in _GENE_SETS:
         raise ValueError(f"unknown gene_set {gs!r}")

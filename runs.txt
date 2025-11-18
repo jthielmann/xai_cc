@@ -253,3 +253,19 @@ train these
 ./submit.sh to_train/coad_small_dino_wmse_lrshare_fixlr_1e-3
 ./submit.sh to_train/coad_small_dino_wmse_lrshare_headlr_median
 ./submit.sh to_train/coad_small_dino_wmse_lrshare_bs128
+python script/main.py --config sweeps/to_train/coad_cmmn_uni_mse_heads
+python script/main.py --config sweeps/to_train/coad_cmmn_uni_mse_ft5
+python script/main.py --config sweeps/to_train/coad_cmmn_uni_mse_all
+python script/main.py --config sweeps/to_train/coad_cmmn_uni_wmse_heads
+python script/main.py --config sweeps/to_train/coad_cmmn_dino_mse_heads
+python script/main.py --config sweeps/to_train/coad_cmmn_dino_mse_ft5
+python script/main.py --config sweeps/to_train/coad_cmmn_dino_mse_all
+python script/main.py --config sweeps/to_train/coad_cmmn_dino_wmse_heads
+python script/main.py --config sweeps/to_train/coad_cmmn_uni_mse_heads_debug
+python script/main.py --config sweeps/to_train/coad_cmmn_uni_mse_ft5_debug
+python script/main.py --config sweeps/to_train/coad_cmmn_uni_mse_all_debug
+python script/main.py --config sweeps/to_train/coad_cmmn_uni_wmse_heads_debug
+python script/main.py --config sweeps/to_train/coad_cmmn_dino_mse_heads_debug
+python script/main.py --config sweeps/to_train/coad_cmmn_dino_mse_ft5_debug
+python script/main.py --config sweeps/to_train/coad_cmmn_dino_mse_all_debug
+python script/main.py --config sweeps/to_train/coad_cmmn_dino_wmse_heads_debug
