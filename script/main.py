@@ -64,6 +64,28 @@ def _validate_learning_rates(cfg: Dict[str, Any]) -> None:
     has_encoder_lr = "encoder_lr" in cfg
     enc_lr = cfg.get("encoder_lr") if has_encoder_lr else None
     ratio = cfg.get("encoder_lr_ratio")
+    raw_finetune_layers = cfg.get("encoder_finetune_layers")
+    if isinstance(raw_finetune_layers, str):
+        raw_finetune_layers = raw_finetune_layers.strip()
+    if raw_finetune_layers in (None, ""):
+        finetune_layers = 0
+    else:
+        try:
+            finetune_layers = int(raw_finetune_layers)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"encoder_finetune_layers must be an integer >= 0; got {raw_finetune_layers!r}"
+            )
+        if finetune_layers < 0:
+            raise ValueError(
+                f"encoder_finetune_layers must be an integer >= 0; got {raw_finetune_layers!r}"
+            )
+    layer_name_overrides = cfg.get("encoder_finetune_layer_names")
+    if isinstance(layer_name_overrides, str):
+        has_layer_name_overrides = bool(layer_name_overrides.strip())
+    else:
+        has_layer_name_overrides = bool(layer_name_overrides)
+    partial_finetune = finetune_layers > 0 or has_layer_name_overrides
     if ratio is not None:
         ratio_val = float(ratio)
         if ratio_val <= 0:
@@ -102,14 +124,19 @@ def _validate_learning_rates(cfg: Dict[str, Any]) -> None:
     head_val = float(head_lr)
     if head_val <= 0:
         raise ValueError(f"head_lr must be positive; got {head_lr}")
-    if not freeze_encoder:
+    encoder_requires_lr = (not freeze_encoder) or partial_finetune
+    if encoder_requires_lr:
         if not has_encoder_lr:
+            if freeze_encoder and partial_finetune:
+                raise ValueError(
+                    "encoder_lr missing while freeze_encoder=True and encoder finetuning is requested"
+                )
             raise ValueError("encoder_lr missing while encoder is trainable and enable_lr_tuning=False")
         enc_val = float(enc_lr)
         if enc_val <= 0:
             raise ValueError(f"encoder_lr must be positive; got {enc_lr}")
-    if has_encoder_lr and freeze_encoder:
-        raise ValueError("encoder_lr provided but freeze_encoder=True; remove one of them")
+    elif has_encoder_lr:
+        raise ValueError("encoder_lr provided but freeze_encoder=True with no encoder finetuning")
     if has_encoder_lr and ratio is not None:
         raise ValueError(
             f"encoder_lr={enc_lr} conflicts with encoder_lr_ratio={ratio}; choose one"
@@ -364,6 +391,8 @@ def main():
             sweep_id = wandb.sweep(sweep_config, project=project)
             with open(sweep_id_file, "w") as f:
                 f.write(sweep_id)
+            if debug:
+                print(f"[debug] stored sweep id at {os.path.abspath(sweep_id_file)}")
         wandb.agent(sweep_id, function=_sweep_run, project=project)
     else:
         _train(raw_cfg)
