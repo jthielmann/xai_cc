@@ -1,0 +1,70 @@
+project: hvg_resnet50random_mse_gene_heads
+name: hvg_resnet50random_mse_gene_heads
+method: grid
+metric:
+  name: valid_loss
+  goal: minimize
+
+parameters:
+  run_name:
+    value: hvg_resnet50random_mse_gene_heads
+  group:
+    value: hvg_resnet50random_mse_gene_heads
+  job_type:
+    value: train
+  tags:
+    value: [coad, hvg, mse, gene_heads, enc-resnet50random]
+  log_to_wandb:
+    value: true
+  debug:
+    value: false
+  use_early_stopping:
+    value: true
+  generate_scatters:
+    value: true
+  dataset:
+    value: coad
+  gene_set:
+    value: hvg
+  gene_data_filename:
+    value: gene_log1p.csv
+  meta_data_dir:
+    value: metadata
+  image_size:
+    value: 224
+  batch_size:
+    value: 32
+  num_workers:
+    value: 2
+  split_genes_by:
+    value: 50
+  encoder_type:
+    value: resnet50random
+  freeze_encoder:
+    value: true
+  encoder_finetune_layers:
+    value: 0
+  one_linear_out_layer:
+    value: false
+  middle_layer_features:
+    value: 256
+  epochs:
+    value: 20
+  optimizer:
+    value: adamw
+  use_lr_find:
+    value: false
+  lr_find_share_heads:
+    value: true
+  lr_find_head_strategy:
+    value: first
+  enable_lr_tuning:
+    value: false
+  head_lr:
+    value: 0.001
+  encoder_lr:
+    value: 0
+  loss_fn_switch:
+    value: MSE
+  strategy:
+    value: "auto"

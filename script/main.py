@@ -56,19 +56,63 @@ def _apply_gene_set_inplace(cfg: Dict[str, Any]) -> None:
 
 
 def _validate_learning_rates(cfg: Dict[str, Any]) -> None:
-    fixed = cfg.get("global_fix_learning_rate")
-    enc_lr = cfg.get("encoder_lr")
+    fixed_raw = cfg.get("global_fix_learning_rate")
+    freeze_encoder = bool(cfg.get("freeze_encoder"))
+    allow_tuning = bool(cfg.get("enable_lr_tuning"))
+    has_head_lr = "head_lr" in cfg
+    head_lr = cfg.get("head_lr") if has_head_lr else None
+    has_encoder_lr = "encoder_lr" in cfg
+    enc_lr = cfg.get("encoder_lr") if has_encoder_lr else None
     ratio = cfg.get("encoder_lr_ratio")
-    if enc_lr is None:
-        return
     if ratio is not None:
-        raise ValueError(f"encoder_lr={enc_lr} conflicts with encoder_lr_ratio={ratio}; choose one")
-    if fixed is None:
+        ratio_val = float(ratio)
+        if ratio_val <= 0:
+            raise ValueError(f"encoder_lr_ratio must be positive; got {ratio}")
+    if fixed_raw is not None:
+        fixed = float(fixed_raw)
+        if fixed <= 0:
+            raise ValueError(f"global_fix_learning_rate must be positive; got {fixed_raw}")
+        if allow_tuning:
+            raise ValueError("global_fix_learning_rate conflicts with enable_lr_tuning=True")
+        conflicts = []
+        if has_head_lr:
+            conflicts.append("head_lr")
+        if has_encoder_lr:
+            conflicts.append("encoder_lr")
+        if ratio is not None:
+            conflicts.append("encoder_lr_ratio")
+        if freeze_encoder:
+            raise ValueError(
+                f"global_fix_learning_rate={fixed} conflicts with freeze_encoder=True; remove one"
+            )
+        if conflicts:
+            joined = ", ".join(conflicts)
+            raise ValueError(
+                f"global_fix_learning_rate={fixed} conflicts with {joined}; remove those overrides"
+            )
         return
-    fixed_val = float(fixed)
-    if fixed_val >= 0:
+    if allow_tuning:
+        if has_head_lr:
+            raise ValueError("enable_lr_tuning=True conflicts with explicit head_lr override")
+        if has_encoder_lr:
+            raise ValueError("enable_lr_tuning=True conflicts with explicit encoder_lr override")
+        return
+    if not has_head_lr:
+        raise ValueError("head_lr missing while enable_lr_tuning=False")
+    head_val = float(head_lr)
+    if head_val <= 0:
+        raise ValueError(f"head_lr must be positive; got {head_lr}")
+    if not freeze_encoder:
+        if not has_encoder_lr:
+            raise ValueError("encoder_lr missing while encoder is trainable and enable_lr_tuning=False")
+        enc_val = float(enc_lr)
+        if enc_val <= 0:
+            raise ValueError(f"encoder_lr must be positive; got {enc_lr}")
+    if has_encoder_lr and freeze_encoder:
+        raise ValueError("encoder_lr provided but freeze_encoder=True; remove one of them")
+    if has_encoder_lr and ratio is not None:
         raise ValueError(
-            f"encoder_lr={enc_lr} conflicts with global_fix_learning_rate={fixed}; use encoder_lr_ratio"
+            f"encoder_lr={enc_lr} conflicts with encoder_lr_ratio={ratio}; choose one"
         )
 
 def _train(cfg: Dict[str, Any]) -> None:

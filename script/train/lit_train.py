@@ -1,6 +1,7 @@
 # lit_training.py: Defines the core training pipeline and utilities for
 # setting up, running, and summarizing model training with Lightning and W&B.
 import gc
+import math
 # Standard library imports
 import os
 import json
@@ -20,7 +21,7 @@ from wandb.wandb_run import Run
 from typing import cast, Any
 import re
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -36,6 +37,7 @@ import os, json, pandas as pd
 from collections import Counter
 from script.configs.normalization import resolve_norm
 
+PATIENCE_EPOCH_FRACTION = 0.15
 
 @contextmanager
 def _temp_cwd(path):
@@ -486,6 +488,7 @@ class TrainerPipeline:
         return out_path
 
     def _create_trainer(self) -> L.Trainer:
+        epochs = self.config.get("epochs")
         profiler = None
         if self.config.get("do_profile", False):
             profiler = PyTorchProfiler(
@@ -497,12 +500,13 @@ class TrainerPipeline:
                 )
             )
 
+        patience = math.ceil(epochs * PATIENCE_EPOCH_FRACTION)
         callbacks = []
         if self.config.get("use_early_stopping", False):
             callbacks.append(EarlyStopping(
                     monitor=f"val_{self.config['loss_fn_switch']}",
                     mode="min",
-                    patience=self.config.get("patience", 10)
+                    patience=patience
                 ))
         if self.config.get("monitorLr", False):
             callbacks.append(LearningRateMonitor(logging_interval="step"))
@@ -519,7 +523,7 @@ class TrainerPipeline:
             strategy = "auto"
         precision = _choose_precision()
         trainer = L.Trainer(
-            max_epochs=self.config["epochs"] if not self.config.get("debug", False) else 2,
+            max_epochs=epochs if not self.config.get("debug", False) else 2,
             logger=self.logger,
             log_every_n_steps=self.config.get("log_every_n_steps", 1),
             enable_checkpointing=self.config.get("enable_checkpointing", False),
@@ -707,11 +711,36 @@ class TrainerPipeline:
         _save_spatial_parquets(spatial_ds.df, self.config["genes"], self.out_path)
 
 
+    def _fixed_lr_schedule(self) -> Optional[Dict[str, float]]:
+        fixed = self.config.get("global_fix_learning_rate")
+        if fixed is None:
+            return None
+        fixed_value = float(fixed)
+        genes: List[str] = list(self.config.get("genes", []))
+        tuned: Dict[str, float] = {g: fixed_value for g in genes}
+        if not bool(self.config.get("freeze_encoder", False)):
+            tuned["encoder"] = fixed_value
+        return tuned
+
+    def _manual_learning_rates(self) -> Optional[Dict[str, float]]:
+        head = self.config.get("head_lr")
+        if head is None:
+            return None
+        head_val = float(head)
+        genes: List[str] = list(self.config.get("genes", []))
+        tuned: Dict[str, float] = {g: head_val for g in genes}
+        if bool(self.config.get("freeze_encoder", False)):
+            return tuned
+        encoder = self.config.get("encoder_lr")
+        if encoder is None:
+            raise ValueError("head_lr override requires encoder_lr when encoder is trainable")
+        tuned["encoder"] = float(encoder)
+        return tuned
+
     def tune_learning_rate(
             self,
             model: L.LightningModule,
             train_loader: torch.utils.data.DataLoader,
-            fixed_lr: float = -1,
             use_lr_find: bool = True
     ) -> Dict[str, float]:
         freeze_encoder = bool(self.config.get("freeze_encoder", False))
@@ -730,14 +759,6 @@ class TrainerPipeline:
         if head_strategy not in {"first", "median"}:
             raise ValueError(f"unsupported lr_find_head_strategy: {head_strategy}")
 
-        if fixed_lr != -1.0:
-            tuned_lrs: Dict[str, float] = {}
-            head_lr = float(fixed_lr)
-            for g in genes:
-                tuned_lrs[g] = head_lr
-            if not freeze_encoder:
-                tuned_lrs["encoder"] = head_lr * float(encoder_ratio)
-            return tuned_lrs
         if debug:
             keys: List[str] = ([] if freeze_encoder else ["encoder"]) + genes
             return {k: 0.01 for k in keys}
@@ -872,10 +893,18 @@ class TrainerPipeline:
             self.config.setdefault("learning_rate", 1e-3) # init learning rate
 
             # store all results here
-            fixed = self.config.get("global_fix_learning_rate", -1)
             use_lr_find = self.config.get("use_lr_find", False)
-            # build lr dict from either tuning or fixed if provided
-            lrs = self.tune_learning_rate(model, train_loader, fixed, use_lr_find)
+            fixed_lrs = self._fixed_lr_schedule()
+            enable_tuning = bool(self.config.get("enable_lr_tuning", False))
+            if fixed_lrs is not None:
+                lrs = fixed_lrs
+            elif enable_tuning:
+                lrs = self.tune_learning_rate(model, train_loader, use_lr_find)
+            else:
+                manual_lrs = self._manual_learning_rates()
+                if manual_lrs is None:
+                    raise ValueError("head_lr (and encoder_lr when unfrozen) required unless enable_lr_tuning=True")
+                lrs = manual_lrs
 
             log.info("Tuned learning rates: %s", lrs)
             model.update_lr(lrs)
