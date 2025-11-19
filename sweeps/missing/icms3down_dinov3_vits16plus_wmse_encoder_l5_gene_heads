@@ -39,7 +39,7 @@ parameters:
   split_genes_by:
     value: 50
   encoder_type:
-    value: dinov3_vits16plus
+    values: [dinov3_vits16plus]
   freeze_encoder:
     value: true
   encoder_finetune_layers:

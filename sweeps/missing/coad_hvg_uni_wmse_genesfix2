@@ -39,7 +39,7 @@ parameters:
   split_genes_by:
     value: 100
   encoder_type:
-    value: uni
+    values: [uni]
   freeze_encoder:
     value: true
   encoder_finetune_layers:

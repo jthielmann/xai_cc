@@ -39,7 +39,7 @@ parameters:
   split_genes_by:
     value: 50
   encoder_type:
-    value: resnet50random
+    values: [resnet50random]
   freeze_encoder:
     value: true
   encoder_finetune_layers:

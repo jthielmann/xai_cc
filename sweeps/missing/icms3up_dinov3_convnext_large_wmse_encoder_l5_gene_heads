@@ -39,7 +39,7 @@ parameters:
   split_genes_by:
     value: 50
   encoder_type:
-    value: dinov3_convnext_large
+    values: [dinov3_convnext_large]
   freeze_encoder:
     value: true
   encoder_finetune_layers:
