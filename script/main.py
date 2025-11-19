@@ -209,7 +209,7 @@ def _resolve_config_path(name: str) -> str:
     if os.path.isfile(name):
         return name
     # search common config roots
-    roots = ["../sweeps/configs", "../sweeps/to_train"]
+    roots = ["../sweeps/configs", "../sweeps/to_train", "../sweeps/missing"]
     for root in roots:
         cand = os.path.join(root, name)
         if os.path.isfile(cand):
@@ -307,6 +307,34 @@ def _flatten_params(raw: Dict[str, Any]) -> Dict[str, Any]:
         cfg[pk] = pv["value"]
     return cfg
 
+def _count_gene_chunks_for_split(raw_cfg: Dict[str, Any]) -> int:
+    split_raw = read_config_parameter(raw_cfg, "split_genes_by")
+    if split_raw is None:
+        return 0
+    chunk = int(split_raw)
+    if chunk <= 0:
+        return 0
+    genes_val = read_config_parameter(raw_cfg, "genes")
+    if isinstance(genes_val, list):
+        if genes_val and isinstance(genes_val[0], list):
+            return len(genes_val)
+        flat = [str(g) for g in genes_val if str(g).strip() != ""]
+        if not flat:
+            return 0
+        return (len(flat) + chunk - 1) // chunk
+    base_fixed = _flatten_base_fixed(raw_cfg)
+    base_fixed.update(get_dataset_cfg(raw_cfg))
+    base_fixed["split_genes_by"] = chunk
+    cfg_for_genes = dict(base_fixed)
+    prepare_gene_list(cfg_for_genes)
+    chunks = cfg_for_genes.get("gene_chunks")
+    if isinstance(chunks, list):
+        return len(chunks)
+    genes = cfg_for_genes.get("genes")
+    if isinstance(genes, list) and genes and isinstance(genes[0], list):
+        return len(genes)
+    return 0
+
 def _build_sweep_config(raw_cfg: Dict[str, Any], config_basename: str = None) -> Dict[str, Any]:
     """Build a W&B sweep spec from a raw config with a 'parameters' section."""
     params_dict = (raw_cfg.get("parameters", {})) if isinstance(raw_cfg, dict) else {}
@@ -351,7 +379,9 @@ def _has_sweep_params(config: Dict[str, Any]) -> bool:
     params = config.get("parameters", {}) if isinstance(config, dict) else {}
     if not isinstance(params, dict):
         return False
-    return any(isinstance(v, dict) and ("values" in v or "distribution" in v) for v in params.values())
+    if any(isinstance(v, dict) and ("values" in v or "distribution" in v) for v in params.values()):
+        return True
+    return _count_gene_chunks_for_split(config) > 1
 
 def main():
     args = parse_args()
