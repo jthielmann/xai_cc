@@ -1,0 +1,31 @@
+project: eval coad_small_dino_wmse_lrshare_fixlr_1e-3
+name: eval coad_small_dino_wmse_lrshare_fixlr_1e-3
+xai_pipeline: manual
+
+lrp: true
+lxt: true
+scatter: true
+diff: true
+sae: false
+umap: true
+forward_to_csv: false
+
+run_name: eval_coad_small_dino_wmse_lrshare_fixlr_1e-3
+group: eval
+job_type: eval
+tags: [eval, icms2down, coad_small_dino_wmse_lrshare_fixlr_1e-3]
+debug: false
+log_to_wandb: true
+
+is_sweep: true
+
+dataset: coad
+meta_data_dir: metadata
+gene_data_filename: gene_log1p.csv
+model_state_path: ../models/icms2down/coad_small_dino_wmse_lrshare_fixlr_1e-3
+encoder_state_path: null
+gene_head_state_path: null
+sae_state_path: null
+
+boxplots: false
+plot_violin: false

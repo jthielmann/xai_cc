@@ -1,0 +1,31 @@
+project: eval coad_hvg_uni_wmse_genesfix2
+name: eval coad_hvg_uni_wmse_genesfix2
+xai_pipeline: manual
+
+lrp: true
+lxt: true
+scatter: true
+diff: true
+sae: false
+umap: true
+forward_to_csv: false
+
+run_name: eval_coad_hvg_uni_wmse_genesfix2
+group: eval
+job_type: eval
+tags: [eval, hvg, coad_hvg_uni_wmse_genesfix2]
+debug: false
+log_to_wandb: true
+
+is_sweep: true
+
+dataset: coad
+meta_data_dir: metadata
+gene_data_filename: gene_log1p.csv
+model_state_path: ../models/hvg/coad_hvg_uni_wmse_genesfix2
+encoder_state_path: null
+gene_head_state_path: null
+sae_state_path: null
+
+boxplots: false
+plot_violin: false
