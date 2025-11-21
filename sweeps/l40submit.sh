@@ -47,7 +47,7 @@ cat > "$tmp" <<EOF
 #SBATCH --gres=gpu:l40:1
 #SBATCH --cpus-per-gpu=4
 #SBATCH --mem=128G
-#SBATCH --time=96:00:00
+#SBATCH --time=6-00:00:00
 
 echo "[\$(date)] starting run on \$(hostname) — job: \${SLURM_JOB_NAME} (\${SLURM_JOB_ID})"
 mkdir -p logs
