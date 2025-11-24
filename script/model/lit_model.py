@@ -789,7 +789,7 @@ class GeneExpressionRegressor(L.LightningModule):
         else:
             project = self.config.get("project", "project")
             csv_paths = [
-                os.path.join(results_root, "all.csv"),
+                # os.path.join(results_root, "all.csv"),
                 os.path.join(results_root, project, "results.csv"),
             ]
 
