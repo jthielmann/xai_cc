@@ -145,7 +145,9 @@ def build_config_columns(config: Dict[str, Any], tuned_lrs: Dict[str, Any] = Non
 
 def append_row_with_schema(csv_path: str, row: Dict[str, Any]) -> None:
     df_new = pd.DataFrame([row])
-    if os.path.exists(csv_path):
+    file_exists = os.path.exists(csv_path)
+    file_empty = file_exists and os.path.getsize(csv_path) == 0
+    if file_exists and not file_empty:
         df_old = pd.read_csv(csv_path)
         all_cols = list(dict.fromkeys(list(df_old.columns) + list(df_new.columns)))
         df_old = df_old.reindex(columns=all_cols)

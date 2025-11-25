@@ -4,9 +4,9 @@ set -euo pipefail
 n="$1"
 config="$2"
 
-./submit.sh --config "$config"
+./submit.sh "$config"
 sleep 120
 for ((i = 2; i <= n; i++)); do
 
-  ./submit.sh --config "$config"
+  ./submit.sh "$config"
 done
