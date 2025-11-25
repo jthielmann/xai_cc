@@ -43,7 +43,7 @@ parameters:
   freeze_encoder:
     value: true
   encoder_finetune_layers:
-    value: 0
+    value: 5
   one_linear_out_layer:
     value: false
   middle_layer_features:
