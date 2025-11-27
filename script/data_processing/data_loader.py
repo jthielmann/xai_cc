@@ -79,44 +79,23 @@ class STDataset(Dataset):
         self.return_floats = return_floats
         self.return_patient_and_tilepath = return_patient_and_tilepath
 
-        # Determine gene columns explicitly (stable order)
         if genes is None:
-            # auto-detect genes = all numeric columns except 'tile' and *_lds_w
-            candidates = []
-            for c in self.df.columns:
-                if _is_meta_gene_column(c) or str(c).endswith("_lds_w"):
-                    continue
-                if _is_unnamed_column(c):
-                    continue
-                # keep only numeric columns
-                if pd.api.types.is_numeric_dtype(self.df[c]):
-                    candidates.append(c)
-
-            if not candidates:
-                raise ValueError("Could not infer gene columns; please pass `genes`.")
-
-            if gene_list_index and gene_list_index > 0:
-                if split_genes_by is not None and split_genes_by > 0:
-                    k = int(split_genes_by)
-                    if k <= 0:
-                        raise ValueError("split_genes_by must be a positive integer.")
-                    chunks = [candidates[i:i + k] for i in range(0, len(candidates), k)]
-                    if gene_list_index >= len(chunks):
-                        raise IndexError(f"gene_list_index={gene_list_index} exceeds number of chunks={len(chunks)}.")
-                    candidates = chunks[gene_list_index]
-            self.genes = list(candidates)
-        else:
-            # Sanitize provided list: drop any accidental Unnamed/blank entries
-            genes = [
-                g for g in genes
-                if not _is_unnamed_column(g) and not _is_meta_gene_column(g)
-            ]
-            if not genes:
-                raise ValueError("No valid gene columns after filtering out unnamed/blank entries.")
-            missing = [g for g in genes if g not in self.df.columns]
-            if missing:
-                raise ValueError(f"Genes missing in DataFrame: {missing}")
-            self.genes = list(genes)
+            raise ValueError("genes must be provided")
+        if isinstance(genes, str):
+            raise ValueError("genes must be a list of gene names, not a string")
+        genes = list(genes)
+        if not genes:
+            raise ValueError("genes list is empty after resolution")
+        genes = [
+            g for g in genes
+            if not _is_unnamed_column(g) and not _is_meta_gene_column(g)
+        ]
+        if not genes:
+            raise ValueError("No valid gene columns after filtering out unnamed/blank entries.")
+        missing = [g for g in genes if g not in self.df.columns]
+        if missing:
+            raise ValueError(f"Genes missing in DataFrame: {missing}")
+        self.genes = list(genes)
 
         # Optional per-gene weights: try to read a vector w[g] per sample
         self.use_weights = use_weights
@@ -348,6 +327,13 @@ def get_base_dataset(
     precomputed_edges: Dict[str, np.ndarray] = None,
     return_edges: bool = False,
 ) :
+    if genes is None:
+        raise ValueError("genes must be provided")
+    if isinstance(genes, str):
+        raise ValueError("genes must be a list of gene names, not a string")
+    genes = list(genes)
+    if not genes:
+        raise ValueError("genes list is empty")
     if lds_smoothing_csv is not None and genes is None:
         raise RuntimeError(f"lds_smoothing_csv is not None ({lds_smoothing_csv}) and genes is None")
     # normalize meta data directory token (support 'meta_data', '/meta_data', 'meta_data/')

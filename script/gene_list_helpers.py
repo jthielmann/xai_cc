@@ -150,7 +150,7 @@ def prepare_gene_list(cfg: Dict[str, Any]) -> List[List[str]]:
         cfg["gene_chunks"] = [base_genes]
 
     cfg["n_gene_chunks"] = len(cfg["gene_chunks"])
-    return cfg["genes"]
+    return cfg["gene_chunks"]
 
 
 def get_active_chunk_idx(cfg: Dict[str, Any], chunk: List[str] = None) -> int:
