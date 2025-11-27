@@ -71,8 +71,10 @@ def resolve_unique_model_file(
         "dinov3_vits16plus": "dinov3_vits16plus_pretrain_lvd1689m-4057cbaa.pth",
         "dinov3_vits16": "dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
     }
+    alias = {"dinov3": "dinov3_vitb16"}
 
     t = (encoder_type or "").strip().lower()
+    t = alias.get(t, t)
 
     if t in DINOv3_FILEMAP:
         base = Path(encoders_dir)

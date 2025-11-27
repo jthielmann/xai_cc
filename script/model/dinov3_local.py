@@ -18,6 +18,8 @@ _ALLOWED: List[str] = [
     "dinov3_convnext_large",
 ]
 
+_ALIAS = {"dinov3": "dinov3_vitb16"}
+
 
 def available_dinov3_models() -> List[str]:
     return list(_ALLOWED)
@@ -27,6 +29,7 @@ def _normalize_name(name: str) -> str:
     if not isinstance(name, str) or not name:
         raise ValueError(f"invalid name: {name}")
     key = name.strip().lower()
+    key = _ALIAS.get(key, key)
     if key not in _ALLOWED:
         raise ValueError(
             f"unknown model '{name}'. expected one of: {', '.join(_ALLOWED)}"
