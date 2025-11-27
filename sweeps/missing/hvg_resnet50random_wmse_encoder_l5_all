@@ -1,5 +1,5 @@
-project: hvg_resnet50random_wmse_encoder_l5_gene_heads
-name: hvg_resnet50random_wmse_encoder_l5_gene_heads
+project: hvg_resnet50random_wmse_encoder_l5_all
+name: hvg_resnet50random_wmse_encoder_l5_all
 method: grid
 metric:
   name: valid_loss
@@ -7,13 +7,13 @@ metric:
 
 parameters:
   run_name:
-    value: hvg_resnet50random_wmse_encoder_l5_gene_heads
+    value: hvg_resnet50random_wmse_encoder_l5_all
   group:
-    value: hvg_resnet50random_wmse_encoder_l5_gene_heads
+    value: hvg_resnet50random_wmse_encoder_l5_all
   job_type:
     value: train
   tags:
-    value: [coad, hvg, wmse, encoder_l5_+_gene_heads, enc-resnet50random]
+    value: [coad, hvg, wmse, all, enc-resnet50random]
   log_to_wandb:
     value: true
   debug:
@@ -41,7 +41,7 @@ parameters:
   encoder_type:
     values: [resnet50random]
   freeze_encoder:
-    value: true
+    value: false
   encoder_finetune_layers:
     value: 5
   one_linear_out_layer:
@@ -49,7 +49,7 @@ parameters:
   middle_layer_features:
     value: 256
   epochs:
-    value: 32
+    value: 20
   optimizer:
     value: adamw
   use_lr_find:
@@ -63,7 +63,7 @@ parameters:
   head_lr:
     value: 0.001
   encoder_lr:
-    value: 0.00001
+    value: 0.001
   loss_fn_switch:
     value: WMSE
   lds_weight_csv:

@@ -6,6 +6,7 @@ import torch
 
 # project imports
 from script.configs.dataset_config import get_dataset_cfg
+from script.gene_list_helpers import _is_meta_gene_column
 from script.model.model_factory import get_encoder, infer_encoder_out_dim
 
 def _bytes2gb(x: int) -> float: return x / (1024**3)
@@ -62,8 +63,12 @@ def main():
         gene_data_filename = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
         fp = os.path.join(data_dir, patients[0], meta_data_dir.lstrip("/"), gene_data_filename)
         df = pd.read_csv(fp, nrows=1)
-        candidates = [c for c in df.columns if
-                      c != "tile" and not str(c).endswith("_lds_w") and pd.api.types.is_numeric_dtype(df[c])]
+        candidates = [
+            c for c in df.columns
+            if not _is_meta_gene_column(c)
+            and not str(c).endswith("_lds_w")
+            and pd.api.types.is_numeric_dtype(df[c])
+        ]
         if not candidates:
             raise ValueError("Could not infer gene columns from dataset")
         genes = set(candidates)

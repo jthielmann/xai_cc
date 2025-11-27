@@ -33,7 +33,7 @@ _BASE_CRC_BASE: Dict[str, Any] = {
 }
 
 _BASE_COAD: Dict[str, Any] = {
-    "data_dir": "/data/cephfs-2/unmirrored/groups/krieger/xai/HEST/hest_coad_visium",
+    "data_dir": "../data/coad/",
     "meta_data_dir": "metadata",
     "gene_data_filename": "gene_log1p.csv",
     "train_samples_all": [

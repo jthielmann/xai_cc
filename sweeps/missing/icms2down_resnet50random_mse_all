@@ -1,5 +1,5 @@
-project: icms2up_resnet50random_wmse_encoder_l5_gene_heads
-name: icms2up_resnet50random_wmse_encoder_l5_gene_heads
+project: icms2down_resnet50random_mse_all
+name: icms2down_resnet50random_mse_all
 method: grid
 metric:
   name: valid_loss
@@ -7,13 +7,13 @@ metric:
 
 parameters:
   run_name:
-    value: icms2up_resnet50random_wmse_encoder_l5_gene_heads
+    value: icms2down_resnet50random_mse_all
   group:
-    value: icms2up_resnet50random_wmse_encoder_l5_gene_heads
+    value: icms2down_resnet50random_mse_all
   job_type:
     value: train
   tags:
-    value: [coad, icms2up, wmse, encoder_l5_+_gene_heads, enc-resnet50random]
+    value: [coad, icms2down, mse, all, enc-resnet50random]
   log_to_wandb:
     value: true
   debug:
@@ -25,7 +25,7 @@ parameters:
   dataset:
     value: coad
   gene_set:
-    value: icms2up
+    value: icms2down
   gene_data_filename:
     value: gene_log1p.csv
   meta_data_dir:
@@ -41,15 +41,15 @@ parameters:
   encoder_type:
     values: [resnet50random]
   freeze_encoder:
-    value: true
+    value: false
   encoder_finetune_layers:
-    value: 5
+    value: 0
   one_linear_out_layer:
     value: false
   middle_layer_features:
     value: 256
   epochs:
-    value: 32
+    value: 20
   optimizer:
     value: adamw
   use_lr_find:
@@ -63,16 +63,8 @@ parameters:
   head_lr:
     value: 0.001
   encoder_lr:
-    value: 0.00001
+    value: 0.001
   loss_fn_switch:
-    value: WMSE
-  lds_weight_csv:
-    value: ../weights/wmse/coad/best_smoothings_tuned.csv
-  lds_bin_edge_strategy:
-    value: quantile
-  lds_bin_edge_clip:
-    value: 0.0
-  lds_share_bin_edges:
-    value: true
+    value: MSE
   strategy:
     value: "auto"

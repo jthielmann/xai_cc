@@ -5,6 +5,7 @@ import torch.nn.functional
 from torchvision import transforms
 from script.data_processing.image_transforms import get_eval_transforms, get_transforms
 from script.configs.dataset_config import get_dataset_cfg
+from script.gene_list_helpers import _is_meta_gene_column
 from typing import Any, Dict, List, Literal, Mapping, Sequence, Tuple
 DEFAULT_RANDOM_SEED = 42
 
@@ -83,7 +84,7 @@ class STDataset(Dataset):
             # auto-detect genes = all numeric columns except 'tile' and *_lds_w
             candidates = []
             for c in self.df.columns:
-                if c == "tile" or c == "patient" or str(c).endswith("_lds_w"):
+                if _is_meta_gene_column(c) or str(c).endswith("_lds_w"):
                     continue
                 if _is_unnamed_column(c):
                     continue
@@ -106,7 +107,10 @@ class STDataset(Dataset):
             self.genes = list(candidates)
         else:
             # Sanitize provided list: drop any accidental Unnamed/blank entries
-            genes = [g for g in genes if not _is_unnamed_column(g)]
+            genes = [
+                g for g in genes
+                if not _is_unnamed_column(g) and not _is_meta_gene_column(g)
+            ]
             if not genes:
                 raise ValueError("No valid gene columns after filtering out unnamed/blank entries.")
             missing = [g for g in genes if g not in self.df.columns]
@@ -350,7 +354,10 @@ def get_base_dataset(
     meta_dir = meta_data_dir.strip("/")
     # Safety: never include unnamed/index columns as genes; sanitize early
     if genes is not None:
-        genes = [g for g in genes if not _is_unnamed_column(g)]
+        genes = [
+            g for g in genes
+            if not _is_unnamed_column(g) and not _is_meta_gene_column(g)
+        ]
         if not genes:
             raise ValueError("Provided gene list contains only unnamed/blank columns; nothing to use.")
     # Always try to include spatial coordinates if present ('x','y'), even when specific genes are requested.
@@ -378,7 +385,10 @@ def get_base_dataset(
 
     # Safety (again): ensure genes are sanitized
     if genes is not None:
-        genes = [g for g in genes if not _is_unnamed_column(g)]
+        genes = [
+            g for g in genes
+            if not _is_unnamed_column(g) and not _is_meta_gene_column(g)
+        ]
 
     edges_lookup = {} if precomputed_edges is None else precomputed_edges
     edges_result: Dict[str, np.ndarray] = dict(edges_lookup) if return_edges else edges_lookup
@@ -570,7 +580,7 @@ def get_dataset_from_config(
     max_len: int = None,
     bins: int = 1,
     only_inputs: bool = False,
-    gene_data_filename: str = "gene_data.csv",
+    gene_data_filename: str = "",
     meta_data_dir: str = "/meta_data/",
     lds_smoothing_csv: str = None,
     weight_transform: str = "inverse",
@@ -610,7 +620,10 @@ def get_dataset_from_config(
                 "Pass 'samples' explicitly to override."
             )
 
-    resolved_gene_data_filename = dataset_cfg.get("gene_data_filename", gene_data_filename)
+    if not gene_data_filename:
+        resolved_gene_data_filename = dataset_cfg.get("gene_data_filename")
+    else:
+        resolved_gene_data_filename = gene_data_filename
     resolved_meta_data_dir = dataset_cfg.get("meta_data_dir", meta_data_dir)
 
     return get_dataset(
@@ -682,7 +695,10 @@ def get_base_dataset_single_file(
 
     # Safety: never include unnamed/index-like columns as genes if provided
     if genes is not None:
-        genes = [g for g in genes if not _is_unnamed_column(g)]
+        genes = [
+            g for g in genes
+            if not _is_unnamed_column(g) and not _is_meta_gene_column(g)
+        ]
         if not genes:
             raise ValueError("Provided gene list contains only unnamed/blank columns; nothing to use.")
 
@@ -715,7 +731,7 @@ def get_base_dataset_single_file(
         if genes is None:
             candidates = []
             for c in df.columns:
-                if c == "tile" or str(c).endswith("_lds_w") or c == "patient":
+                if _is_meta_gene_column(c) or str(c).endswith("_lds_w"):
                     continue
                 if _is_unnamed_column(c):
                     continue

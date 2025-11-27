@@ -1,7 +1,41 @@
 import glob
 import os
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 import pandas as pd
+
+
+_META_GENE_COLUMNS = {
+    "tile",
+    "patient",
+    "x",
+    "y",
+    "px",
+    "py",
+    "row",
+    "col",
+    "barcode",
+    "spot",
+    "spot_id",
+    "spot_index",
+    "section",
+    "sample",
+}
+
+
+def _is_meta_gene_column(name: Any) -> bool:
+    try:
+        s = str(name).strip().lower()
+    except Exception:
+        s = str(name)
+    if s in _META_GENE_COLUMNS:
+        return True
+    for prefix in ("coord_", "spatial_", "pixel_", "image_", "img_", "spot_"):
+        if s.startswith(prefix):
+            return True
+    for suffix in ("_x", "_y", "_row", "_col", "_coord", "_coords"):
+        if s.endswith(suffix):
+            return True
+    return False
 
 
 _GENE_SETS: Dict[str, List[str]] = {
@@ -65,9 +99,9 @@ def get_full_gene_list(cfg: Dict[str, Any]) -> List[str]:
         cols = []
         for c in df.columns:
             s = str(c)
-            if c == "tile" or s.endswith("_lds_w"):
-                continue
             if s.strip() == "" or s.strip().lower().startswith("unnamed"):
+                continue
+            if s.endswith("_lds_w") or _is_meta_gene_column(s):
                 continue
             if pd.api.types.is_numeric_dtype(df[c]):
                 cols.append(c)
