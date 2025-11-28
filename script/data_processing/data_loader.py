@@ -1200,7 +1200,6 @@ class STSpatialDataset(Dataset):
         y_t = torch.tensor(y_val, dtype=self.dtype)
 
         if self.return_patient:
-            # keep patient as a Python str to avoid encoding assumptions
             return img, target, x_t, y_t, patient_id
 
         return img, target, x_t, y_t
