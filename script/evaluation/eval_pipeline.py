@@ -355,9 +355,9 @@ class EvalPipeline:
             os.makedirs(lrp_dir, exist_ok=True)
             print(f"[Eval] Starting LRP (backend={lrp_backend}) on {n} items -> {lrp_dir}")
             if lrp_backend == "custom":
-                plot_lrp_custom(self.model, loader, run=self.wandb_run, save_dir=lrp_dir)
+                plot_lrp_custom(self.model, loader, run=self.wandb_run, out_path=lrp_dir)
             else:
-                plot_lrp(self.model, loader, run=self.wandb_run, save_dir=lrp_dir)
+                plot_lrp(self.model, loader, run=self.wandb_run, out_path=lrp_dir)
 
         # Note: PCX has been moved to the CRP pipeline (script/crp_main.py).
         if self.config.get("diff"):

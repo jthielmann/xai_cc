@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 import torch
 from zennit.attribution import Gradient
 from zennit.composites import EpsilonPlusFlat
@@ -15,16 +16,16 @@ def _imgify_rel(att):
     return zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
 
 
-def plot_lrp(model, data, run=None, save_dir: str = None):
+def plot_lrp(model, data, run=None, out_path: Optional[str] = None):
     """Compute LRP attributions and either log to W&B and/or save locally.
 
     - If a W&B run is provided, log images under "lrp/".
-    - If save_dir is provided, write PNGs there.
-    - At least one of (run, save_dir) must be provided.
+    - If out_path is provided, write PNGs there.
+    - At least one of (run, out_path) must be provided.
     """
-    if run is None and not save_dir:
+    if run is None and not out_path:
         raise RuntimeError(
-            "No output target for LRP: provide a W&B run and/or save_dir."
+            "No output target for LRP: provide a W&B run and/or out_path."
         )
     model.eval()
     device = next(model.parameters()).device
@@ -99,9 +100,9 @@ def plot_lrp(model, data, run=None, save_dir: str = None):
                     caption = f"patient={patient}  tile={t}" if patient else f"tile={t}"
                 key = f"lrp/attribution_{idx}_{gene}"
                 run.log({key: wandb.Image(panel, caption=caption)}, commit=True)
-            if save_dir:
-                os.makedirs(save_dir, exist_ok=True)
-                fn = os.path.join(save_dir, f"lrp_{idx:04d}_{gene}.png")
+            if out_path:
+                os.makedirs(out_path, exist_ok=True)
+                fn = os.path.join(out_path, f"lrp_{idx:04d}_{gene}.png")
                 panel.save(fn)
 
     # Log a per-case W&B table at the end (if W&B run is provided)
@@ -133,7 +134,7 @@ def plot_lrp(model, data, run=None, save_dir: str = None):
         run.log({"lrp/table": table})
 
 
-def plot_lrp_custom(model, data, run=None, save_dir: str = None):
+def plot_lrp_custom(model, data, run=None, out_path: Optional[str] = None):
     model.eval()
     device = next(model.parameters()).device
     table_rows = []
@@ -190,9 +191,9 @@ def plot_lrp_custom(model, data, run=None, save_dir: str = None):
         })
         if run is not None:
             run.log({f"lrp/attribution_custom[{idx}]": wandb.Image(panel)})
-        if save_dir:
-            os.makedirs(save_dir, exist_ok=True)
-            fn = os.path.join(save_dir, f"lrp_custom_{idx:04d}.png")
+        if out_path:
+            os.makedirs(out_path, exist_ok=True)
+            fn = os.path.join(out_path, f"lrp_custom_{idx:04d}.png")
             panel.save(fn)
     if run is not None and table_rows:
         cols = [

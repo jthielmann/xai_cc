@@ -53,7 +53,7 @@ def _get_composite_and_layer(encoder):
     layer_name = _auto_record_layer_name(encoder)
     return composite, layer_name
 
-def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items: int = None, out_dir: str = None):
+def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items: int = None, out_path: str = None):
     """CRP using zennit-crp CondAttribution on a small dataset subset."""
     model.eval()
     device = next(model.parameters()).device
@@ -78,8 +78,8 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
 
     attribution = CondAttribution(model)
     count = 0
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    if out_path:
+        os.makedirs(out_path, exist_ok=True)
     total = len(dataset)
     for i in range(total):
         if max_items is not None and count >= max_items:
@@ -116,9 +116,9 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
         img = zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
         if run is not None:
             run.log({f"crp/attribution[{i}]": wandb.Image(img)})
-        if out_dir:
+        if out_path:
             fn = f"crp_{i:04d}.png"
-            img.save(os.path.join(out_dir, fn))
+            img.save(os.path.join(out_path, fn))
         count += 1
         if (i + 1) % 100 == 0 or (i + 1) == total:
             print(f"[CRP] progress: {i + 1}/{total}")
@@ -291,7 +291,7 @@ def plot_crp(
     top_k: int = 5,
     abs_norm: bool = True,
     cmap: str = "bwr",
-    out_dir: str = None,
+    out_path: str = None,
 ):
     """
     CRP-like conditional attribution reimplemented with pure PyTorch hooks.
@@ -305,8 +305,8 @@ def plot_crp(
     heatmaps_list, selected_channels_list, targets_list = [], [], []
     all_images = []
 
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    if out_path:
+        os.makedirs(out_path, exist_ok=True)
     for i in range(len(dataset)):
         # Load one datapoint and prepare input tensor, unsqueeze if dim == 3
         x, label = _prepare_single_input(model, dataset[i])
@@ -327,10 +327,10 @@ def plot_crp(
         selected_channels_list.append(selected_channels[0].detach().cpu())
         targets_list.append(targets_idx.detach().cpu())
         all_images.extend(images)
-        if out_dir:
+        if out_path:
             gene_name = getattr(model, "genes")[target]
             for j, im in enumerate(images):
-                im.save(os.path.join(out_dir, f"crp_custom_{i:04d}_{j:02d}_{gene_name}.png"))
+                im.save(os.path.join(out_path, f"crp_custom_{i:04d}_{j:02d}_{gene_name}.png"))
 
 
     same_shape = all(h.shape == heatmaps_list[0].shape for h in heatmaps_list)

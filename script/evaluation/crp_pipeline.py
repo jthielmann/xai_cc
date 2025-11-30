@@ -92,8 +92,8 @@ class EvalPipeline:
                 ds_subset = Subset(ds, list(range(n)))
             else:
                 ds_subset = ds
-            out_dir = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "crp")
-            os.makedirs(out_dir, exist_ok=True)
+            out_path = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "crp")
+            os.makedirs(out_path, exist_ok=True)
             # Require explicit target_layer in config; allow special value 'encoder' which maps to a model-specific default
             target_layer = self.config.get("target_layer")
             if not target_layer or not isinstance(target_layer, str):
@@ -114,11 +114,11 @@ class EvalPipeline:
                     raise KeyError(f"target_layer '{resolved_layer}' not found in model named_modules().")
 
             ds_len = len(ds_subset)
-            print(f"[CRP] Starting CRP (backend={crp_backend}, layer='{resolved_layer}') on {ds_len} items -> {out_dir}")
+            print(f"[CRP] Starting CRP (backend={crp_backend}, layer='{resolved_layer}') on {ds_len} items -> {out_path}")
             if crp_backend == "custom":
-                plot_crp(self.model, ds_subset, run=self.wandb_run, out_dir=out_dir, layer_name=resolved_layer)
+                plot_crp(self.model, ds_subset, run=self.wandb_run, out_path=out_path, layer_name=resolved_layer)
             else:
-                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=max_items if max_items > 0 else None, out_dir=out_dir, layer_name=resolved_layer)
+                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=max_items if max_items > 0 else None, out_path=out_path, layer_name=resolved_layer)
 
         if self.config.get("pcx"):
             # Enforce: always use model genes; eval config must not set 'genes'.
