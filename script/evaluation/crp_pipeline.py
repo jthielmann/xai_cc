@@ -137,4 +137,4 @@ class EvalPipeline:
             # Ensure genes come from model
             cfg_pcx["genes"] = list(mc_genes)
             print(f"[CRP] Starting PCX -> {cfg_pcx['out_path']}")
-            plot_pcx(self.model, cfg_pcx, run=self.wandb_run)
+            plot_pcx(self.model, cfg_pcx, run=self.wandb_run, out_path=cfg_pcx["out_path"])

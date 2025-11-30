@@ -399,12 +399,14 @@ class EvalPipeline:
 
         if self.config.get("scatter"):
             cfg_scatter = dict(self.config)
-            cfg_scatter["out_path"] = os.path.join(self.config["eval_path"], self.model_name, "scatter")
+            scatter_dir = os.path.join(self.config["eval_path"], self.model_name, "scatter")
+            cfg_scatter["out_path"] = scatter_dir
             print(f"[Eval] Starting scatter plots -> {cfg_scatter['out_path']}")
             plot_scatter(
                 cfg_scatter,
                 self.model,
-                wandb_run=self.wandb_run
+                wandb_run=self.wandb_run,
+                out_path=scatter_dir,
             )
 
         if self.config.get("umap"):
@@ -651,4 +653,4 @@ class EvalPipeline:
                 cfg_lxt["lxt_conv_gamma"] = 0.25
                 cfg_lxt["lxt_lin_gamma"] = 0.25
             print(f"[Eval] Starting LXT plots -> {lxt_dir}")
-            plot_lxt(self.model, cfg_lxt, run=self.wandb_run)
+            plot_lxt(self.model, cfg_lxt, run=self.wandb_run, out_path=lxt_dir)

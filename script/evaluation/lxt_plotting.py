@@ -1,5 +1,5 @@
 import itertools
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 import os
 
 import numpy as np
@@ -20,6 +20,23 @@ from script.data_processing.image_transforms import get_transforms
 from script.data_processing.data_loader import get_dataset_from_config, STDataset
 
 import wandb
+
+
+def _resolve_out_path(out_path_arg: Optional[str], config) -> str:
+    cfg_path = None
+    if isinstance(config, dict):
+        cfg_path = config.get("out_path")
+    if (
+        out_path_arg
+        and cfg_path
+        and os.path.abspath(str(cfg_path)) != os.path.abspath(str(out_path_arg))
+    ):
+        raise ValueError(f"Conflicting out_path arg and config: {out_path_arg} vs {cfg_path}")
+    if out_path_arg:
+        return str(out_path_arg)
+    if cfg_path:
+        return str(cfg_path)
+    raise ValueError("out_path required")
 
 
 def _resolve_gamma_config(config) -> Tuple[List[float], List[float]]:
@@ -57,7 +74,7 @@ def _resolve_gamma_config(config) -> Tuple[List[float], List[float]]:
     )
 
 
-def plot_lxt(model, config, run=None):
+def plot_lxt(model, config, run=None, out_path: Optional[str] = None):
     # Ensure ViT and zennit are patched for LXT
     monkey_patch(vision_transformer, verbose=True)
     monkey_patch_zennit(verbose=True)
@@ -93,9 +110,8 @@ def plot_lxt(model, config, run=None):
 
     any_logged = False
     last_img = None
-    out_dir = config.get("out_path")
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    resolved_out_path = _resolve_out_path(out_path, config)
+    os.makedirs(resolved_out_path, exist_ok=True)
     # Evaluate all gamma pairs; one grid per pair for clarity
     table_rows = []
     for conv_gamma, lin_gamma in itertools.product(conv_list, lin_list):
@@ -145,10 +161,9 @@ def plot_lxt(model, config, run=None):
                     "heatmap": wandb.Image(grid_img),
                 })
                 any_logged = True
-            if out_dir:
-                fn = f"lxt_conv={conv_gamma}_lin={lin_gamma}_{i:04d}.png"
-                safe_fn = fn.replace(" ", "_")
-                grid_img.save(os.path.join(out_dir, safe_fn))
+            fn = f"lxt_conv={conv_gamma}_lin={lin_gamma}_{i:04d}.png"
+            safe_fn = fn.replace(" ", "_")
+            grid_img.save(os.path.join(resolved_out_path, safe_fn))
 
 
     # Log a per-case W&B table at the end

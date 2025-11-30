@@ -328,8 +328,9 @@ def plot_crp(
         targets_list.append(targets_idx.detach().cpu())
         all_images.extend(images)
         if out_dir:
+            gene_name = getattr(model, "genes")[target]
             for j, im in enumerate(images):
-                im.save(os.path.join(out_dir, f"crp_custom_{i:04d}_{j:02d}.png"))
+                im.save(os.path.join(out_dir, f"crp_custom_{i:04d}_{j:02d}_{gene_name}.png"))
 
 
     same_shape = all(h.shape == heatmaps_list[0].shape for h in heatmaps_list)

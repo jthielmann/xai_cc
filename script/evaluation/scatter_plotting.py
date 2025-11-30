@@ -1,5 +1,5 @@
 import os
-from typing import Iterable
+from typing import Iterable, Optional
 
 import numpy as np
 from matplotlib import cm, colors, pyplot as plt
@@ -11,6 +11,23 @@ import wandb
 from script.data_processing.data_loader import get_dataset_from_config
 from script.data_processing.image_transforms import get_transforms
 from script.model.lit_model_helpers import compute_per_gene_pearson, build_scatter_appendix
+
+
+def _resolve_out_path(out_path_arg: Optional[str], config) -> str:
+    cfg_path = None
+    if isinstance(config, dict):
+        cfg_path = config.get("out_path")
+    if (
+        out_path_arg
+        and cfg_path
+        and os.path.abspath(str(cfg_path)) != os.path.abspath(str(out_path_arg))
+    ):
+        raise ValueError(f"Conflicting out_path arg and config: {out_path_arg} vs {cfg_path}")
+    if out_path_arg:
+        return str(out_path_arg)
+    if cfg_path:
+        return str(cfg_path)
+    raise ValueError("out_path required")
 
 
 def make_scatter_figure(yh: np.ndarray, yt: np.ndarray, loss: float, r: float, title: str):
@@ -36,7 +53,7 @@ def make_scatter_figure(yh: np.ndarray, yt: np.ndarray, loss: float, r: float, t
 
 
 @torch.no_grad()
-def plot_scatter(config, model, wandb_run=None):
+def plot_scatter(config, model, wandb_run=None, out_path: Optional[str] = None):
     model.eval()
 
     # Resolve device from model parameters
@@ -102,7 +119,8 @@ def plot_scatter(config, model, wandb_run=None):
     sweep_cfg = getattr(getattr(wandb_run, "config", None), "_items", None) or getattr(wandb_run, "config", {})
     appendix = build_scatter_appendix(config, sweep_cfg.get("sweep_parameter_names", [])) if sweep_cfg else ""
 
-    os.makedirs(config.get("out_path", "."), exist_ok=True)
+    resolved_out_path = _resolve_out_path(out_path, config)
+    os.makedirs(resolved_out_path, exist_ok=True)
 
     # One figure per gene
     table_rows = []
@@ -125,8 +143,11 @@ def plot_scatter(config, model, wandb_run=None):
         )
 
         # Save locally
-        out_dir = config.get("out_path", ".")
-        fig.savefig(os.path.join(out_dir, f"scatter_{gene}.png"), dpi=150, bbox_inches="tight")
+        fig.savefig(
+            os.path.join(resolved_out_path, f"scatter_{gene}.png"),
+            dpi=150,
+            bbox_inches="tight",
+        )
 
         # Log to W&B if available
         if wandb_run is not None:

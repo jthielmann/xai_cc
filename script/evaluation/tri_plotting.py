@@ -6,6 +6,7 @@ import os
 import wandb
 import torch
 import pandas as pd
+from typing import Optional
 
 from script.evaluation.relevance import get_coords_from_name
 from script.data_processing.data_loader import get_patient_loader, get_dataset
@@ -79,12 +80,30 @@ def plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=Fals
     log.info("Saved spatial plot: %s", out_file)
 
 
-def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path: str, *, max_items: int = None, is_online=False, wandb_run=None):
+def _resolve_out_path(out_path_arg: Optional[str], config) -> str:
+    cfg_path = None
+    if isinstance(config, dict):
+        cfg_path = config.get("out_path")
+    if (
+        out_path_arg
+        and cfg_path
+        and os.path.abspath(str(cfg_path)) != os.path.abspath(str(out_path_arg))
+    ):
+        raise ValueError(f"Conflicting out_path arg and config: {out_path_arg} vs {cfg_path}")
+    if out_path_arg:
+        return str(out_path_arg)
+    if cfg_path:
+        return str(cfg_path)
+    raise ValueError("out_path required")
+
+
+def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path: Optional[str] = None, *, max_items: int = None, is_online=False, wandb_run=None):
     data_dir = cfg.get("data_dir")
     if not data_dir:
         raise ValueError("Missing 'data_dir' in config; cannot build spatial dataset for triptych.")
     meta_data_dir = cfg.get("meta_data_dir", "/meta_data/")
     gene_data_filename = cfg.get("gene_data_filename", "gene_data.csv")
+    target_out_path = _resolve_out_path(out_path, cfg)
 
     # Build a standard dataset restricted to the selected patient and single gene
     # Coordinates (x,y) are expected inside the gene CSV for COAD and similar datasets.
@@ -153,4 +172,4 @@ def plot_triptych_from_model(model, cfg: dict, patient: str, gene: str, out_path
     y_label = np.asarray(labels, dtype=np.float32)
     y_pred = np.asarray(preds, dtype=np.float32)
 
-    plot_triptych(x, y, y_label, y_pred, patient, gene, out_path, is_online=is_online, wandb_run=wandb_run)
+    plot_triptych(x, y, y_label, y_pred, patient, gene, target_out_path, is_online=is_online, wandb_run=wandb_run)

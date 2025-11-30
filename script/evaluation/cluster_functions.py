@@ -17,7 +17,6 @@ from zennit.composites import EpsilonPlusFlat
 import torch.nn as nn
 from sklearn.mixture import GaussianMixture
 
-from script.pcx_utils.render import vis_opaque_img_border
 from crp.visualization import FeatureVisualization
 import os
 from torchvision.utils import make_grid

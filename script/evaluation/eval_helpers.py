@@ -46,11 +46,6 @@ def normalize_state_dicts(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def collect_state_dicts(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Collect and load model state dicts based on config.
-
-    Handles either separate encoder/gene_head/sae paths or a bundled
-    model path containing a best_model.pth.
-    """
     if config.get("encoder_state_path", None) and config.get("model_state_path", None):
         raise RuntimeError(
             "corrupted config: encoder_state_path and model_state_path are both set\n"
