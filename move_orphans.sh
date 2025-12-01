@@ -3,7 +3,7 @@ set -euo pipefail
 
 csv="models_overview_full.csv"
 models_root="models"
-legacy_root="${models_root}/legacy"
+legacy_root="${models_root}/test_runs"
 
 [[ -f "$csv" ]]
 mkdir -p "$legacy_root"
