@@ -1,4 +1,4 @@
-project: missing/icms2down_resnet50random_wmse_all
+project: icms2down_resnet50random_wmse_all
 name: sae_icms2down_resnet50random_wmse_all
 run_name: sae_icms2down_resnet50random_wmse_all
 group: sae_icms2down_resnet50random_wmse_all
