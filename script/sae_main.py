@@ -118,6 +118,15 @@ def main() -> None:
     bundled = load_state_dict_from_path(best_path)
     state_dicts = normalize_state_dicts(bundled)
     model = load_lit_regressor(cfg["model_config"], state_dicts)
+    model_genes = cfg["model_config"].get("genes")
+    if model_genes is not None:
+        cfg["genes"] = list(model_genes)
+    else:
+        model_gene_set = cfg["model_config"].get("gene_set")
+        if model_gene_set is not None:
+            cfg["gene_set"] = model_gene_set
+        else:
+            raise ValueError("model config missing genes or gene_set for SAE")
 
     # force full encoder freeze regardless of config
     cfg["model_config"]["freeze_encoder"] = True
