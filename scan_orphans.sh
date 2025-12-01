@@ -13,6 +13,7 @@ csv_path, models_root, legacy_root = sys.argv[1:4]
 projects = { (r.get("project") or "").strip()
              for r in csv.DictReader(open(csv_path), delimiter=";")
              if (r.get("project") or "").strip() }
+tokens = {p.lower() for p in projects}
 for cfg in pathlib.Path(models_root).rglob("config"):
     if legacy_root in cfg.as_posix():
         continue
@@ -21,7 +22,8 @@ for cfg in pathlib.Path(models_root).rglob("config"):
     except Exception:
         continue
     proj = (proj or "").strip()
-    if not proj or proj in projects:
+    path_hit = any(tok and tok in cfg.parent.as_posix().lower() for tok in tokens)
+    if not proj or proj in projects or path_hit:
         continue
     run_dir = cfg.parent
     dest = pathlib.Path(legacy_root) / run_dir.name
