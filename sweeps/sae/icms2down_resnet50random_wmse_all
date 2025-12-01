@@ -1,0 +1,25 @@
+project: missing/icms2down_resnet50random_wmse_all
+name: sae_icms2down_resnet50random_wmse_all
+run_name: sae_icms2down_resnet50random_wmse_all
+group: sae_icms2down_resnet50random_wmse_all
+job_type: train_sae
+tags: [sae, icms2down, resnet50random, wmse, all]
+
+dataset: coad
+meta_data_dir: metadata
+gene_data_filename: gene_log1p.csv
+model_state_path: icms2down/icms2down_resnet50random_wmse_all/enc-resnet50random_genes_id-c73e940902_genes_id-c73e940902_run_name-enc_resnet50random
+
+log_to_wandb: true
+debug: false
+train_sae: true
+sae: true
+freeze_encoder: true
+batch_size: 32
+num_workers: 2
+epochs: 10
+d_hidden: 512
+k: 64
+allow_negative_topk: false
+topk_by_magnitude: false
+lr: 0.001
