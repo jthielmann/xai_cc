@@ -9,11 +9,14 @@ legacy_root="${models_root}/legacy"
 
 python3 - "$csv" "$models_root" "$legacy_root" <<'PY'
 import csv, pathlib, sys, yaml
+from datetime import datetime, timezone, timedelta
 csv_path, models_root, legacy_root = sys.argv[1:4]
 projects = { (r.get("project") or "").strip()
              for r in csv.DictReader(open(csv_path), delimiter=";")
              if (r.get("project") or "").strip() }
 tokens = {p.lower() for p in projects}
+recent = []
+cutoff = datetime.now(timezone.utc) - timedelta(days=3)
 for cfg in pathlib.Path(models_root).rglob("config"):
     if legacy_root in cfg.as_posix():
         continue
@@ -26,10 +29,17 @@ for cfg in pathlib.Path(models_root).rglob("config"):
     if not proj or proj in projects or path_hit:
         continue
     run_dir = cfg.parent
+    mtime = datetime.fromtimestamp(run_dir.stat().st_mtime, tz=timezone.utc)
+    if mtime >= cutoff:
+        recent.append(run_dir.as_posix())
     dest = pathlib.Path(legacy_root) / run_dir.name
     i = 1
     while dest.exists():
         dest = pathlib.Path(legacy_root) / f"{run_dir.name}_{i}"
         i += 1
     print(f"would mv {run_dir} -> {dest}")
+if recent:
+    print("\nRecent (<=3 days) candidates:")
+    for r in sorted(recent):
+        print(r)
 PY
