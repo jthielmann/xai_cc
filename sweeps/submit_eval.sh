@@ -52,6 +52,8 @@ echo "[$(date)] starting eval job on $(hostname) — job: ${SLURM_JOB_NAME:-eval
 mkdir -p logs
 shopt -s expand_aliases
 source ~/.bashrc
+lxt
+script
 
 # Activate your environment if needed, e.g.:
 # conda activate xai
