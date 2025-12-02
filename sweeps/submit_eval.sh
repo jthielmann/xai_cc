@@ -43,7 +43,7 @@ cat > "$tmp" <<EOF
 #SBATCH --error=logs/%x_%j.out
 #SBATCH --partition=gpu
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:l40:1
 #SBATCH --cpus-per-gpu=4
 #SBATCH --mem=128G
 #SBATCH --time=48:00:00
