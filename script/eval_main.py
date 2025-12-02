@@ -399,12 +399,21 @@ def main() -> None:
             genes = mc.get("genes")
             if not genes:
                 raise ValueError(f"model_config.genes missing in {model_cfg_path}")
+            project = mc.get("project")
+            if not isinstance(project, str) or not project.strip():
+                raise ValueError(f"project missing in model config: {model_cfg_path}")
             gs_token = _sanitize_token(compute_genes_id(genes))
             base_root = "../evaluation/debug" if debug_flag else "../evaluation"
             label_tok = _sanitize_token(label)
-            out_base = os.path.join(base_root, label_tok, gs_token, _sanitize_token(enc))
+            out_base = os.path.join(
+                base_root,
+                label_tok,
+                gs_token,
+                _sanitize_token(enc),
+                _sanitize_token(project.replace(" ", "")),
+            )
             bases_to_aggregate.add(out_base)
-            boxplot_roots.add(os.path.dirname(out_base))
+            boxplot_roots.add(os.path.dirname(os.path.dirname(out_base)))
             rel_model = os.path.relpath(rd, models_root)
             tgt = os.path.join(out_base, rel_model)
             enc_l = enc.lower()
