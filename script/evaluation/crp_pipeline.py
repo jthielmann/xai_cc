@@ -1,5 +1,6 @@
 import itertools
 import os
+import json
 import torch
 from typing import Any, Dict
 
@@ -15,6 +16,9 @@ import os
 from script.evaluation.eval_helpers import (
     collect_state_dicts
 )
+from crp.attribution import CondAttribution
+from crp.concepts import ChannelConcept
+from crp.visualization import FeatureVisualization
 
 class EvalPipeline:
     def __init__(self, config, run):
@@ -62,6 +66,25 @@ class EvalPipeline:
         short = f"{tail}/__{h}"
         return short[:MAX_LEN]
 
+    def _run_crp_rank(self, ds, layer_name: str, max_items: int):
+        enc = getattr(self.model, "encoder", self.model)
+        composite, _ = _get_composite_and_layer(enc)
+        if max_items > 0:
+            ds = Subset(ds, list(range(min(max_items, len(ds)))))
+        n = len(ds)
+        fv = FeatureVisualization(CondAttribution(self.model), ds, {layer_name: ChannelConcept()})
+        fv.run(composite, 0, n)
+        k = self.config.get("crp_rank_k")
+        refs = fv.get_max_reference(layer=layer_name, k=k)
+        components = list(refs.keys())
+        base = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name)
+        os.makedirs(base, exist_ok=True)
+        out_fn = os.path.join(base, "crp_rank.json")
+        with open(out_fn, "w") as handle:
+            json.dump({"layer": layer_name, "components": components}, handle)
+        if not self.config.get("crp_components") and components:
+            self.config["crp_components"] = components
+
     def run(self):
         if self.config.get("crp"):
             # Ensure gradients flow for attribution even if encoder was frozen during training
@@ -84,12 +107,12 @@ class EvalPipeline:
                 only_inputs=False,
                 meta_data_dir=meta_dir,
                 gene_data_filename=gene_csv,
+                return_patient_and_tilepath=bool(cfg.get("crp_rank_plot_sidecar")),
             )
             # Optional truncation via config: crp_max_items; default: use all
             max_items = int(self.config.get("crp_max_items", 0) or 0)
             if max_items > 0:
-                n = min(max_items, len(ds))
-                ds_subset = Subset(ds, list(range(n)))
+                ds_subset = Subset(ds, list(range(min(max_items, len(ds)))))
             else:
                 ds_subset = ds
             out_path = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "crp")
@@ -113,12 +136,38 @@ class EvalPipeline:
                 if resolved_layer not in names:
                     raise KeyError(f"target_layer '{resolved_layer}' not found in model named_modules().")
 
+            if bool(self.config.get("crp_rank")):
+                self._run_crp_rank(ds_subset, resolved_layer, max_items)
+
             ds_len = len(ds_subset)
             print(f"[CRP] Starting CRP (backend={crp_backend}, layer='{resolved_layer}') on {ds_len} items -> {out_path}")
             if crp_backend == "custom":
-                plot_crp(self.model, ds_subset, run=self.wandb_run, out_path=out_path, layer_name=resolved_layer)
+                plot_crp(
+                    self.model,
+                    ds_subset,
+                    run=self.wandb_run,
+                    out_path=out_path,
+                    layer_name=resolved_layer,
+                )
             else:
-                plot_crp_zennit(self.model, ds_subset, run=self.wandb_run, max_items=max_items if max_items > 0 else None, out_path=out_path, layer_name=resolved_layer)
+                sidecar_rows = []
+                def _sidecar(**row):
+                    sidecar_rows.append(row)
+                plot_crp_zennit(
+                    self.model,
+                    ds_subset,
+                    run=self.wandb_run,
+                    max_items=max_items if max_items > 0 else None,
+                    out_path=out_path,
+                    layer_name=resolved_layer,
+                    components=self.config.get("crp_components"),
+                    sidecar_handle=_sidecar if bool(self.config.get("crp_rank_plot_sidecar")) else None,
+                )
+                if self.config.get("crp_rank_plot_sidecar") and sidecar_rows:
+                    meta_fn = os.path.join(out_path, "crp_rank_plot_sidecar.jsonl")
+                    with open(meta_fn, "w") as handle:
+                        for row in sidecar_rows:
+                            handle.write(json.dumps(row) + "\n")
 
         if self.config.get("pcx"):
             # Enforce: always use model genes; eval config must not set 'genes'.

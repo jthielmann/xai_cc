@@ -1,0 +1,11 @@
+model_state_path: ../models/<run_dir>
+target_layer: "encoder.layer4.1"
+crp: true
+crp_backend: zennit
+crp_rank: true
+crp_rank_k: 1
+crp_max_items: 16
+crp_rank_plot_sidecar: true
+return_patient_and_tilepath: true
+eval_label: crp_rank_sidecar
+out_path: ../evaluation

@@ -1,0 +1,9 @@
+model_state_path: ../models/icms2down/icms2down_resnet50random_mse_all
+target_layer: "encoder.layer4.1"
+crp: true
+crp_backend: zennit
+crp_rank: true
+crp_rank_k: 1
+crp_max_items: 16
+eval_label: crp_rank_demo
+out_path: ../evaluation

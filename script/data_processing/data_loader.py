@@ -576,6 +576,7 @@ def get_dataset_from_config(
     lds_bin_edge_clip: float = 0.0,
     precomputed_bin_edges: Dict[str, np.ndarray] = None,
     return_edges: bool = False,
+    return_patient_and_tilepath: bool = False,
 ) -> STDataset:
 
     cfg: dict[str, Any] = {"dataset": dataset_name}
@@ -630,6 +631,7 @@ def get_dataset_from_config(
         lds_bin_edge_clip=lds_bin_edge_clip,
         precomputed_bin_edges=precomputed_bin_edges,
         return_edges=return_edges,
+        return_patient_and_tilepath=return_patient_and_tilepath,
     )
 
 

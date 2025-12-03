@@ -9,6 +9,7 @@ import zennit.image as zimage
 from zennit.composites import EpsilonPlusFlat
 from zennit.torchvision import VGGCanonizer, ResNetCanonizer
 from crp.attribution import CondAttribution
+from crp.concepts import ChannelConcept
 import re
 
 
@@ -53,7 +54,16 @@ def _get_composite_and_layer(encoder):
     layer_name = _auto_record_layer_name(encoder)
     return composite, layer_name
 
-def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items: int = None, out_path: str = None):
+def plot_crp_zennit(
+    model,
+    dataset,
+    run=None,
+    layer_name: str = None,
+    max_items: int = None,
+    out_path: str = None,
+    components=None,
+    sidecar_handle=None,
+):
     """CRP using zennit-crp CondAttribution on a small dataset subset."""
     model.eval()
     device = next(model.parameters()).device
@@ -81,6 +91,11 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
     if out_path:
         os.makedirs(out_path, exist_ok=True)
     total = len(dataset)
+    mask_map = None
+    conditions = [{"y": [0]}]
+    if components:
+        mask_map = {target_layer: ChannelConcept.mask}
+        conditions = [{target_layer: components, "y": [0]}]
     for i in range(total):
         if max_items is not None and count >= max_items:
             break
@@ -93,7 +108,9 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
         x.requires_grad_(True)
         x = x + x.new_zeros(())
 
-        attr = attribution(x, [{"y": [0]}], composite, record_layer=record_for_call)
+        attr = attribution(
+            x, conditions, composite, record_layer=record_for_call, mask_map=mask_map
+        )
         keys = list(attr.relevances.keys())
         pick = None
         for k in record_for_call:
@@ -119,6 +136,22 @@ def plot_crp_zennit(model, dataset, run=None, layer_name: str = None, max_items:
         if out_path:
             fn = f"crp_{i:04d}.png"
             img.save(os.path.join(out_path, fn))
+            if sidecar_handle is not None:
+                patient = None
+                tile = None
+                if isinstance(sample, (tuple, list)) and len(sample) >= 4 and isinstance(sample[2], str) and isinstance(sample[3], str):
+                    patient = sample[2]
+                    tile = sample[3]
+                else:
+                    raise ValueError("CRP sidecar requires dataset to return (img, target, patient, tile).")
+                sidecar_handle(
+                    index=i,
+                    filename=fn,
+                    layer=pick,
+                    components=components,
+                    patient=patient,
+                    tile=tile,
+                )
         count += 1
         if (i + 1) % 100 == 0 or (i + 1) == total:
             print(f"[CRP] progress: {i + 1}/{total}")
