@@ -2,6 +2,7 @@ import itertools
 import os
 import json
 import torch
+import numpy as np
 from typing import Any, Dict
 
 from script.evaluation.crp_plotting import plot_crp_zennit, plot_crp, _get_composite_and_layer
@@ -18,6 +19,7 @@ from script.evaluation.eval_helpers import (
 )
 from crp.attribution import CondAttribution
 from crp.concepts import ChannelConcept
+from crp.helper import load_maximization
 from crp.visualization import FeatureVisualization
 
 class EvalPipeline:
@@ -67,6 +69,13 @@ class EvalPipeline:
         return short[:MAX_LEN]
 
     def _run_crp_rank(self, ds, layer_name: str, max_items: int, target_index: int):
+        k_raw = self.config.get("crp_rank_k")
+        k_str = str(k_raw).strip()
+        if not k_str.isdigit():
+            raise ValueError(f"crp_rank_k must be a positive integer, got {k_raw!r}.")
+        k = int(k_str)
+        if k <= 0:
+            raise ValueError(f"crp_rank_k must be greater than zero, got {k}.")
         enc = getattr(self.model, "encoder", self.model)
         composite, _ = _get_composite_and_layer(enc)
         if max_items > 0:
@@ -85,8 +94,15 @@ class EvalPipeline:
         n = len(ds)
         fv = FeatureVisualization(CondAttribution(self.model), ds, {layer_name: ChannelConcept()})
         fv.run(composite, 0, n)
-        k = self.config.get("crp_rank_k")
-        refs = fv.get_max_reference(layer=layer_name, k=k)
+        _, rel_c_sorted, _ = load_maximization(fv.RelMax.PATH, layer_name)
+        n_channels = rel_c_sorted.shape[1]
+        if k > n_channels:
+            raise ValueError(
+                f"crp_rank_k={k} exceeds channel count {n_channels} for {layer_name}."
+            )
+        best = rel_c_sorted[0]
+        topk = np.argsort(-best)[:k].tolist()
+        refs = fv.get_max_reference(concept_ids=topk, layer_name=layer_name)
         components = list(refs.keys())
         base = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name)
         os.makedirs(base, exist_ok=True)
