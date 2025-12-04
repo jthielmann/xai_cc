@@ -62,6 +62,7 @@ def plot_crp_zennit(
     max_items: int = None,
     out_path: str = None,
     components=None,
+    target_index: int = 0,
     sidecar_handle=None,
 ):
     """CRP using zennit-crp CondAttribution on a small dataset subset."""
@@ -92,10 +93,10 @@ def plot_crp_zennit(
         os.makedirs(out_path, exist_ok=True)
     total = len(dataset)
     mask_map = None
-    conditions = [{"y": [0]}]
+    conditions = [{"y": [target_index]}]
     if components:
         mask_map = {target_layer: ChannelConcept.mask}
-        conditions = [{target_layer: components, "y": [0]}]
+        conditions = [{target_layer: components, "y": [target_index]}]
     for i in range(total):
         if max_items is not None and count >= max_items:
             break

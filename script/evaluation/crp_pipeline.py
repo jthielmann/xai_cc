@@ -95,11 +95,41 @@ class EvalPipeline:
             # Use TEST split from the selected dataset; honor configured test_samples
             # Directly resolve metadata CSV using eval override with model_config fallback
             cfg = self.config
+            mc_genes = cfg.get("model_config", {}).get("genes")
+            if not mc_genes:
+                raise ValueError("Trained model config does not contain 'genes'; cannot run CRP.")
+            genes = []
+            for g in mc_genes:
+                gs = str(g).strip()
+                if not gs:
+                    continue
+                if gs.lower().startswith("unnamed"):
+                    continue
+                genes.append(gs)
+            if not genes:
+                raise ValueError("No valid genes after excluding empty/unnamed entries.")
+            target_gene = cfg.get("gene")
+            user_genes = cfg.get("genes")
+            if not target_gene and user_genes is not None:
+                if isinstance(user_genes, str):
+                    target_gene = user_genes.strip()
+                elif isinstance(user_genes, (list, tuple)):
+                    if len(user_genes) == 1:
+                        target_gene = str(user_genes[0]).strip()
+                    else:
+                        raise ValueError("CRP expects one gene; set 'gene' or a single-element 'genes'.")
+            if not target_gene:
+                raise ValueError("CRP requires a target gene via 'gene' or a single-element 'genes'.")
+            if target_gene not in genes:
+                raise ValueError(f"target gene {target_gene!r} not found in model genes list.")
+            target_index = genes.index(target_gene)
+            cfg["gene"] = target_gene
+            cfg["genes"] = genes
             meta_dir = cfg.get("meta_data_dir") or cfg["model_config"].get("meta_data_dir", "/meta_data/")
             gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
-                genes=None,
+                genes=cfg["genes"],
                 split="test",
                 debug=bool(self.config.get("debug", False)),
                 transforms=eval_tf,
@@ -148,6 +178,7 @@ class EvalPipeline:
                     run=self.wandb_run,
                     out_path=out_path,
                     layer_name=resolved_layer,
+                    target=target_index,
                 )
             else:
                 sidecar_rows = []
@@ -161,6 +192,7 @@ class EvalPipeline:
                     out_path=out_path,
                     layer_name=resolved_layer,
                     components=self.config.get("crp_components"),
+                    target_index=target_index,
                     sidecar_handle=_sidecar if bool(self.config.get("crp_rank_plot_sidecar")) else None,
                 )
                 if self.config.get("crp_rank_plot_sidecar") and sidecar_rows:
