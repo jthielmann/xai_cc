@@ -138,8 +138,11 @@ def _setup_model_config(config_name:str):
 
 def main() -> None:
     args = parse_args()
+    print(f"[crp_main] config_path={args.config}")
     raw_cfg = parse_yaml_config(args.config)
+    print(f"[crp_main] model_state_path_raw={raw_cfg.get('model_state_path')}")
     cfg = _build_cfg(raw_cfg)
+    print(f"[crp_main] model_state_path_resolved={cfg.get('model_state_path')}")
     if not cfg.get("eval_label"):
         msp = raw_cfg.get("model_state_path")
         if isinstance(msp, str) and msp.strip():
