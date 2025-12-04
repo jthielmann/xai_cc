@@ -126,7 +126,7 @@ def plot_crp_zennit(
         if i == 0:
             sample_keys = keys[:8]
             print(f"[CRP][debug] picked_layer={pick}; keys_sample={sample_keys}")
-        rel = attr.relevances[pick].sum(1).detach().cpu()
+        rel = attr.heatmap.detach().cpu()
         # Sanitize and normalize to avoid NaN/Inf during visualization
         rel = torch.nan_to_num(rel, nan=0.0, posinf=1.0, neginf=-1.0)
         denom = torch.nan_to_num(rel.abs(), nan=0.0).amax(dim=(1, 2), keepdim=True).clamp_min(1e-12)
