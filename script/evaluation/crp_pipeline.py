@@ -66,11 +66,22 @@ class EvalPipeline:
         short = f"{tail}/__{h}"
         return short[:MAX_LEN]
 
-    def _run_crp_rank(self, ds, layer_name: str, max_items: int):
+    def _run_crp_rank(self, ds, layer_name: str, max_items: int, target_index: int):
         enc = getattr(self.model, "encoder", self.model)
         composite, _ = _get_composite_and_layer(enc)
         if max_items > 0:
             ds = Subset(ds, list(range(min(max_items, len(ds)))))
+        class _RankDataset:
+            def __init__(self, base, target_idx: int):
+                self.base = base
+                self.target_idx = int(target_idx)
+            def __len__(self):
+                return len(self.base)
+            def __getitem__(self, idx):
+                sample = self.base[idx]
+                x = sample[0] if isinstance(sample, (tuple, list)) else sample
+                return x, self.target_idx
+        ds = _RankDataset(ds, target_index)
         n = len(ds)
         fv = FeatureVisualization(CondAttribution(self.model), ds, {layer_name: ChannelConcept()})
         fv.run(composite, 0, n)
@@ -167,7 +178,7 @@ class EvalPipeline:
                     raise KeyError(f"target_layer '{resolved_layer}' not found in model named_modules().")
 
             if bool(self.config.get("crp_rank")):
-                self._run_crp_rank(ds_subset, resolved_layer, max_items)
+                self._run_crp_rank(ds_subset, resolved_layer, max_items, target_index)
 
             ds_len = len(ds_subset)
             print(f"[CRP] Starting CRP (backend={crp_backend}, layer='{resolved_layer}') on {ds_len} items -> {out_path}")
