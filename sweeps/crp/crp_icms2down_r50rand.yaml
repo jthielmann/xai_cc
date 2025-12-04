@@ -1,4 +1,4 @@
-model_state_path: icms2down/icms2down_resnet50random_mse_all
+model_state_path: icms2down/icms2down_resnet50random_mse_all/enc-resnet50random_genes_id-c73e940902_genes_id-c73e940902_run_name-enc_resnet50random/
 target_layer: "encoder.layer4.1"
 crp: true
 crp_backend: zennit
