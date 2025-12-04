@@ -8,3 +8,4 @@ crp_max_items: 16
 eval_label: crp_rank_demo
 out_path: ../evaluation
 dataset: coad
+genes: ['ENOSF1']
