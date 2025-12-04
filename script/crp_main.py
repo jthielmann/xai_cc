@@ -152,13 +152,13 @@ def main() -> None:
         m = mode.strip().lower()
         if m == "auto":
             cfg = build_auto_xai_config(cfg)
-        elif m == "manual":
-            pass
-        else:
-            raise ValueError("invalid xai_pipeline value; expected 'manual' or 'auto'")
-    _sanity_check_config(cfg)
-    cfg["model_config"] = _setup_model_config("../models/" + cfg["model_state_path"] + "/config")
-    setup_dump_env()
+    elif m == "manual":
+        pass
+    else:
+        raise ValueError("invalid xai_pipeline value; expected 'manual' or 'auto'")
+_sanity_check_config(cfg)
+cfg["model_config"] = _setup_model_config(os.path.join(cfg["model_state_path"], "config"))
+setup_dump_env()
 
     run = None
     if bool(cfg.get("log_to_wandb")):
