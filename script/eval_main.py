@@ -367,17 +367,14 @@ def main() -> None:
 
     # gather all dirs that contain best_model.pth
     model_dirs = []
-    if not bool(raw_cfg.get("is_sweep")):
-        dir = read_config_parameter(raw_cfg, "model_state_path")
-        if dir is None or not os.path.isdir(dir):
-            raise RuntimeError(f"model state path {dir} not found")
-        model_dirs.append(dir)
-    # is_sweep
+    base_dir = "../models/" + read_config_parameter(raw_cfg, "model_state_path")
+    if not base_dir or not os.path.isdir(base_dir):
+        raise RuntimeError(f"model state path {base_dir} not found for config variable 'model_state_path'")
+    # single run with best_model.pth and config directly there
+    if os.path.exists(base_dir + "/config"):
+        model_dirs.append(base_dir)
+    # split_genes_by case
     else:
-        base_dir = "../models/" + read_config_parameter(raw_cfg, "model_state_path")
-        if not base_dir or not os.path.isdir(base_dir):
-            raise RuntimeError(f"model state path {base_dir} not found for config variable 'model_state_path'")
-
         for runs in os.listdir(base_dir):
             if os.path.exists(os.path.join(base_dir, runs, "best_model.pth")):
                 model_dirs.append(os.path.join(base_dir, runs))
@@ -391,8 +388,6 @@ def main() -> None:
 
         if len(model_dirs) == 0:
             raise RuntimeError("no model state paths found")
-
-
 
         for job in model_dirs:
             for flagname in flagnames:
