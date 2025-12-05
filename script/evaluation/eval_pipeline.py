@@ -604,13 +604,19 @@ class EvalPipeline:
 
             df = pd.DataFrame(rows)
             print("len(df)", len(df))
-            out_base = "../evaluation"
+            out_path = "../evaluation"
             if debug:
-                out_base = os.path.join(out_base, "debug")
+                out_path = os.path.join(out_path, "debug")
             else:
-                out_base = os.path.join(out_base, "results")
+                out_path = os.path.join(out_path, "results")
 
-            df.to_csv(os.path.join(out_base, "predictions.csv"), index=False)
+            # append run name then gene set
+            model_path = os.path.join(self.config["model_state_path"], "best_model.pth")
+            print(model_path)
+            exit(0)
+            out_path.append()
+
+            df.to_csv(os.path.join(out_path, "predictions.csv"), index=False)
             exit(0)
 
 
