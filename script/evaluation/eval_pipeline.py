@@ -560,6 +560,7 @@ class EvalPipeline:
                 self.wandb_run.log({"umap/table": table})
 
         if self.config.get("forward_to_csv_simple"):
+            print("forward_to_csv_simple")
             eval_tf = get_transforms(self.config["model_config"], split="eval")
             debug = bool(self.config.get("debug", False))
             meta_dir = self.config.get("meta_data_dir")
