@@ -375,14 +375,14 @@ def main() -> None:
         model_dirs.append(base_dir)
     # split_genes_by case
     else:
-        for runs in os.listdir(base_dir):
-            if os.path.exists(os.path.join(base_dir, runs, "best_model.pth")):
-                model_dirs.append(os.path.join(base_dir, runs))
+        for run_name in os.listdir(base_dir):
+            run_dir = os.path.join(base_dir, run_name)
+            if os.path.exists(os.path.join(run_dir, "config")):
+                model_dirs.append(run_dir)
             else:
-                run_dir = os.path.join(base_dir, runs)
                 for gene_split_dir in os.listdir(run_dir):
                     if os.path.exists(os.path.join(run_dir, gene_split_dir, "best_model.pth")):
-                        model_dirs.append(os.path.join(base_dir, runs))
+                        model_dirs.append(os.path.join(run_dir, gene_split_dir))
                     else:
                         raise RuntimeError(f"model state path {run_dir}/{gene_split_dir} not found")
 
