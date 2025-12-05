@@ -574,7 +574,7 @@ class EvalPipeline:
             os.makedirs(out_filepath, exist_ok=True)
             out_filename = os.path.join(out_filepath, "predictions.csv")
             print(out_filename)
-            if os.path.exists(out_filename):
+            if not self.config["redo"] and os.path.exists(out_filename):
                 print(f"[Eval] {out_filename} already exists")
                 return
 
