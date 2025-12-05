@@ -591,6 +591,9 @@ class EvalPipeline:
 
                 img = img.unsqueeze(0).to(device)
                 y_hat = self.model(img)
+                expected = len(self.model.genes)
+                if y.numel() != expected:
+                    raise RuntimeError(f"y size {y.numel()} != model genes {expected}; genes={self.model.genes}")
                 for gene in self.config["model_config"]["genes"]:
                     gene_idx = self.model.gene_to_idx[gene]
                     gene_out = y_hat[0, gene_idx].item()
