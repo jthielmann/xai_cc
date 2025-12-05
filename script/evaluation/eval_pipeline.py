@@ -586,23 +586,26 @@ class EvalPipeline:
             rows = []
             device = auto_device(self.model)
             self.model.eval()
+            pcnt = 0.1
             for idx, (img, y, patient, tile_name) in enumerate(dataset):
                 row = {"patient": patient, "tile": tile_name}
 
                 img = img.unsqueeze(0).to(device)
                 y_hat = self.model(img)
-                expected = len(self.model.genes)
-                if y.numel() != expected:
-                    raise RuntimeError(f"y size {y.numel()} != model genes {expected}; genes={self.model.genes}")
-                for gene in self.config["model_config"]["genes"]:
+                genes = [
+                    g for g in self.config["model_config"]["genes"]
+                    if "unnamed" not in str(g).lower() and str(g).lower() not in {"x", "y"}
+                ]
+                for gene in genes:
                     gene_idx = self.model.gene_to_idx[gene]
                     gene_out = y_hat[0, gene_idx].item()
 
                     row[gene + "_pred"] = round(gene_out,6)
                     row[gene + "_label"] = round(float(y[gene_idx]), 6)
 
-                if idx % 10 == 0:
-                    print(idx)
+                if idx / len(dataset) > pcnt:
+                    print(pcnt * 100, "/100")
+                    pcnt += 0.1
                 rows.append(row)
 
             df = pd.DataFrame(rows)
