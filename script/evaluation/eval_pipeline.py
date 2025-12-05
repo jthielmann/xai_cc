@@ -570,7 +570,7 @@ class EvalPipeline:
             print(self.config)
             dataset = get_dataset_from_config(
                 dataset_name=self.config["dataset"],
-                genes=self.config.model_config["genes"],
+                genes=self.config["model_config"]["genes"],
                 split="test",
                 debug=debug,
                 transforms=eval_tf,
