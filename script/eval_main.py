@@ -383,8 +383,7 @@ def main() -> None:
     # split_genes_by case
     else:
         for run_name in os.listdir(base_dir):
-            print(run_name, base_dir)
-            exit(0)
+
             run_dir = os.path.join(base_dir, run_name)
             config_path = os.path.join(run_dir, "config")
             model_path = os.path.join(run_dir, "best_model.pth")
@@ -396,7 +395,8 @@ def main() -> None:
             else:
                 for gene_split_name in os.listdir(run_dir):
                     gene_split_dir = os.path.join(run_dir, gene_split_name)
-
+                    print(gene_split_dir)
+                    exit(0)
                     config_path = os.path.join(gene_split_dir, "config")
                     model_path = os.path.join(gene_split_dir, "best_model.pth")
 
