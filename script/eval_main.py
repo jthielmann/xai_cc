@@ -192,7 +192,6 @@ def _run_single(raw_cfg: Dict[str, Any], run=None) -> None:
         cfg["diff_max_items"] = 200       # cap tiles in triptychs
     setup_dump_env()
 
-    created_run = False
     local_run = run
     if local_run is None and bool(cfg.get("log_to_wandb")):
         for key in ("run_name", "group", "job_type", "tags"):
@@ -208,7 +207,6 @@ def _run_single(raw_cfg: Dict[str, Any], run=None) -> None:
             tags=cfg["tags"],
             config=wb_cfg,
         )
-        created_run = True
         cfg = dict(cfg)
         cfg.update(dict(local_run.config))
         if original_run_name is not None:
@@ -221,7 +219,7 @@ def _run_single(raw_cfg: Dict[str, Any], run=None) -> None:
     finally:
         pipeline.cleanup()
 
-    if created_run and local_run is not None:
+    if local_run:
         local_run.finish()
 
 
@@ -358,159 +356,54 @@ def _run_boxplots(root: str, cfg: Dict[str, Any]) -> None:
 def main() -> None:
     args = parse_args()
     raw_cfg = parse_yaml_config(args.config)
+    flags = {}
+    flagnames = ["forward_to_csv", "scatter", "diff", "umap", "lxt", "lrp", "log_to_wandb", "boxplots",
+                  "forward_to_csv_simple"]
+    for flagname in flagnames:
+        if flagname not in raw_cfg:
+            raise KeyError(f"Missing required flag '{flagname}' in config for sweep mode")
+        else:
+            flags[flagname] = bool(raw_cfg[flagname])
 
-    if bool(raw_cfg.get("is_sweep", False)):
-        base_val = read_config_parameter(raw_cfg, "model_state_path")
-        if not base_val or not isinstance(base_val, (str, list)):
-            raise ValueError("is_sweep=true requires 'model_state_path' to be a directory path")
-        base_dir = _verify_path(base_val if isinstance(base_val, str) else base_val[0], "../models")
-        if not os.path.isdir(base_dir):
-            raise RuntimeError(f"is_sweep=true but model_state_path is not a directory: {base_dir}")
-        bases = base_val if isinstance(base_val, list) else [base_val]
-        pairs: List[tuple[str, str]] = []
-        for b in bases:
-            rd_base = _verify_path(b, "../models")
-            rds = _find_model_run_dirs(rd_base)
-            if not rds:
-                continue
-            label = str(b)
-            pairs.extend((rd, label) for rd in rds)
-        if not pairs:
-            raise RuntimeError(f"No model run subdirectories with config+best_model.pth under: {base_dir}")
-        base_run_name_cfg = raw_cfg.get("run_name")
-        models_root = os.path.dirname(os.path.abspath(base_dir))
-        # Insert encoder_type into evaluation output base for per-run skip checks
-        # Read encoder_type from each run's stored model config
-        debug_flag = bool(raw_cfg["debug"])
-        # out_base is computed per-run below since it depends on encoder_type
-        bases_to_aggregate = set()
-        boxplot_roots = set()
-        for _flag in ("forward_to_csv", "scatter", "diff", "umap", "lxt", "lrp", "log_to_wandb", "boxplots"):
-            if _flag not in raw_cfg:
-                raise KeyError(f"Missing required flag '{_flag}' in config for sweep mode")
-        for rd, label in pairs:
-            model_cfg_path = os.path.join(rd, "config")
-            if not os.path.exists(model_cfg_path):
-                raise RuntimeError(f"missing model config for run dir: {rd}")
-            mc = parse_yaml_config(model_cfg_path) or {}
-            enc = mc.get("encoder_type")
-            if not isinstance(enc, str) or not enc.strip():
-                raise ValueError(f"encoder_type missing in model config: {model_cfg_path}")
-            genes = mc.get("genes")
-            if not genes:
-                raise ValueError(f"model_config.genes missing in {model_cfg_path}")
-            project = mc.get("project")
-            if not isinstance(project, str) or not project.strip():
-                raise ValueError(f"project missing in model config: {model_cfg_path}")
-            gs_token = _sanitize_token(compute_genes_id(genes))
-            base_root = "../evaluation/debug" if debug_flag else "../evaluation"
-            label_tok = _sanitize_token(label)
-            out_base = os.path.join(
-                base_root,
-                label_tok,
-                gs_token,
-                _sanitize_token(enc),
-                _sanitize_token(project.replace(" ", "")),
-            )
-            bases_to_aggregate.add(out_base)
-            boxplot_roots.add(os.path.dirname(os.path.dirname(out_base)))
-            rel_model = os.path.relpath(rd, models_root)
-            tgt = os.path.join(out_base, rel_model)
-            enc_l = enc.lower()
-            requested = {
-                "forward_to_csv": bool(raw_cfg["forward_to_csv"]),
-                "scatter": bool(raw_cfg["scatter"]),
-                "diff": bool(raw_cfg["diff"]),
-                "umap": bool(raw_cfg["umap"]),
-                "lxt": (bool(raw_cfg["lxt"]) and ("vit" in enc_l)),
-                "lrp": (bool(raw_cfg["lrp"]) and ("resnet" in enc_l)),
-            }
-            cases = [k for k, v in requested.items() if v]
-            # Determine which cases will actually run to avoid empty W&B runs
-            planned = []
-            for k in cases:
-                sub = "predictions" if k == "forward_to_csv" else k
-                case_dir = os.path.join(tgt, sub)
-                if os.path.exists(case_dir):
-                    if ("clear_all" in raw_cfg) and bool(raw_cfg["clear_all"]):
-                        planned.append((k, case_dir))
+    # gather all dirs that contain best_model.pth
+    model_dirs = []
+    if not bool(raw_cfg.get("is_sweep")):
+        dir = read_config_parameter(raw_cfg, "model_state_path")
+        if dir is None or not os.path.isdir(dir):
+            raise RuntimeError(f"model state path {dir} not found")
+        model_dirs.append(dir)
+    # is_sweep
+    else:
+        base_dir = "../models/" + read_config_parameter(raw_cfg, "model_state_path")
+        if not base_dir or not os.path.isdir(base_dir):
+            raise RuntimeError(f"model state path {base_dir} not found for config variable 'model_state_path'")
+
+        for runs in os.listdir(base_dir):
+            if os.path.exists(os.path.join(base_dir, runs, "best_model.pth")):
+                model_dirs.append(os.path.join(base_dir, runs))
+            else:
+                run_dir = os.path.join(base_dir, runs)
+                for gene_split_dir in os.listdir(run_dir):
+                    if os.path.exists(os.path.join(run_dir, gene_split_dir, "best_model.pth")):
+                        model_dirs.append(os.path.join(base_dir, runs))
                     else:
-                        continue
-                else:
-                    planned.append((k, case_dir))
+                        raise RuntimeError(f"model state path {run_dir}/{gene_split_dir} not found")
 
-            per_model_run = None
-            per_model_run_name = (base_run_name_cfg or f"eval_all_{gs_token}")
-            token = _sanitize_token(rel_model)
-            per_model_run_name = f"{per_model_run_name}__{token}"[:128]
+        if len(model_dirs) == 0:
+            raise RuntimeError("no model state paths found")
 
-            if planned and bool(raw_cfg["log_to_wandb"]):
-                for key in ("group", "job_type", "tags"):
-                    if key not in raw_cfg:
-                        raise ValueError(f"Missing required parameter '{key}' in config for sweep run")
-                wb_cfg = {k: v for k, v in raw_cfg.items() if k not in ("project", "metric", "method", "run_name", "group", "job_type", "tags")}
-                per_model_run = wandb.init(
-                    project=raw_cfg.get("project", "xai"),
-                    name=per_model_run_name,
-                    group=raw_cfg["group"],
-                    job_type=raw_cfg["job_type"],
-                    tags=raw_cfg["tags"],
-                    config=wb_cfg,
-                )
 
-            for k, case_dir in planned:
-                if os.path.exists(case_dir):
-                    if ("clear_all" in raw_cfg) and bool(raw_cfg["clear_all"]):
-                        shutil.rmtree(case_dir)
-                    else:
-                        continue
+
+        for job in model_dirs:
+            for flagname in flagnames:
+                flags[flagname] = bool(raw_cfg.get(flagname))
                 per_cfg = dict(raw_cfg)
-                per_cfg["xai_pipeline"] = "manual"
-                for kk in ("lrp", "lxt", "scatter", "diff", "sae", "umap", "forward_to_csv"):
-                    per_cfg[kk] = (kk == k)
-                if k == "umap" and not per_cfg.get("umap_layer"):
-                    per_cfg["umap_layer"] = "encoder"
-                per_cfg["model_state_path"] = rd
-                per_cfg["eval_label"] = label_tok
-                per_cfg["encoder_type"] = enc
-                per_cfg["run_name"] = per_model_run_name
-                _run_single(per_cfg, run=per_model_run)
-
-            if per_model_run is not None:
-                per_model_run.finish()
-        # Skip aggregation in debug runs: aggregator ignores '/debug/' trees
-        if not debug_flag:
-            if raw_cfg["forward_to_csv"]:
-                for b in sorted(bases_to_aggregate):
-                    gather_forward_metrics(b)
-            if raw_cfg["boxplots"] and raw_cfg["forward_to_csv"]:
-                for r in sorted(boxplot_roots):
-                    _run_boxplots(r, raw_cfg)
-        return
-
-    # Detect sweep-style lists for model_state_path and expand into multiple runs.
-    ms_param = read_config_parameter(raw_cfg, "model_state_path")
-    if isinstance(ms_param, list):
-        base_run_name = raw_cfg.get("run_name") or "forward_to_csv"
-        roots = set()
-        for ms in ms_param:
-            per_cfg = dict(raw_cfg)
-            per_cfg["model_state_path"] = ms
-            # Ensure a unique, informative run_name for each model
-            token = _sanitize_token(ms)
-            per_cfg["run_name"] = f"{base_run_name}__{token}"[:128]
-            _run_single(per_cfg)
-            if raw_cfg["boxplots"] and not raw_cfg["debug"]:
-                roots.add(_compute_boxplot_root(per_cfg))
-        if raw_cfg["boxplots"] and not raw_cfg["debug"]:
-            for r in sorted(roots):
-                _run_boxplots(r, raw_cfg)
-        return
-
-    # Fallback to single-run behavior
-    _run_single(raw_cfg)
-    if raw_cfg["boxplots"] and not raw_cfg["debug"]:
-        _run_boxplots(_compute_boxplot_root(raw_cfg), raw_cfg)
+                model_config = parse_yaml_config(job + "/config")
+                per_cfg["model_state_path"] = job
+                per_cfg["eval_label"] = flagname
+                per_cfg["encoder_type"] = model_config["encoder_type"]
+                per_cfg["run_name"] = None
+                _run_single(job, run=None)
 
 
 if __name__ == "__main__":
