@@ -560,14 +560,13 @@ class EvalPipeline:
         if self.config.get("forward_to_csv_simple"):
             print("forward_to_csv_simple")
             eval_tf = get_transforms(self.config["model_config"], split="eval")
-            debug = bool(self.config.get("debug", False))
+            debug = bool(self.config.get("debug"))
             meta_dir = self.config.get("meta_data_dir")
             if not meta_dir:
                 raise ValueError(f"meta_dir missing in config {self.config}")
             gene_csv = self.config.get("gene_data_filename")
             if not gene_csv:
                 raise ValueError(f"gene_data_filename missing in config {self.config}")
-            print(self.config)
             dataset = get_dataset_from_config(
                 dataset_name=self.config["dataset"],
                 genes=self.config["model_config"]["genes"],
