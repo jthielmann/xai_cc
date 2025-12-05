@@ -587,8 +587,7 @@ class EvalPipeline:
             device = auto_device(self.model)
             self.model.eval()
             for img, y, patient, tile_name in dataset:
-                row = {}
-
+                row = {"patient": patient, "tile": tile_name}
 
                 img = img.unsqueeze(0).to(device)
                 y_hat = self.model(img)
@@ -598,11 +597,10 @@ class EvalPipeline:
 
                     row[gene + "_pred"] = gene_out
                     row[gene + "_label"] = float(y[gene_idx])
-                    row["patient"] = patient
-                    row["tile"] = tile_name
-                    print(row)
-                    exit(0)
-                    rows.append(row)
+
+                print(row)
+                exit(0)
+            rows.append(row)
 
             if debug:
                 exit(0)
