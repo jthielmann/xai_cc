@@ -595,8 +595,8 @@ class EvalPipeline:
                     gene_idx = self.model.gene_to_idx[gene]
                     gene_out = y_hat[0, gene_idx].item()
 
-                    row[gene + "_pred"] = gene_out
-                    row[gene + "_label"] = float(y[gene_idx])
+                    row[gene + "_pred"] = round(gene_out,6)
+                    row[gene + "_label"] = round(float(y[gene_idx]), 6)
 
                 print(row)
                 exit(0)
