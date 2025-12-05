@@ -559,6 +559,35 @@ class EvalPipeline:
                     table.add_data(r["layer"], r["n_neighbors"], r["min_dist"], r["figure"], r["file"])
                 self.wandb_run.log({"umap/table": table})
 
+        if self.config.get("forward_to_csv_simple"):
+            eval_tf = get_transforms(self.config["model_config"], split="eval")
+            debug = bool(self.config.get("debug", False))
+            meta_dir = self.config.get("meta_data_dir")
+            if not meta_dir:
+                raise ValueError(f"meta_dir missing in config {self.config}")
+            gene_csv = self.config.get("gene_data_filename")
+            if not gene_csv:
+                raise ValueError(f"gene_data_filename missing in config {self.config}")
+            dataset = get_dataset_from_config(
+                dataset_name=self.config["dataset"],
+                genes=self.config.model_config["genes"],
+                split="test",
+                debug=debug,
+                transforms=eval_tf,
+                samples=self.config.get("test_samples"),
+                max_len=100 if debug else None,
+                only_inputs=True,
+                meta_data_dir=meta_dir,
+                gene_data_filename=gene_csv,
+            )
+
+            loader = DataLoader(dataset)
+            print("dataset", len(dataset))
+            print("loader", len(loader))
+            if debug:
+                exit(0)
+
+
         if self.config.get("forward_to_csv"):
             patients = list(self.config.get("test_samples", []))
             genes = self.config["model_config"]["genes"]

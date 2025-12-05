@@ -10,7 +10,6 @@ from zennit.composites import EpsilonPlusFlat
 from zennit.torchvision import VGGCanonizer, ResNetCanonizer
 from crp.attribution import CondAttribution
 from crp.concepts import ChannelConcept
-import re
 
 
 def _get_layer_names(model, types):
@@ -23,27 +22,60 @@ def _get_layer_names(model, types):
     return names
 
 
-def _auto_record_layer_name(encoder: nn.Module) -> str:
+def _auto_record_layer_name(encoder: nn.Module, encoder_type: str) -> str:
+    if not isinstance(encoder_type, str) or not encoder_type.strip():
+        raise ValueError("encoder_type required for CRP layer selection.")
     names = [n for n, _ in encoder.named_modules()]
-    res = [n for n in names if re.match(r"^layer[1-4]\.\d+$", n)]
-    if res:
-        return sorted(res, key=lambda s: (int(s.split('.')[0][5:]), int(s.split('.')[1])))[-1]
-    cnx = [n for n in names if re.match(r"^stages\.\d+\.blocks\.\d+$", n)]
-    if cnx:
-        def _key(s):
-            p = s.split('.')
-            return (int(p[1]), int(p[3]))
-        return sorted(cnx, key=_key)[-1]
-    vit = [n for n in names if re.match(r"^(blocks|layers|encoder_layers)\.\d+$", n)]
-    if vit:
-        return sorted(vit, key=lambda s: int(s.split('.')[1]))[-1]
-    picks = _get_layer_names(encoder, [nn.Conv2d, nn.Linear])
-    if picks:
-        return picks[-1]
-    raise ValueError("No suitable layer found for CRP recording.")
+    t = encoder_type.strip().lower()
+
+    # Hardcoded targets per encoder_type family.
+    if t in {"resnet50random", "resnet50imagenet", "dino"}:
+        picks = [n for n in names if n.startswith("layer4.")]
+        if picks:
+            return sorted(picks, key=lambda s: int(s.split(".")[1]))[-1]
+        raise ValueError(f"{encoder_type} expected ResNet blocks, none found.")
+
+    if t in {
+        "dinov3_convnext_tiny",
+        "dinov3_convnext_small",
+        "dinov3_convnext_base",
+        "dinov3_convnext_large",
+    }:
+        picks = []
+        for n in names:
+            parts = n.split(".")
+            if len(parts) == 4 and parts[0] == "stages" and parts[2] == "blocks":
+                if parts[1].isdigit() and parts[3].isdigit():
+                    picks.append((int(parts[1]), int(parts[3]), n))
+        if picks:
+            return max(picks, key=lambda x: (x[0], x[1]))[2]
+        raise ValueError(f"{encoder_type} expected ConvNeXt blocks, none found.")
+
+    if t in {
+        "dinov3",
+        "dinov3_vits16",
+        "dinov3_vits16plus",
+        "dinov3_vitb16",
+        "dinov3_vitl16",
+        "dinov3_vith16plus",
+        "dinov3_vit7b16",
+        "uni",
+        "uni2-h",
+    } or t.startswith("dinov3_vit"):
+        picks = []
+        for n in names:
+            parts = n.split(".")
+            if len(parts) == 2 and parts[0] in {"blocks", "layers", "encoder_layers"}:
+                if parts[1].isdigit():
+                    picks.append((int(parts[1]), n))
+        if picks:
+            return max(picks, key=lambda x: x[0])[1]
+        raise ValueError(f"{encoder_type} expected transformer blocks, none found.")
+
+    raise ValueError(f"Unsupported encoder_type {encoder_type!r} for CRP recording.")
 
 
-def _get_composite_and_layer(encoder):
+def _get_composite_and_layer(encoder, encoder_type: str = None):
     enc_type = type(encoder).__name__
     if enc_type == "VGG":
         composite = EpsilonPlusFlat(canonizers=[VGGCanonizer()])
@@ -51,31 +83,35 @@ def _get_composite_and_layer(encoder):
         composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
     else:
         composite = EpsilonPlusFlat()
-    layer_name = _auto_record_layer_name(encoder)
+    layer_name = _auto_record_layer_name(encoder, encoder_type)
     return composite, layer_name
 
 def plot_crp_zennit(
     model,
     dataset,
     run=None,
-    layer_name: str = None,
     max_items: int = None,
     out_path: str = None,
     components=None,
     target_index: int = 0,
     sidecar_handle=None,
-):
+    ):
     """CRP using zennit-crp CondAttribution on a small dataset subset."""
     model.eval()
     device = next(model.parameters()).device
     enc = getattr(model, "encoder", model)
-    composite, default_layer_name = _get_composite_and_layer(enc)
-    if layer_name is None or layer_name == "encoder":
-        target_layer = (
-            f"encoder.{default_layer_name}" if enc is not model else default_layer_name
-        )
-    else:
-        target_layer = layer_name
+    enc_type = None
+    cfg = getattr(model, "config", None)
+    if isinstance(cfg, dict):
+        enc_type = cfg.get("encoder_type")
+    if not enc_type:
+        raise ValueError("encoder_type missing on model.config; required for CRP.")
+    composite, default_layer_name = _get_composite_and_layer(
+        enc, encoder_type=enc_type
+    )
+    target_layer = (
+        f"encoder.{default_layer_name}" if enc is not model else default_layer_name
+    )
     all_names = [n for n, _ in model.named_modules()]
     has_encoder = (enc is not model)
     print(f"[CRP][debug] resolved_target={target_layer} default_layer={default_layer_name} has_encoder={has_encoder}")

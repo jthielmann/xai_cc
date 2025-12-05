@@ -77,7 +77,9 @@ class EvalPipeline:
         if k <= 0:
             raise ValueError(f"crp_rank_k must be greater than zero, got {k}.")
         enc = getattr(self.model, "encoder", self.model)
-        composite, _ = _get_composite_and_layer(enc)
+        composite, _ = _get_composite_and_layer(
+            enc, self.config.get("encoder_type")
+        )
         if max_items > 0:
             ds = Subset(ds, list(range(min(max_items, len(ds)))))
         class _RankDataset:
@@ -174,24 +176,17 @@ class EvalPipeline:
                 ds_subset = ds
             out_path = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "crp")
             os.makedirs(out_path, exist_ok=True)
-            # Require explicit target_layer in config; allow special value 'encoder' which maps to a model-specific default
-            target_layer = self.config.get("target_layer")
-            if not target_layer or not isinstance(target_layer, str):
-                raise ValueError("CRP requires 'target_layer' in config (e.g., 'encoder' or a dot-path layer name).")
+            # Resolve target layer from encoder_type mapping; users no longer override.
             enc = getattr(self.model, "encoder", self.model)
-            _, default_layer_name = _get_composite_and_layer(enc)
-            if target_layer == "encoder":
-                # Fully-qualified name if model has an encoder submodule
-                resolved_layer = (
-                    f"encoder.{default_layer_name}" if enc is not self.model else default_layer_name
-                )
-            else:
-                resolved_layer = target_layer
-            # Validate target_layer exists on model for explicit names
-            if target_layer != "encoder":
-                names = {n for n, _ in self.model.named_modules()}
-                if resolved_layer not in names:
-                    raise KeyError(f"target_layer '{resolved_layer}' not found in model named_modules().")
+            _, default_layer_name = _get_composite_and_layer(
+                enc, self.config.get("encoder_type")
+            )
+            resolved_layer = (
+                f"encoder.{default_layer_name}" if enc is not self.model else default_layer_name
+            )
+            names = {n for n, _ in self.model.named_modules()}
+            if resolved_layer not in names:
+                raise KeyError(f"target_layer '{resolved_layer}' not found in model named_modules().")
 
             if bool(self.config.get("crp_rank")):
                 self._run_crp_rank(ds_subset, resolved_layer, max_items, target_index)
