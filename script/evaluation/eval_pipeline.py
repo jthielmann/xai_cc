@@ -598,9 +598,13 @@ class EvalPipeline:
                     row[gene + "_pred"] = round(gene_out,6)
                     row[gene + "_label"] = round(float(y[gene_idx]), 6)
 
-                print(idx)
-            rows.append(row)
+                if idx % 10 == 0:
+                    print(idx)
+                rows.append(row)
 
+            df = pd.DataFrame(rows)
+            print("len(df)", len(df))
+            exit(0)
             if debug:
                 exit(0)
 
