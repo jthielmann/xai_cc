@@ -612,12 +612,11 @@ class EvalPipeline:
 
             # append run name then gene set
             model_path = self.config["model_state_path"]
-            print(model_path)
-            print(self.config)
-            exit(0)
-            out_path.append()
 
-            df.to_csv(os.path.join(out_path, "predictions.csv"), index=False)
+            # [9:] cuts ../models
+            out_filename = os.path.join(out_path, model_path[9:], "predictions.csv")
+            print(out_filename)
+            df.to_csv(out_filename, index=False)
             exit(0)
 
 
