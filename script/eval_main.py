@@ -391,6 +391,8 @@ def main() -> None:
 
         for i in range(len(model_dirs)):
             for flagname in flags.keys():
+                if flags[flagname] is False:
+                    continue
                 print(i, "/", len(model_dirs), "->", model_dirs[i], flagname)
                 model_dir = model_dirs[i]
                 flags[flagname] = bool(raw_cfg.get(flagname))
