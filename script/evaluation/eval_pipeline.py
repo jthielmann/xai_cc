@@ -611,7 +611,7 @@ class EvalPipeline:
                 out_path = os.path.join(out_path, "results")
 
             # append run name then gene set
-            model_path = os.path.join(self.config["model_state_path"], "best_model.pth")
+            model_path = self.config["model_state_path"]
             print(model_path)
             print(self.config)
             exit(0)
