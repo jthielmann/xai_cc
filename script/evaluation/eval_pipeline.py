@@ -575,14 +575,35 @@ class EvalPipeline:
                 transforms=eval_tf,
                 samples=self.config.get("test_samples"),
                 max_len=100 if debug else None,
-                only_inputs=True,
+                only_inputs=False,
                 meta_data_dir=meta_dir,
                 gene_data_filename=gene_csv,
+                return_patient_and_tilepath=True
             )
 
-            loader = DataLoader(dataset)
             print("dataset", len(dataset))
-            print("loader", len(loader))
+
+            rows = []
+            device = auto_device(self.model)
+            self.model.eval()
+            for img, y, patient, tile_name in dataset:
+                row = {}
+
+
+                img = img.unsqueeze(0).to(device)
+                y_hat = self.model(img)
+                for gene in self.config["model_config"]["genes"]:
+                    gene_idx = self.model.gene_to_idx[gene]
+                    gene_out = float(y_hat[0, gene_idx])
+
+                    row[gene + "_pred"] = gene_out
+                    row[gene + "_label"] = float(y[gene_idx])
+                    row["patient"] = patient
+                    row["tile"] = tile_name
+                    print(row)
+                    exit(0)
+                    rows.append(row)
+
             if debug:
                 exit(0)
 
