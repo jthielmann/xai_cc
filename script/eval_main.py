@@ -398,6 +398,7 @@ def main() -> None:
                 per_cfg["eval_label"] = flagname
                 per_cfg["encoder_type"] = model_config["encoder_type"]
                 per_cfg["run_name"] = None
+                per_cfg["model_config"] = model_config
                 _run_single(per_cfg, run=None)
 
 
