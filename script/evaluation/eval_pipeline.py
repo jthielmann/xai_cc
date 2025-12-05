@@ -244,8 +244,6 @@ class EvalPipeline:
         self.config = dict(config)
         self.wandb_run = run
         self.run_name = self.config.get("run_name")
-        if not self.run_name:
-            raise ValueError("Config must provide run_name")
         self.model_src = self.config.get("model_config_path")
         self.model = self._load_model()
         if torch.cuda.is_available():
