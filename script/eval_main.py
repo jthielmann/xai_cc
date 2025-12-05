@@ -395,8 +395,6 @@ def main() -> None:
             else:
                 for gene_split_name in os.listdir(run_dir):
                     gene_split_dir = os.path.join(run_dir, gene_split_name)
-                    print(gene_split_dir)
-                    exit(0)
                     config_path = os.path.join(gene_split_dir, "config")
                     model_path = os.path.join(gene_split_dir, "best_model.pth")
 
@@ -404,7 +402,7 @@ def main() -> None:
                         model_dirs_incomplete.append(run_dir)
                         continue
                     if os.path.exists(config_path) and os.path.exists(model_path):
-                        model_dirs.append(os.path.join(run_dir, gene_split_dir))
+                        model_dirs.append(gene_split_dir)
                     else:
                         raise RuntimeError(f"model state path {run_dir}/{gene_split_dir} not found")
 
