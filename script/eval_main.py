@@ -390,7 +390,7 @@ def main() -> None:
             raise RuntimeError("no model state paths found")
 
         for i in range(len(model_dirs)):
-            for flagname in flagnames:
+            for flagname in flags.keys():
                 print(i, "/", len(model_dirs), "->", model_dirs[i], flagname)
                 model_dir = model_dirs[i]
                 flags[flagname] = bool(raw_cfg.get(flagname))
