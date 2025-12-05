@@ -614,7 +614,7 @@ class EvalPipeline:
             model_path = self.config["model_state_path"]
 
             # [9:] cuts ../models
-            out_filename = os.path.join(out_path, model_path[9:], "predictions.csv")
+            out_filename = os.path.join(out_path, model_path[10:], "predictions.csv")
             print(out_filename)
             df.to_csv(out_filename, index=False)
             exit(0)
