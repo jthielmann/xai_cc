@@ -604,9 +604,14 @@ class EvalPipeline:
 
             df = pd.DataFrame(rows)
             print("len(df)", len(df))
-            exit(0)
+            out_base = "../evaluation"
             if debug:
-                exit(0)
+                out_base = os.path.join(out_base, "debug")
+            else:
+                out_base = os.path.join(out_base, "results")
+
+            df.to_csv(os.path.join(out_base, "predictions.csv"), index=False)
+            exit(0)
 
 
         if self.config.get("forward_to_csv"):
