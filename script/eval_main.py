@@ -410,7 +410,7 @@ def main() -> None:
             raise RuntimeError("no model state paths found")
         if len(model_dirs_incomplete) > 0:
             model_dirs_incomplete_df = pd.DataFrame(model_dirs_incomplete)
-            model_dirs_incomplete_df.to_csv(f"../evaluation/missing/{base_dir}/incomplete_runs.csv", index=False)
+            model_dirs_incomplete_df.to_csv(f"../evaluation/missing/{base_dir[10:]}/incomplete_runs.csv", index=False)
 
         for i in range(len(model_dirs)):
             for flagname in flags.keys():
