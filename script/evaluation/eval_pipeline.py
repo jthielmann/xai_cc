@@ -586,7 +586,7 @@ class EvalPipeline:
             rows = []
             device = auto_device(self.model)
             self.model.eval()
-            for img, y, patient, tile_name in dataset:
+            for idx, (img, y, patient, tile_name) in enumerate(dataset):
                 row = {"patient": patient, "tile": tile_name}
 
                 img = img.unsqueeze(0).to(device)
@@ -598,8 +598,7 @@ class EvalPipeline:
                     row[gene + "_pred"] = round(gene_out,6)
                     row[gene + "_label"] = round(float(y[gene_idx]), 6)
 
-                print(row)
-                exit(0)
+                print(idx)
             rows.append(row)
 
             if debug:
