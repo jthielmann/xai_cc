@@ -594,7 +594,7 @@ class EvalPipeline:
                 y_hat = self.model(img)
                 for gene in self.config["model_config"]["genes"]:
                     gene_idx = self.model.gene_to_idx[gene]
-                    gene_out = float(y_hat[0, gene_idx])
+                    gene_out = y_hat[0, gene_idx].item()
 
                     row[gene + "_pred"] = gene_out
                     row[gene + "_label"] = float(y[gene_idx])
