@@ -383,7 +383,6 @@ def main() -> None:
     # split_genes_by case
     else:
         for run_name in os.listdir(base_dir):
-
             run_dir = os.path.join(base_dir, run_name)
             config_path = os.path.join(run_dir, "config")
             model_path = os.path.join(run_dir, "best_model.pth")
@@ -399,7 +398,7 @@ def main() -> None:
                     model_path = os.path.join(gene_split_dir, "best_model.pth")
 
                     if xor(os.path.exists(config_path), os.path.exists(model_path)):
-                        model_dirs_incomplete.append(run_dir)
+                        model_dirs_incomplete.append(gene_split_dir)
                         continue
                     if os.path.exists(config_path) and os.path.exists(model_path):
                         model_dirs.append(gene_split_dir)
