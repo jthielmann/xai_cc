@@ -3,6 +3,8 @@ import shutil
 import sys
 from random import random
 
+import pandas as pd
+
 sys.path.insert(0, '..')
 
 # Make numba avoid OpenMP/TBB to prevent clashes with PyTorch/MKL on HPC
@@ -353,6 +355,10 @@ def _run_boxplots(root: str, cfg: Dict[str, Any]) -> None:
         run.finish()
 
 
+def xor(a, b):
+    return (a and not b) or (not a and b)
+
+
 def main() -> None:
     args = parse_args()
     raw_cfg = parse_yaml_config(args.config)
@@ -367,6 +373,7 @@ def main() -> None:
 
     # gather all dirs that contain best_model.pth
     model_dirs = []
+    model_dirs_incomplete = []
     base_dir = "../models/" + read_config_parameter(raw_cfg, "model_state_path")
     if not base_dir or not os.path.isdir(base_dir):
         raise RuntimeError(f"model state path {base_dir} not found for config variable 'model_state_path'")
@@ -377,17 +384,33 @@ def main() -> None:
     else:
         for run_name in os.listdir(base_dir):
             run_dir = os.path.join(base_dir, run_name)
-            if os.path.exists(os.path.join(run_dir, "config")):
+            config_path = os.path.join(run_dir, "config")
+            model_path = os.path.join(run_dir, "best_model.pth")
+            if xor(os.path.exists(config_path), os.path.exists(model_path)):
+                model_dirs_incomplete.append(run_dir)
+                continue
+            if os.path.exists(os.path.join(run_dir, "config")) and os.path.exists(os.path.join(run_dir, "best_model.pth")):
                 model_dirs.append(run_dir)
             else:
-                for gene_split_dir in os.listdir(run_dir):
-                    if os.path.exists(os.path.join(run_dir, gene_split_dir, "best_model.pth")):
+                for gene_split_name in os.listdir(run_dir):
+                    gene_split_dir = os.path.join(run_dir, gene_split_name)
+
+                    config_path = os.path.join(gene_split_dir, "config")
+                    model_path = os.path.join(gene_split_dir, "best_model.pth")
+
+                    if xor(os.path.exists(config_path), os.path.exists(model_path)):
+                        model_dirs_incomplete.append(run_dir)
+                        continue
+                    if os.path.exists(config_path) and os.path.exists(model_path):
                         model_dirs.append(os.path.join(run_dir, gene_split_dir))
                     else:
                         raise RuntimeError(f"model state path {run_dir}/{gene_split_dir} not found")
 
         if len(model_dirs) == 0:
             raise RuntimeError("no model state paths found")
+        if len(model_dirs_incomplete) > 0:
+            model_dirs_incomplete_df = pd.DataFrame(model_dirs_incomplete)
+            model_dirs_incomplete_df.to_csv(f"../evaluation/missing/{base_dir}/incomplete_runs.csv", index=False)
 
         for i in range(len(model_dirs)):
             for flagname in flags.keys():
