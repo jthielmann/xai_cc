@@ -9,3 +9,4 @@ eval_label: crp_rank_demo
 out_path: ../evaluation
 dataset: coad
 genes: ['ENOSF1']
+crp_rank_plot_sidecar: true
