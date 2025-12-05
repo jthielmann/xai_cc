@@ -389,12 +389,14 @@ def main() -> None:
         if len(model_dirs) == 0:
             raise RuntimeError("no model state paths found")
 
-        for job in model_dirs:
+        for i in range(len(model_dirs)):
             for flagname in flagnames:
+                print(i, "/", len(model_dirs), "->", model_dirs[i], flagname)
+                model_dir = model_dirs[i]
                 flags[flagname] = bool(raw_cfg.get(flagname))
                 per_cfg = dict(raw_cfg)
-                model_config = parse_yaml_config(job + "/config")
-                per_cfg["model_state_path"] = job
+                model_config = parse_yaml_config(model_dir + "/config")
+                per_cfg["model_state_path"] = model_dir
                 per_cfg["eval_label"] = flagname
                 per_cfg["encoder_type"] = model_config["encoder_type"]
                 per_cfg["run_name"] = None

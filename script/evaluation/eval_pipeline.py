@@ -559,8 +559,27 @@ class EvalPipeline:
 
         if self.config.get("forward_to_csv_simple"):
             print("forward_to_csv_simple")
-            eval_tf = get_transforms(self.config["model_config"], split="eval")
+
             debug = bool(self.config.get("debug"))
+            out_path = "../evaluation"
+            if debug:
+                out_path = os.path.join(out_path, "debug")
+            out_path = os.path.join(out_path, "predictions")
+
+            # append run name then gene set
+            model_path = self.config["model_state_path"]
+
+            # [10:] cuts ../models/
+            out_filepath = os.path.join(out_path, model_path[10:])
+            os.makedirs(out_filepath, exist_ok=True)
+            out_filename = os.path.join(out_filepath, "predictions.csv")
+            print(out_filename)
+            if os.path.exists(out_filename):
+                print(f"[Eval] {out_filename} already exists")
+                return
+
+            eval_tf = get_transforms(self.config["model_config"], split="eval")
+
             meta_dir = self.config.get("meta_data_dir")
             if not meta_dir:
                 raise ValueError(f"meta_dir missing in config {self.config}")
@@ -604,25 +623,13 @@ class EvalPipeline:
                     row[gene + "_label"] = round(float(y[gene_idx]), 6)
 
                 if idx / len(dataset) > pcnt:
-                    print(pcnt * 100, "/100")
+                    print(round(pcnt * 100, 0), "/100")
                     pcnt += 0.1
                 rows.append(row)
 
             df = pd.DataFrame(rows)
             print("len(df)", len(df))
-            out_path = "../evaluation"
-            if debug:
-                out_path = os.path.join(out_path, "debug")
-            out_path = os.path.join(out_path, "predictions")
 
-            # append run name then gene set
-            model_path = self.config["model_state_path"]
-
-            # [10:] cuts ../models/
-            out_filepath = os.path.join(out_path, model_path[10:])
-            os.makedirs(out_filepath, exist_ok=True)
-            out_filename = os.path.join(out_filepath, "predictions.csv")
-            print(out_filename)
             df.to_csv(out_filename, index=False)
 
 
