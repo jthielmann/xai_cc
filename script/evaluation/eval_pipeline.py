@@ -567,6 +567,7 @@ class EvalPipeline:
             gene_csv = self.config.get("gene_data_filename")
             if not gene_csv:
                 raise ValueError(f"gene_data_filename missing in config {self.config}")
+            print(self.config.model_config)
             dataset = get_dataset_from_config(
                 dataset_name=self.config["dataset"],
                 genes=self.config.model_config["genes"],
