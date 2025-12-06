@@ -17,7 +17,7 @@ job_type: v
 tags: [eval_debug, cmmn]
 debug: false
 log_to_wandb: false
-redo: true
+redo: false
 
 
 # When true, treat model_state_path as a base project directory and
