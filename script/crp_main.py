@@ -35,57 +35,21 @@ def _resolve_relative(path: str, source_path=None) -> str:
             return candidate
     return os.path.normpath(os.path.join(bases[0], path)) if bases else path
 
+def _prepare_out_dir_and_dump_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    cfg.update(get_dataset_cfg(cfg))
+    encoder_type = cfg.get("model_config").get("encoder_type")
+    genes = cfg.get("model_config").get("genes")
+    id = compute_genes_id(genes)
+    base_root = "../evaluation/debug" if cfg["debug"] else "../evaluation"
 
-def _sanitize_token(s: str) -> str:
-    return (
-        str(s)
-        .replace("\\", "/")
-        .rstrip("/")
-        .replace("/", "__")
-        .replace(" ", "_")
-    )[:128]
-
-
-def _prepare_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    merged = dict(cfg)
-    merged.update(get_dataset_cfg(merged))
-    enc = merged.get("encoder_type") or (merged.get("model_config") or {}).get("encoder_type")
-    if not isinstance(enc, str) or not enc.strip():
-        raise ValueError("encoder_type missing; required to build eval output path")
-    enc_token = _sanitize_token(enc)
-    genes = (merged.get("model_config") or {}).get("genes")
-    if not genes:
-        raise ValueError("model_config.genes missing; required to build gene_set path")
-    gs_token = _sanitize_token(compute_genes_id(genes))
-    base_root = "../evaluation/debug" if bool(merged.get("debug", False)) else "../evaluation"
-    label = merged.get("eval_label")
-    if isinstance(label, str) and label.strip():
-        label = _sanitize_token(label)
-    else:
-        label = None
-    base = os.path.join(base_root, label, gs_token, enc_token) if label else os.path.join(base_root, gs_token, enc_token)
-    eval_path = base
-    merged["eval_path"] = eval_path
-    merged["out_path"] = eval_path
-    os.makedirs(eval_path, exist_ok=True)
-    ensure_free_disk_space(eval_path)
-    dump_cfg = {k: v for k, v in merged.items() if not str(k).startswith("_")}
-    with open(os.path.join(eval_path, "config"), "w") as handle:
-        yaml.safe_dump(dump_cfg, handle, sort_keys=False, default_flow_style=False, allow_unicode=True)
-    return merged
-
-
-def _sanity_check_config(config: Dict[str, Any]):
-    if config.get("model_state_path") and not config.get("encoder_state_path") and not config.get("gene_head_state_path"):
-        return
-    if not config.get("model_state_path") and config.get("encoder_state_path") and config.get("gene_head_state_path"):
-        return
-    raise RuntimeError(
-        f"corrupted config:\n"
-        f"encoder_state_path {config.get('encoder_state_path', 'empty')}\n"
-        f"gene_head_state_path {config.get('gene_head_state_path', 'empty')}\n"
-        f"model_state_path {config.get('model_state_path', 'empty')}\n"
-    )
+    crp_path = os.path.join(base_root, "crp", id, encoder_type)
+    cfg["eval_path"] = crp_path
+    cfg["out_path"] = crp_path
+    os.makedirs(crp_path, exist_ok=False)
+    ensure_free_disk_space(crp_path)
+    with open(os.path.join(crp_path, "config"), "w") as handle:
+        yaml.safe_dump(cfg, handle, sort_keys=False)
+    return cfg
 
 
 def _verify_path(path, models_dir):
@@ -135,6 +99,19 @@ def _setup_model_config(config_name:str):
     config = {k: v for k, v in raw_cfg.items()}
     return config
 
+def _update_crp_config(cfg) -> Dict[str, Any]:
+    cfg["crp"] = True
+
+    cfg["lrp"] = False
+    cfg["pxc"] = False
+    cfg["diff"] = False
+    cfg["scatter"] = False
+    cfg["forward_to_csv"] = False
+    cfg["forward_to_csv_simple"] = False
+    cfg["umap"] = False
+    cfg["lxt"] = False
+    return cfg
+
 
 def main() -> None:
     args = parse_args()
@@ -147,16 +124,8 @@ def main() -> None:
         msp = raw_cfg.get("model_state_path")
         if isinstance(msp, str) and msp.strip():
             cfg["eval_label"] = msp
-    mode = cfg.get("xai_pipeline")
-    if isinstance(mode, str):
-        m = mode.strip().lower()
-        if m == "auto":
-            cfg = build_auto_xai_config(cfg)
-        elif m == "manual":
-            pass
-        else:
-            raise ValueError("invalid xai_pipeline value; expected 'manual' or 'auto'")
-    _sanity_check_config(cfg)
+
+    cfg = _update_crp_config(cfg)
     cfg["model_config"] = _setup_model_config(os.path.join(cfg["model_state_path"], "config"))
     setup_dump_env()
 
@@ -181,7 +150,7 @@ def main() -> None:
         cfg.update(dict(run.config))
         if original_run_name is not None:
             cfg["run_name"] = original_run_name
-    cfg = _prepare_cfg(cfg)
+    cfg = _prepare_out_dir_and_dump_cfg(cfg)
 
     EvalPipeline(cfg, run=run).run()
 

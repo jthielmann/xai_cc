@@ -8,7 +8,7 @@ group: eval
 job_type: xai
 tags: [eval]
 debug: false
-log_to_wandb: true
+log_to_wandb: false
 
 # Model configuration to inherit architecture/dataset details from
 dataset: coad
@@ -22,8 +22,8 @@ sae_state_path: null
 
 eval_dir: ../evaluation
 
-boxplots: true
-plot_violin: true
+boxplots: false
+plot_violin: false
 
 ## Intentionally omit case toggles here. In `xai_pipeline: auto`,
 ## script/xai_auto_config.py decides which cases to enable based on the model.

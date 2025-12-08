@@ -103,6 +103,7 @@ def plot_crp_zennit(
     components=None,
     target_index: int = 0,
     sidecar_handle=None,
+    layer_name: str = None,
     ):
     """CRP using zennit-crp CondAttribution on a small dataset subset."""
     model.eval()
