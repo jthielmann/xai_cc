@@ -381,7 +381,6 @@ def main() -> None:
     for run_name in os.listdir(base_dir):
         print(run_name)
 
-    exit(0)
 
     for run_name in os.listdir(base_dir):
         print(run_name)
@@ -412,11 +411,6 @@ def main() -> None:
                     raise RuntimeError(f"model state path {run_dir}/{gene_split_dir} not found")
 
         models_df = pd.DataFrame(model_dirs, columns=["dir", "run_name"])
-
-        print(models_df["run_name"].unique())
-        print(len(models_df))
-
-        exit(0)
 
         if len(model_dirs) == 0:
             raise RuntimeError("no model state paths found")
