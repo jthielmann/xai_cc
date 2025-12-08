@@ -408,8 +408,6 @@ def main() -> None:
                 if os.path.exists(config_path) and os.path.exists(model_path):
                     model_dirs.append((gene_split_dir, run_name))
                     print("split_genes_by: ", gene_split_dir)
-                else:
-                    raise RuntimeError(f"model state path {run_dir}/{gene_split_dir} not found")
 
         models_df = pd.DataFrame(model_dirs, columns=["dir", "run_name"])
 
