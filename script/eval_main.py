@@ -378,11 +378,10 @@ def main() -> None:
     if not base_dir or not os.path.isdir(base_dir):
         raise RuntimeError(f"model state path {base_dir} not found for config variable 'model_state_path'")
     # single run with best_model.pth and config directly there
+    for run_name in os.listdir(base_dir):
+        print(run_name)
 
-    print (base_dir)
-    print(os.listdir(base_dir))
     exit(0)
-
 
     for run_name in os.listdir(base_dir):
         print(run_name)
