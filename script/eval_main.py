@@ -395,6 +395,7 @@ def main() -> None:
             model_dirs.append((run_dir, run_name))
             print("single run: ", run_dir)
         else:
+            print(f"looping over run_dir {run_dir}", os.listdir(run_dir))
             for gene_split_name in os.listdir(run_dir):
                 gene_split_dir = os.path.join(run_dir, gene_split_name)
                 config_path = os.path.join(gene_split_dir, "config")
