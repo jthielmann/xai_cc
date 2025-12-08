@@ -380,14 +380,17 @@ def main() -> None:
     # single run with best_model.pth and config directly there
 
     for run_name in os.listdir(base_dir):
+        print(run_name)
         run_dir = os.path.join(base_dir, run_name)
         config_path = os.path.join(run_dir, "config")
         model_path = os.path.join(run_dir, "best_model.pth")
         if xor(os.path.exists(config_path), os.path.exists(model_path)):
             model_dirs_incomplete.append((run_dir, run_name))
+            print("incomplete: ", run_dir)
             continue
         if os.path.exists(os.path.join(run_dir, "config")) and os.path.exists(os.path.join(run_dir, "best_model.pth")):
             model_dirs.append((run_dir, run_name))
+            print("single run: ", run_dir)
         else:
             for gene_split_name in os.listdir(run_dir):
                 gene_split_dir = os.path.join(run_dir, gene_split_name)
@@ -396,9 +399,11 @@ def main() -> None:
 
                 if xor(os.path.exists(config_path), os.path.exists(model_path)):
                     model_dirs_incomplete.append((gene_split_dir, run_name))
+                    print("incomplete: ", gene_split_dir)
                     continue
                 if os.path.exists(config_path) and os.path.exists(model_path):
                     model_dirs.append((gene_split_dir, run_name))
+                    print("split_genes_by: ", gene_split_dir)
                 else:
                     raise RuntimeError(f"model state path {run_dir}/{gene_split_dir} not found")
 
