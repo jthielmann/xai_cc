@@ -76,14 +76,22 @@ def _auto_record_layer_name(encoder: nn.Module, encoder_type: str) -> str:
 
 
 def _get_composite_and_layer(encoder, encoder_type: str = None):
-    enc_type = type(encoder).__name__
-    if enc_type == "VGG":
+    if "VGG" in encoder_type:
         composite = EpsilonPlusFlat(canonizers=[VGGCanonizer()])
-    elif hasattr(encoder, "layer1"):
+        layer_name = ""
+    elif "resnet" in encoder_type or encoder_type == "dino":
         composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
+        layer_name = "layer4.2"
+    elif "convnext" in encoder_type:
+        composite = EpsilonPlusFlat() # no resnet specific stuff for these
+        layer_name = "stages.3.blocks.<max>"
+    # dinov3 that is not convnext
+    elif "dinov3" in encoder_type:
+        raise NotImplementedError
+    elif "uni" in encoder_type:
+        raise NotImplementedError
     else:
-        composite = EpsilonPlusFlat()
-    layer_name = _auto_record_layer_name(encoder, encoder_type)
+        raise ValueError(f"Unsupported encoder type {encoder_type!r} for CRP recording.")
     return composite, layer_name
 
 def plot_crp_zennit(

@@ -4,7 +4,7 @@ import json
 import torch
 import numpy as np
 from typing import Any, Dict
-
+from script.configs.dataset_config import get_dataset_cfg
 from script.evaluation.crp_plotting import plot_crp_zennit, plot_crp, _get_composite_and_layer
 from script.evaluation.pcx_plotting import plot_pcx
 from script.model.lit_model import load_lit_regressor
@@ -116,73 +116,48 @@ class EvalPipeline:
 
     def run(self):
         if self.config.get("crp"):
-            # Ensure gradients flow for attribution even if encoder was frozen during training
+            genes_model = []
+            for g in self.config["model_config"]["genes"]:
+                gs = str(g).strip()
+                if gs.lower().startswith("unnamed") or gs.lower() in {"x", "y"}:
+                    continue
+                genes_model.append(gs)
+
+            eval_tf = get_transforms(self.config["model_config"], split="eval")
+            genes_target = self.config["genes"]
             if hasattr(self.model, "encoder_is_fully_frozen"):
                 self.model.encoder_is_fully_frozen = False
-            crp_backend = str(self.config.get("crp_backend", "zennit")).lower()
-            eval_tf = get_transforms(self.config["model_config"], split="eval")
-            # Use TEST split from the selected dataset; honor configured test_samples
-            # Directly resolve metadata CSV using eval override with model_config fallback
-            cfg = self.config
-            mc_genes = cfg.get("model_config", {}).get("genes")
-            if not mc_genes:
-                raise ValueError("Trained model config does not contain 'genes'; cannot run CRP.")
-            genes = []
-            for g in mc_genes:
-                gs = str(g).strip()
-                if not gs:
-                    continue
-                if gs.lower().startswith("unnamed"):
-                    continue
-                genes.append(gs)
-            if not genes:
-                raise ValueError("No valid genes after excluding empty/unnamed entries.")
-            target_gene = cfg.get("gene")
-            user_genes = cfg.get("genes")
-            if not target_gene and user_genes is not None:
-                if isinstance(user_genes, str):
-                    target_gene = user_genes.strip()
-                elif isinstance(user_genes, (list, tuple)):
-                    if len(user_genes) == 1:
-                        target_gene = str(user_genes[0]).strip()
-                    else:
-                        raise ValueError("CRP expects one gene; set 'gene' or a single-element 'genes'.")
-            if not target_gene:
-                raise ValueError("CRP requires a target gene via 'gene' or a single-element 'genes'.")
-            if target_gene not in genes:
-                raise ValueError(f"target gene {target_gene!r} not found in model genes list.")
-            target_index = genes.index(target_gene)
-            cfg["gene"] = target_gene
-            cfg["genes"] = genes
-            meta_dir = cfg.get("meta_data_dir") or cfg["model_config"].get("meta_data_dir", "/meta_data/")
-            gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
+
+            ds_config = get_dataset_cfg(self.config)
+            self.config.update(ds_config)
+
+
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
-                genes=cfg["genes"],
+                genes=genes_target,
                 split="test",
                 debug=bool(self.config.get("debug", False)),
                 transforms=eval_tf,
                 samples=self.config.get("test_samples"),
                 only_inputs=False,
-                meta_data_dir=meta_dir,
-                gene_data_filename=gene_csv,
-                return_patient_and_tilepath=bool(cfg.get("crp_rank_plot_sidecar")),
+                meta_data_dir=self.config["meta_data_dir"],
+                gene_data_filename=self.config["gene_data_filename"],
+                return_patient_and_tilepath=True,
             )
+
+
             # Optional truncation via config: crp_max_items; default: use all
-            max_items = int(self.config.get("crp_max_items", 0) or 0)
-            if max_items > 0:
-                ds_subset = Subset(ds, list(range(min(max_items, len(ds)))))
-            else:
-                ds_subset = ds
-            out_path = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "crp")
+            items = 100 if self.config["debug"] else len(ds)
+            ds = Subset(ds, list(range(items)))
+            crp_str = "crp_demo" if self.config["debug"] else "crp"
+            # :10 cuts ../models/
+            out_path = os.path.join("../evaluation/", crp_str, self.config["model_config"]["out_path"][10:])
             os.makedirs(out_path, exist_ok=True)
             # Resolve target layer from encoder_type mapping; users no longer override.
-            enc = getattr(self.model, "encoder", self.model)
-            _, default_layer_name = _get_composite_and_layer(
-                enc, self.config.get("encoder_type")
-            )
+            encoder = getattr(self.model, "encoder")
+            composite, layername = _get_composite_and_layer(self.config.get("encoder_type"))
             resolved_layer = (
-                f"encoder.{default_layer_name}" if enc is not self.model else default_layer_name
+                f"encoder.{layername}" if enc is not self.model else layername
             )
             names = {n for n, _ in self.model.named_modules()}
             if resolved_layer not in names:
