@@ -415,9 +415,6 @@ def main() -> None:
     for run_name in models_df.run_name.unique():
         print(run_name, len(models_df[models_df["run_name"] == run_name]))
 
-    exit(0)
-
-
     if len(model_dirs) == 0:
         raise RuntimeError("no model state paths found")
     if len(model_dirs_incomplete) > 0:
@@ -425,7 +422,6 @@ def main() -> None:
         location = f"../evaluation/missing/{base_dir[10:]}/"
         if not os.path.exists(location):
             os.makedirs(location)
-
         model_dirs_incomplete_df.to_csv(location + "incomplete_runs.csv", index=False)
 
     for i in range(len(model_dirs)):
