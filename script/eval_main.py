@@ -413,7 +413,7 @@ def main() -> None:
     models_df = pd.DataFrame(model_dirs, columns=["dir", "run_name"])
     print(len(models_df))
     for run_name in models_df.run_name.unique():
-        print(len(models_df[models_df["run_name"] == run_name]))
+        print(run_name, len(models_df[models_df["run_name"] == run_name]))
 
     exit(0)
 
