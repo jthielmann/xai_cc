@@ -404,7 +404,8 @@ def main() -> None:
 
         models_df = pd.DataFrame(model_dirs, columns=["dir", "run_name"])
 
-        print(models_df)
+        print(models_df["run_name"].unique())
+        print(len(models_df))
 
         exit(0)
 
