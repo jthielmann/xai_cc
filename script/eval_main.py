@@ -378,37 +378,40 @@ def main() -> None:
     if not base_dir or not os.path.isdir(base_dir):
         raise RuntimeError(f"model state path {base_dir} not found for config variable 'model_state_path'")
     # single run with best_model.pth and config directly there
-    if os.path.exists(base_dir + "/config"):
-        model_dirs.append(base_dir)
-    # split_genes_by case
-    else:
-        for run_name in os.listdir(base_dir):
-            run_dir = os.path.join(base_dir, run_name)
-            config_path = os.path.join(run_dir, "config")
-            model_path = os.path.join(run_dir, "best_model.pth")
-            if xor(os.path.exists(config_path), os.path.exists(model_path)):
-                model_dirs_incomplete.append(run_dir)
-                continue
-            if os.path.exists(os.path.join(run_dir, "config")) and os.path.exists(os.path.join(run_dir, "best_model.pth")):
-                model_dirs.append(run_dir)
-            else:
-                for gene_split_name in os.listdir(run_dir):
-                    gene_split_dir = os.path.join(run_dir, gene_split_name)
-                    config_path = os.path.join(gene_split_dir, "config")
-                    model_path = os.path.join(gene_split_dir, "best_model.pth")
 
-                    if xor(os.path.exists(config_path), os.path.exists(model_path)):
-                        model_dirs_incomplete.append(gene_split_dir)
-                        continue
-                    if os.path.exists(config_path) and os.path.exists(model_path):
-                        model_dirs.append(gene_split_dir)
-                    else:
-                        raise RuntimeError(f"model state path {run_dir}/{gene_split_dir} not found")
+    for run_name in os.listdir(base_dir):
+        run_dir = os.path.join(base_dir, run_name)
+        config_path = os.path.join(run_dir, "config")
+        model_path = os.path.join(run_dir, "best_model.pth")
+        if xor(os.path.exists(config_path), os.path.exists(model_path)):
+            model_dirs_incomplete.append((run_dir, run_name))
+            continue
+        if os.path.exists(os.path.join(run_dir, "config")) and os.path.exists(os.path.join(run_dir, "best_model.pth")):
+            model_dirs.append((run_dir, run_name))
+        else:
+            for gene_split_name in os.listdir(run_dir):
+                gene_split_dir = os.path.join(run_dir, gene_split_name)
+                config_path = os.path.join(gene_split_dir, "config")
+                model_path = os.path.join(gene_split_dir, "best_model.pth")
+
+                if xor(os.path.exists(config_path), os.path.exists(model_path)):
+                    model_dirs_incomplete.append((gene_split_dir, run_name))
+                    continue
+                if os.path.exists(config_path) and os.path.exists(model_path):
+                    model_dirs.append((gene_split_dir, run_name))
+                else:
+                    raise RuntimeError(f"model state path {run_dir}/{gene_split_dir} not found")
+
+        models_df = pd.DataFrame(model_dirs, columns=["dir", "run_name"])
+
+        print(models_df)
+
+        exit(0)
 
         if len(model_dirs) == 0:
             raise RuntimeError("no model state paths found")
         if len(model_dirs_incomplete) > 0:
-            model_dirs_incomplete_df = pd.DataFrame(model_dirs_incomplete)
+            model_dirs_incomplete_df = pd.DataFrame(model_dirs_incomplete, columns=["dir", "run_name"])
             location = f"../evaluation/missing/{base_dir[10:]}/"
             if not os.path.exists(location):
                 os.makedirs(location)
