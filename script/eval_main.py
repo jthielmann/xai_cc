@@ -380,7 +380,9 @@ def main() -> None:
     # single run with best_model.pth and config directly there
 
     print (base_dir)
+    print(os.listdir(base_dir))
     exit(0)
+
 
     for run_name in os.listdir(base_dir):
         print(run_name)
