@@ -409,33 +409,40 @@ def main() -> None:
                     model_dirs.append((gene_split_dir, run_name))
                     print("split_genes_by: ", gene_split_dir)
 
-        models_df = pd.DataFrame(model_dirs, columns=["dir", "run_name"])
 
-        if len(model_dirs) == 0:
-            raise RuntimeError("no model state paths found")
-        if len(model_dirs_incomplete) > 0:
-            model_dirs_incomplete_df = pd.DataFrame(model_dirs_incomplete, columns=["dir", "run_name"])
-            location = f"../evaluation/missing/{base_dir[10:]}/"
-            if not os.path.exists(location):
-                os.makedirs(location)
+    models_df = pd.DataFrame(model_dirs, columns=["dir", "run_name"])
+    print(len(models_df))
+    for run_name in models_df.run_name.unique():
+        print(len(models_df[models_df["run_name"] == run_name]))
 
-            model_dirs_incomplete_df.to_csv(location + "incomplete_runs.csv", index=False)
+    exit(0)
 
-        for i in range(len(model_dirs)):
-            for flagname in flags.keys():
-                if flags[flagname] is False:
-                    continue
-                print(i, "/", len(model_dirs), "->", model_dirs[i], flagname)
-                model_dir = model_dirs[i]
-                flags[flagname] = bool(raw_cfg.get(flagname))
-                per_cfg = dict(raw_cfg)
-                model_config = parse_yaml_config(model_dir + "/config")
-                per_cfg["model_state_path"] = model_dir
-                per_cfg["eval_label"] = flagname
-                per_cfg["encoder_type"] = model_config["encoder_type"]
-                per_cfg["run_name"] = None
-                per_cfg["model_config"] = model_config
-                _run_single(per_cfg, run=None)
+
+    if len(model_dirs) == 0:
+        raise RuntimeError("no model state paths found")
+    if len(model_dirs_incomplete) > 0:
+        model_dirs_incomplete_df = pd.DataFrame(model_dirs_incomplete, columns=["dir", "run_name"])
+        location = f"../evaluation/missing/{base_dir[10:]}/"
+        if not os.path.exists(location):
+            os.makedirs(location)
+
+        model_dirs_incomplete_df.to_csv(location + "incomplete_runs.csv", index=False)
+
+    for i in range(len(model_dirs)):
+        for flagname in flags.keys():
+            if flags[flagname] is False:
+                continue
+            print(i, "/", len(model_dirs), "->", model_dirs[i], flagname)
+            model_dir = model_dirs[i]
+            flags[flagname] = bool(raw_cfg.get(flagname))
+            per_cfg = dict(raw_cfg)
+            model_config = parse_yaml_config(model_dir + "/config")
+            per_cfg["model_state_path"] = model_dir
+            per_cfg["eval_label"] = flagname
+            per_cfg["encoder_type"] = model_config["encoder_type"]
+            per_cfg["run_name"] = None
+            per_cfg["model_config"] = model_config
+            _run_single(per_cfg, run=None)
 
 
 
