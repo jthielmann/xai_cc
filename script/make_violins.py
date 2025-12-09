@@ -65,10 +65,9 @@ def _plotviolin_data(violin_data, geneset):
     ax.set_title("Pearson by run")
     fig.tight_layout()
     out_dir = "../evaluation/"
-    os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "violins")
     os.makedirs(out_path, exist_ok=True)
-    fig.savefig(out_path + geneset, dpi=200)
+    fig.savefig(out_path + geneset + ".png", dpi=200)
     plt.close(fig)
     return out_path
 
