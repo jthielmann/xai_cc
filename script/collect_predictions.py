@@ -29,7 +29,8 @@ def collect_predictions(base_dir):
                     model_dirs.append((gene_split_dir, run_name))
                     print("split_genes_by: ", gene_split_dir)
 
-    for model_dir in model_dirs:
+    for model_dir, run_name in model_dirs:
+        print(model_dir, )
         df = pd.read_csv(model_dir + predictions_filename)
         preds_cols = [col for col in df.columns if "_pred" in col]
         label_cols = [lab for lab in df.columns if "_label" in lab]
