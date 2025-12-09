@@ -1,8 +1,9 @@
 import os
 
 import pandas as pd
-
-from main_utils import read_config_parameter
+import sys
+sys.path.insert(0, os.getcwd())
+from script.main_utils import read_config_parameter
 
 
 def xor(a, b):
