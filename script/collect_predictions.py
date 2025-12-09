@@ -55,5 +55,5 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Aggregate predictions into CSV")
     p.add_argument("--geneset", required=True, help="Path to models/<geneset>")
     args = p.parse_args()
-    path = collect_predictions(args.path)
+    path = collect_predictions(args.geneset)
     print(path)
