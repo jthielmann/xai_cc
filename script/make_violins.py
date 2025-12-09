@@ -52,7 +52,7 @@ def _plotviolin_data(violin_data, geneset):
         groups.append(arr)
     positions = np.arange(len(labels))
     plot_df = pd.DataFrame({"label": np.repeat(labels, [len(g) for g in groups]), "pearson": np.concatenate(groups)})
-    fig_width = max(8, int(0.4 * len(labels) + 0.99))
+    fig_width = max(8, int(1 * len(labels) + 0.99))
     fig, ax = plt.subplots(figsize=(fig_width, 4.5))
     ax.violinplot(groups, positions=positions, showmeans=False, showextrema=True, showmedians=True)
 
