@@ -35,6 +35,11 @@ def collect_predictions(base_dir):
         print("predictions cols: ", preds_cols)
         label_cols = [lab for lab in df.columns if "_label" in lab]
         print("label_cols: ", label_cols)
+        for lab in label_cols:
+            for pred_col in preds_cols:
+                if pred_col[:-4] in lab:
+                    print("pred_col: ", pred_col, "label_cols: ", lab)
+
         exit(0)
 
 
