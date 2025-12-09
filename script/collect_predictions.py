@@ -18,7 +18,6 @@ def collect_predictions(base_dir):
         pred_path = os.path.join(run_dir, predictions_filename)
         if os.path.exists(pred_path):
             model_dirs.append((run_dir, run_name))
-            print("single run: ", run_dir)
         else:
             for gene_split_name in os.listdir(run_dir):
                 gene_split_dir = os.path.join(run_dir, gene_split_name)
@@ -26,7 +25,8 @@ def collect_predictions(base_dir):
 
                 if os.path.exists(pred_path):
                     model_dirs.append((gene_split_dir, run_name))
-                    print("split_genes_by: ", gene_split_dir)
+
+    print(f"Found {len(model_dirs)} models in {base_dir}")
 
     rows = []
     for idx, (model_dir, run_name) in enumerate(model_dirs):
@@ -46,7 +46,7 @@ def collect_predictions(base_dir):
                     row = [pred_col[:-4], pearson, model_dir, run_name]
                     rows.append(row)
 
-    print("rows: ", rows)
+    print("rows: ", rows[0])
     exit(0)
 
 
