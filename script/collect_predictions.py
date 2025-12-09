@@ -39,6 +39,7 @@ def collect_predictions(geneset):
         label_cols = [lab for lab in df.columns if "_label" in lab]
         config_filename = os.path.join("../models/", model_dir[26:], "config")
         config = parse_yaml_config(config_filename)
+        encoder_type = read_config_parameter(config, "encoder_type")
         loss_fn_switch = read_config_parameter(config, "loss_fn_switch")
         fine_tune_layers = int(read_config_parameter(config, "encoder_finetune_layers"))
         if not read_config_parameter(config, "freeze_encoder"):
@@ -54,7 +55,7 @@ def collect_predictions(geneset):
                     labs = torch.tensor(df[lab])
 
                     pearson = pearson_corrcoef(preds, labs)
-                    row = [pred_col[:-4], round(pearson.item(), 4), model_dir, run_name, loss_fn_switch, trained_layers]
+                    row = [pred_col[:-4], round(pearson.item(), 4), model_dir, run_name, loss_fn_switch, trained_layers, encoder_type]
                     rows.append(row)
 
     results_path = os.path.join("../evaluation/predictions", geneset)
