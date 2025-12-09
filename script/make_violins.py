@@ -37,7 +37,7 @@ sys.path.insert(0, "..")
 """
 
 
-def _plotviolin_data(violin_data):
+def _plotviolin_data(violin_data, geneset):
     if not violin_data:
         raise ValueError(f"no violin_data provided; violin_data={violin_data}")
     labels, groups = [], []
@@ -64,11 +64,11 @@ def _plotviolin_data(violin_data):
     ax.set_xlabel("Run")
     ax.set_title("Pearson by run")
     fig.tight_layout()
-    out_dir = "../evaluation/debug/violins"
+    out_dir = "../evaluation/"
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "violins")
     os.makedirs(out_path, exist_ok=True)
-    fig.savefig(out_path, dpi=200)
+    fig.savefig(out_path + geneset, dpi=200)
     plt.close(fig)
     return out_path
 
@@ -83,7 +83,7 @@ def plot_violins(geneset):
         encoder_type = df[df["run_name"] == run_name]["encoder_type"].unique()[0]
         violin_data.append((run_name, pearsons, loss_fn_switch, trained_layers, encoder_type))
 
-    out_path = _plotviolin_data(violin_data)
+    out_path = _plotviolin_data(violin_data, geneset)
     print(f"saved violins to {out_path}")
 
 if __name__ == "__main__":
