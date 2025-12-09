@@ -88,10 +88,10 @@ def plot_violins(geneset):
     violin_data_list = []
 
     if "icms" in geneset:
-        encoder_types = ["dinov3", "resnet", "uni"]
+        encoder_types = ["dino", "resnet", "uni"]
         for encoder_type in encoder_types:
             violin_data = []
-            df = df_all[encoder_type in df_all["encoder_type"]]
+            df = df_all[df_all["encoder_type"].str.contains("dinov3")]
 
             for run_name in df.run_name.unique():
                 pearsons = df[df["run_name"] == run_name]["pearson"].values
