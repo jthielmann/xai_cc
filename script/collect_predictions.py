@@ -1,5 +1,5 @@
 import os
-
+from tqdm import tqdm
 import pandas as pd
 import sys
 sys.path.insert(0, '..')
@@ -29,8 +29,7 @@ def collect_predictions(geneset):
     print(f"Found {len(model_dirs)} models in {base_dir}")
 
     rows = []
-    for idx, (model_dir, run_name) in enumerate(model_dirs):
-        print(idx, f"/{len(model_dirs)} runs")
+    for model_dir, run_name in tqdm(model_dirs, desc="Runs"):
         df = pd.read_csv(os.path.join(model_dir, predictions_filename))
         preds_cols = [col for col in df.columns if "_pred" in col]
         label_cols = [lab for lab in df.columns if "_label" in lab]
