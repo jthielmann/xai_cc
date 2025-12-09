@@ -13,7 +13,7 @@ def collect_predictions(base_dir):
     model_dirs = []
     model_dirs_incomplete = []
     # single run with best_model.pth and config directly there
-    predictions_filename = "predictions/predictions.csv"
+    predictions_filename = "predictions.csv"
     for run_name in os.listdir(base_dir):
         run_dir = os.path.join(base_dir, run_name)
         pred_path = os.path.join(run_dir, predictions_filename)
