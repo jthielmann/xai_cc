@@ -60,6 +60,7 @@ def _plotviolin_data(violin_data):
             positions=[pos],
             widths=0.12,
             showfliers=False,
+            patch_artist=True,
             boxprops={"facecolor": "none", "linewidth": 0.8},
             whiskerprops={"linewidth": 0.8},
             medianprops={"color": "black", "linewidth": 1.5},
