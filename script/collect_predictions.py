@@ -19,6 +19,8 @@ def collect_predictions(geneset):
         if os.path.exists(pred_path):
             model_dirs.append((run_dir, run_name))
         else:
+            if not os.path.isdir(run_dir):
+                continue
             for gene_split_name in os.listdir(run_dir):
                 gene_split_dir = os.path.join(run_dir, gene_split_name)
                 pred_path = os.path.join(gene_split_dir, predictions_filename)

@@ -95,7 +95,11 @@ print("len(pearson_cols_dfs_cmmn) ", len(set(pearson_cols_dfs_cmmn)))
 print(set(pearson_cols_dfs_icms2up))
 
 
-def _plot_violin_seaborn(data, x_col, y_col, hue_col, title, out_path, y_lim=(-1, 1)):
+def _plotviolin_data(violin_data):
+    run_name, data = violin_data
+    
+
+
 
     num_categories = len(data[x_col].unique())
     fig_width = max(12, num_categories * 1.2)
@@ -136,90 +140,16 @@ def _plot_violin_seaborn(data, x_col, y_col, hue_col, title, out_path, y_lim=(-1
     fig.savefig(out_path, dpi=200, bbox_inches='tight')
     plt.close(fig)
 
-
-print("\n--- Starting Violin Plot Generation ---")
-saved_paths = []
-
-id_cols = ["encoder_type", "wmse", "encoder_finetune_layers"]
-
-data_map = {
-    "icms2up": dfs_icms2up,
-    "icms3up": dfs_icms3up,
-    "icms2down": dfs_icms2down,
-    "icms3down": dfs_icms3down,
-    "hvg": hvg,
-    "cmmn": cmmn,
-}
-
-for set_name, df_list in data_map.items():
-
-    if not df_list:
-        print(f"Skipping '{set_name}': No data found.")
-        continue
-
-    df_concat = pd.concat(df_list)
-
-    genes = _GENE_SETS.get(set_name, [])
-    if not genes:
-        print(f"Skipping '{set_name}': No genes found in _GENE_SETS.")
-        continue
-
-    pearson_cols = [f"pearson_{g}" for g in genes if f"pearson_{g}" in df_concat.columns]
-
-    if not pearson_cols:
-        print(f"Skipping '{set_name}': No matching Pearson columns found in data.")
-        continue
-
-    df_long = df_concat.melt(
-        id_vars=id_cols,
-        value_vars=pearson_cols,
-        var_name="gene",
-        value_name="Pearson r"
-    )
-
-    df_long.dropna(subset=["Pearson r"], inplace=True)
-
-    if df_long.empty:
-        print(f"Skipping '{set_name}': No valid Pearson data after melting.")
-        continue
-
-    wmse_label = np.where(df_long['wmse'], "wmse", "wmse_off")
-
-    df_long['group_label'] = (
-            df_long['encoder_type'].astype(str) + "\n" +
-            wmse_label + "\n" +
-            "L" + df_long['encoder_finetune_layers'].astype(str)
-    )
-
-    title = f"Pearson Correlation for {set_name} genes"
-    fname = _sanitize_token(set_name)
-    out_path_violin = _ensure_out_path(os.path.join(OUT_DIR, f"{fname}__violin"), "png")
-
-    print(f"Plotting: {title}...")
-
-    _plot_violin_seaborn(
-        data=df_long,
-        x_col="group_label",
-        y_col="Pearson r",
-        hue_col=None,
-        title=title,
-        out_path=out_path_violin
-    )
-
-    saved_paths.append(out_path_violin)
-
-print("\n--- Plotting Complete ---")
-print(f"Saved {len(saved_paths)} plots to {OUT_DIR}:")
-for p in saved_paths:
-    print(p)
-
-
-
-
-
 def plot_violins(geneset):
     base_dir = "../evaluation/predictions/" + geneset
     df = pd.read_csv(os.path.join(base_dir, "predictions.csv"))
+    violin_data = []
+    for run_name in df.run_name.unique():
+        pearsons = df[df["run_name"] == run_name]["pearson"].values()
+        violin_data.append((run_name, pearsons))
+
+    _plotviolin_data(violin_data)
+
 
 if __name__ == "__main__":
     import argparse
