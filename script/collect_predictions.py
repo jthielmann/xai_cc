@@ -3,8 +3,7 @@ import os
 import pandas as pd
 import sys
 sys.path.insert(0, '..')
-from script.main_utils import read_config_parameter
-
+from torchmetrics.functional import pearson_corrcoef
 
 def xor(a, b):
     return (a and not b) or (not a and b)
@@ -39,6 +38,10 @@ def collect_predictions(base_dir):
             for pred_col in preds_cols:
                 if pred_col[:-4] in lab:
                     print("pred_col: ", pred_col, "label_cols: ", lab)
+                    preds = df[pred_col]
+                    labs = df[lab]
+
+                    print("pearsonr", pearson_corrcoef(preds, labs))
 
         exit(0)
 
