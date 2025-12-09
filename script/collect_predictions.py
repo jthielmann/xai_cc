@@ -43,9 +43,8 @@ def collect_predictions(geneset):
                     pearson = pearson_corrcoef(preds, labs)
                     row = [pred_col[:-4], round(pearson.item(), 4), model_dir, run_name]
                     rows.append(row)
-    results_path = os.path.join("../evaluation/debug/predictions", geneset, ".csv")
+    results_path = os.path.join("../evaluation/debug/predictions", geneset, "predictions.csv")
     print(f"saving to {results_path}")
-    exit(0)
     pd.DataFrame(rows).to_csv(results_path, index=False)
 
 
