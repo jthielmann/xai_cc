@@ -24,7 +24,8 @@ def _plotviolin_data(violin_data):
     fig.tight_layout()
     out_dir = "../evaluation/debug/violins"
     os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, "violins", ".png")
+    out_path = os.path.join(out_dir, "violins")
+    os.makedirs(out_path, exist_ok=True)
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
     return out_path
