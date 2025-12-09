@@ -31,8 +31,6 @@ def collect_predictions(geneset):
     rows = []
     for idx, (model_dir, run_name) in enumerate(model_dirs):
         print(idx, f"/{len(model_dirs)} runs")
-        if idx == 10:
-            break
         df = pd.read_csv(os.path.join(model_dir, predictions_filename))
         preds_cols = [col for col in df.columns if "_pred" in col]
         label_cols = [lab for lab in df.columns if "_label" in lab]
@@ -46,7 +44,7 @@ def collect_predictions(geneset):
                     row = [pred_col[:-4], round(pearson.item(), 4), model_dir, run_name]
                     rows.append(row)
 
-    pd.DataFrame(rows).to_csv(os.path.join("../evaluation/predictions", geneset, ".csv"), index=False)
+    pd.DataFrame(rows).to_csv(os.path.join("../evaluation/debug/predictions", geneset, ".csv"), index=False)
 
 
 if __name__ == "__main__":
@@ -55,5 +53,4 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Aggregate predictions into CSV")
     p.add_argument("--geneset", required=True, help="Path to models/<geneset>")
     args = p.parse_args()
-    path = collect_predictions(args.geneset)
-    print(path)
+    collect_predictions(args.geneset)
