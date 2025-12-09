@@ -143,10 +143,6 @@ def _build_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 def _setup_model_config(config_path: str) -> Dict[str, Any]:
-    """Load a model config from the exact given path and fail on error.
-
-    No fallbacks or alternative filenames are attempted.
-    """
     p = _resolve_relative(config_path)
     if not os.path.exists(p):
         raise RuntimeError(f"model config path does not exist: {p}")
@@ -168,15 +164,7 @@ def _sanitize_token(s: str) -> str:
 
 def _run_single(raw_cfg: Dict[str, Any], run=None) -> None:
     cfg = _build_cfg(raw_cfg)
-    mode = cfg.get("xai_pipeline")
-    if isinstance(mode, str):
-        m = mode.strip().lower()
-        if m == "auto":
-            cfg = build_auto_xai_config(cfg)
-        elif m == "manual":
-            pass
-        else:
-            raise ValueError("invalid xai_pipeline value; expected 'manual' or 'auto'")
+    cfg = build_auto_xai_config(cfg)
     _sanity_check_config(cfg)
     cfg["model_config"] = _setup_model_config(os.path.join(cfg["model_state_path"], "config"))
     # Always allow gradients through the encoder during evaluation/XAI
