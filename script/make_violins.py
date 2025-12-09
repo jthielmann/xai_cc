@@ -58,7 +58,7 @@ def _plotviolin_data(violin_data):
     sns.pointplot(data=plot_df, x="label", y="pearson", order=labels, estimator=np.mean, markers="x", linestyles="", dodge=True, color="black", zorder=3, legend=False, ax=ax)
     ax.set_xticks(positions)
     ax.set_xticklabels(labels)
-    ax.set_ylim(-1.0, 1.0)
+    ax.set_ylim(-.25, 1.0)
     ax.set_ylabel("Pearson r")
     ax.set_xlabel("Run")
     ax.set_title("Pearson by run")
