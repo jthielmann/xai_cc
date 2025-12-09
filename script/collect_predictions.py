@@ -2,11 +2,9 @@ import os
 from tqdm import tqdm
 import pandas as pd
 import sys
-
-from script.configs.dino_config import loss_fn_switch
+sys.path.insert(0, '..')
 from script.main_utils import parse_yaml_config, read_config_parameter
 
-sys.path.insert(0, '..')
 from torchmetrics.functional import pearson_corrcoef
 import torch
 def xor(a, b):
