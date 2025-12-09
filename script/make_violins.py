@@ -55,7 +55,7 @@ def _plotviolin_data(violin_data):
     fig, ax = plt.subplots(figsize=(8, 4.5))
     ax.violinplot(groups, positions=positions, showmeans=False, showextrema=True, showmedians=True)
 
-    sns.stripplot(data=plot_df, x="label", y="pearson", order=labels, dodge=True, jitter=0.2, color="teal", marker="o", size=2, alpha=0.3, ax=ax, legend=False)
+    sns.stripplot(data=plot_df, x="label", y="pearson", order=labels, dodge=True, jitter=0.2, color="black", marker="o", size=2, alpha=0.3, ax=ax, legend=False)
     #sns.pointplot(data=plot_df, x="label", y="pearson", order=labels, estimator=np.mean, markers="x", linestyles="", dodge=True, color="black", zorder=3, legend=False, ax=ax, alpha=0.01)
     ax.set_xticks(positions)
     ax.set_xticklabels(labels)
