@@ -2,7 +2,7 @@ import os
 
 import pandas as pd
 import sys
-sys.path.insert(0, os.getcwd())
+sys.path.insert(0, '..')
 from script.main_utils import read_config_parameter
 
 
