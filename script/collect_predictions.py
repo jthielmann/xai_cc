@@ -2,7 +2,7 @@ import os
 
 import pandas as pd
 
-from script.main_utils import read_config_parameter
+from main_utils import read_config_parameter
 
 
 def xor(a, b):
