@@ -8,9 +8,9 @@ import torch
 def xor(a, b):
     return (a and not b) or (not a and b)
 
-def collect_predictions(base_dir):
+def collect_predictions(geneset):
     model_dirs = []
-    model_dirs_incomplete = []
+    base_dir = "../evaluation/predictions/" + geneset
     # single run with best_model.pth and config directly there
     predictions_filename = "predictions.csv"
     for run_name in os.listdir(base_dir):
@@ -46,15 +46,14 @@ def collect_predictions(base_dir):
                     row = [pred_col[:-4], round(pearson.item(), 4), model_dir, run_name]
                     rows.append(row)
 
-    print("rows: ", rows[0])
-    exit(0)
+    pd.DataFrame(rows).to_csv(os.path.join("../evaluation/predictions", geneset, ".csv"), index=False)
 
 
 if __name__ == "__main__":
     import argparse
 
     p = argparse.ArgumentParser(description="Aggregate predictions into CSV")
-    p.add_argument("--path", required=True, help="Path to models/<geneset>")
+    p.add_argument("--geneset", required=True, help="Path to models/<geneset>")
     args = p.parse_args()
     path = collect_predictions(args.path)
     print(path)
