@@ -52,7 +52,8 @@ def _plotviolin_data(violin_data, geneset):
         groups.append(arr)
     positions = np.arange(len(labels))
     plot_df = pd.DataFrame({"label": np.repeat(labels, [len(g) for g in groups]), "pearson": np.concatenate(groups)})
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    fig_width = max(8, int(0.4 * len(labels) + 0.99))
+    fig, ax = plt.subplots(figsize=(fig_width, 4.5))
     ax.violinplot(groups, positions=positions, showmeans=False, showextrema=True, showmedians=True)
 
     sns.stripplot(data=plot_df, x="label", y="pearson", order=labels, dodge=True, jitter=0.2, color="black", marker="o", size=2, alpha=0.165, ax=ax, legend=False)
@@ -68,7 +69,7 @@ def _plotviolin_data(violin_data, geneset):
     plot_dir = os.path.join(out_dir, "violins")
     os.makedirs(plot_dir, exist_ok=True)
 
-    filename = f"violins_{geneset}.svg"
+    filename = f"{geneset}.svg"
     out_path = os.path.join(plot_dir, filename)
 
     fig.savefig(out_path)
