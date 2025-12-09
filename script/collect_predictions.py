@@ -28,6 +28,7 @@ def collect_predictions(base_dir):
                     model_dirs.append((gene_split_dir, run_name))
                     print("split_genes_by: ", gene_split_dir)
 
+    rows = []
     for model_dir, run_name in model_dirs:
         df = pd.read_csv(os.path.join(model_dir, predictions_filename))
         preds_cols = [col for col in df.columns if "_pred" in col]
@@ -41,9 +42,12 @@ def collect_predictions(base_dir):
                     preds = torch.tensor(df[pred_col])
                     labs = torch.tensor(df[lab])
 
-                    print("pearsonr", pearson_corrcoef(preds, labs))
+                    pearson = pearson_corrcoef(preds, labs)
+                    row = [pred_col[:-4], pearson, model_dir, run_name]
+                    rows.append(row)
 
-        exit(0)
+    print("rows: ", rows)
+    exit(0)
 
 
 if __name__ == "__main__":
