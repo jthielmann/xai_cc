@@ -600,7 +600,6 @@ class EvalPipeline:
                 return_patient_and_tilepath=True
             )
 
-            print("dataset", len(dataset))
 
             rows = []
             device = auto_device(self.model)

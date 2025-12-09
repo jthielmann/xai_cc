@@ -410,10 +410,11 @@ def main() -> None:
                     print("split_genes_by: ", gene_split_dir)
 
 
-    models_df = pd.DataFrame(model_dirs, columns=["dir", "run_name"])
-    print(len(models_df))
-    for run_name in models_df.run_name.unique():
-        print(run_name, len(models_df[models_df["run_name"] == run_name]))
+    if raw_cfg.get("debug"):
+        models_df = pd.DataFrame(model_dirs, columns=["dir", "run_name"])
+        print(len(models_df))
+        for run_name in models_df.run_name.unique():
+            print(run_name, len(models_df[models_df["run_name"] == run_name]))
 
     if len(model_dirs) == 0:
         raise RuntimeError("no model state paths found")
@@ -429,14 +430,14 @@ def main() -> None:
             if flags[flagname] is False:
                 continue
             print(i, "/", len(model_dirs), "->", model_dirs[i], flagname)
-            model_dir = model_dirs[i]
+            model_dir, run_name = model_dirs[i]
             flags[flagname] = bool(raw_cfg.get(flagname))
             per_cfg = dict(raw_cfg)
             model_config = parse_yaml_config(model_dir + "/config")
             per_cfg["model_state_path"] = model_dir
             per_cfg["eval_label"] = flagname
             per_cfg["encoder_type"] = model_config["encoder_type"]
-            per_cfg["run_name"] = None
+            per_cfg["run_name"] = run_name
             per_cfg["model_config"] = model_config
             _run_single(per_cfg, run=None)
 
