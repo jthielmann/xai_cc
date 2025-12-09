@@ -20,8 +20,8 @@ def _plotviolin_data(violin_data, geneset, encoder_key=None):
         groups.append(arr)
     positions = np.arange(len(labels))
     plot_df = pd.DataFrame({"label": np.repeat(labels, [len(g) for g in groups]), "pearson": np.concatenate(groups)})
-    fig_width = max(8, int(1.5 * len(labels) + 0.99))
-    fig, ax = plt.subplots(figsize=(fig_width, 4.5))
+    fig_width = max(8, int(0.4 * len(labels) + 0.99))
+    fig, ax = plt.subplots(figsize=(fig_width, 4.5), constrained_layout=True)
     ax.violinplot(groups, positions=positions, showmeans=False, showextrema=True, showmedians=True)
 
     sns.stripplot(data=plot_df, x="label", y="pearson", order=labels, dodge=True, jitter=0.2, color="black", marker="o", size=2, alpha=0.165, ax=ax, legend=False)
