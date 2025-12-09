@@ -31,6 +31,8 @@ def collect_predictions(base_dir):
     rows = []
     for idx, (model_dir, run_name) in enumerate(model_dirs):
         print(idx, f"/{len(model_dirs)} runs")
+        if idx == 10:
+            break
         df = pd.read_csv(os.path.join(model_dir, predictions_filename))
         preds_cols = [col for col in df.columns if "_pred" in col]
         label_cols = [lab for lab in df.columns if "_label" in lab]
