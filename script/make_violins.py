@@ -56,7 +56,7 @@ def _plotviolin_data(violin_data):
     ax.violinplot(groups, positions=positions, showmeans=False, showextrema=True, showmedians=False)
     for pos, arr in zip(positions, groups):
         ax.boxplot(
-            arr,
+            [arr],
             positions=[pos],
             widths=0.12,
             showfliers=False,
