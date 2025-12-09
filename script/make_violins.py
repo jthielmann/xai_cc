@@ -41,8 +41,10 @@ def _plotviolin_data(violin_data, geneset):
     if not violin_data:
         raise ValueError(f"no violin_data provided; violin_data={violin_data}")
     labels, groups = [], []
+    encoder_types = []
     for item in violin_data:
         run_name, vals, loss_fn_switch, trained_layers, encoder_type = item
+        encoder_types.append(encoder_type)
         arr = np.asarray(vals, dtype=float)
         bad = ~np.isfinite(arr)
         if bad.any():
@@ -69,7 +71,10 @@ def _plotviolin_data(violin_data, geneset):
     plot_dir = os.path.join(out_dir, "violins")
     os.makedirs(plot_dir, exist_ok=True)
 
-    filename = f"{geneset}.svg"
+    if len(set(encoder_types)) == 1:
+        filename = f"{geneset}_d{encoder_types[0]}.svg"
+    else:
+        filename = f"{geneset}.svg"
     out_path = os.path.join(plot_dir, filename)
 
     fig.savefig(out_path)
