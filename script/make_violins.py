@@ -79,17 +79,35 @@ def _plotviolin_data(violin_data, geneset):
 
 def plot_violins(geneset):
     base_dir = "../evaluation/predictions/" + geneset
-    df = pd.read_csv(os.path.join(base_dir, "predictions.csv"))
-    violin_data = []
-    for run_name in df.run_name.unique():
-        pearsons = df[df["run_name"] == run_name]["pearson"].values
-        loss_fn_switch = df[df["run_name"] == run_name]["loss"].unique()[0]
-        trained_layers = df[df["run_name"] == run_name]["trained_layers"].unique()[0]
-        encoder_type = df[df["run_name"] == run_name]["encoder_type"].unique()[0]
-        violin_data.append((run_name, pearsons, loss_fn_switch, trained_layers, encoder_type))
+    df_all = pd.read_csv(os.path.join(base_dir, "predictions.csv"))
+    violin_data_list = []
 
-    out_path = _plotviolin_data(violin_data, geneset)
-    print(f"saved violins to {out_path}")
+    if "icms" in geneset:
+        for encoder_type in df_all["encoder_type"].unique():
+            violin_data = []
+            df = df_all[df_all["encoder_type"] == encoder_type]
+
+            for run_name in df.run_name.unique():
+                pearsons = df[df["run_name"] == run_name]["pearson"].values
+                loss_fn_switch = df[df["run_name"] == run_name]["loss"].unique()[0]
+                trained_layers = df[df["run_name"] == run_name]["trained_layers"].unique()[0]
+                encoder_type = df[df["run_name"] == run_name]["encoder_type"].unique()[0]
+                violin_data.append((run_name, pearsons, loss_fn_switch, trained_layers, encoder_type))
+            violin_data_list.append(violin_data)
+    else:
+        violin_data = []
+        df = df_all
+        for run_name in df.run_name.unique():
+            pearsons = df[df["run_name"] == run_name]["pearson"].values
+            loss_fn_switch = df[df["run_name"] == run_name]["loss"].unique()[0]
+            trained_layers = df[df["run_name"] == run_name]["trained_layers"].unique()[0]
+            encoder_type = df[df["run_name"] == run_name]["encoder_type"].unique()[0]
+            violin_data.append((run_name, pearsons, loss_fn_switch, trained_layers, encoder_type))
+        violin_data_list.append(violin_data)
+
+    for violin_data in violin_data_list:
+        out_path = _plotviolin_data(violin_data, geneset)
+        print(f"saved violins to {out_path}")
 
 if __name__ == "__main__":
     import argparse
