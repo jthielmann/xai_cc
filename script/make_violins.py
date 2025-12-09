@@ -64,11 +64,16 @@ def _plotviolin_data(violin_data, geneset):
     ax.set_xlabel("Run")
     ax.set_title("Pearson by run")
     fig.tight_layout()
-    out_dir = "../evaluation/"
-    out_path = os.path.join(out_dir, "violins")
-    os.makedirs(out_path, exist_ok=True)
-    fig.savefig(out_path + geneset + ".png", dpi=200)
+    out_dir = "../evaluation"
+    plot_dir = os.path.join(out_dir, "violins")
+    os.makedirs(plot_dir, exist_ok=True)
+
+    filename = f"violins_{geneset}.svg"
+    out_path = os.path.join(plot_dir, filename)
+
+    fig.savefig(out_path)
     plt.close(fig)
+
     return out_path
 
 def plot_violins(geneset):
