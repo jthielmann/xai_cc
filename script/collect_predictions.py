@@ -30,6 +30,7 @@ def collect_predictions(geneset):
 
     rows = []
     for model_dir, run_name in tqdm(model_dirs, desc="Runs"):
+        break
         df = pd.read_csv(os.path.join(model_dir, predictions_filename))
         preds_cols = [col for col in df.columns if "_pred" in col]
         label_cols = [lab for lab in df.columns if "_label" in lab]
@@ -42,8 +43,10 @@ def collect_predictions(geneset):
                     pearson = pearson_corrcoef(preds, labs)
                     row = [pred_col[:-4], round(pearson.item(), 4), model_dir, run_name]
                     rows.append(row)
-
-    pd.DataFrame(rows).to_csv(os.path.join("../evaluation/debug/predictions", geneset, ".csv"), index=False)
+    results_path = os.path.join("../evaluation/debug/predictions", geneset, ".csv")
+    print(f"saving to {results_path}")
+    exit(0)
+    pd.DataFrame(rows).to_csv(results_path, index=False)
 
 
 if __name__ == "__main__":
