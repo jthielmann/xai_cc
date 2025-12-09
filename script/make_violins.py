@@ -96,49 +96,31 @@ print(set(pearson_cols_dfs_icms2up))
 
 
 def _plotviolin_data(violin_data):
-    run_name, data = violin_data
-    
-
-
-
-    num_categories = len(data[x_col].unique())
-    fig_width = max(12, num_categories * 1.2)
-    fig_height = 8
-
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-
-    sns.violinplot(data=data, x=x_col, y=y_col, hue=hue_col, inner=None, cut=0, ax=ax, saturation=0.75)
-
-    sns.stripplot(data=data, x=x_col, y=y_col, hue=hue_col,dodge=True,jitter=0.2,color='black',marker='o',size=2,alpha=0.6,ax=ax,legend=False)
-
-    sns.pointplot(data=data, x=x_col, y=y_col, hue=hue_col, estimator=np.mean, markers='x', linestyles='', dodge=True, color='black', zorder=3, legend=False, ax=ax)
-
-    if hue_col:
-        handles, labels = ax.get_legend_handles_labels()
-        num_hue_levels = len(data[hue_col].unique())
-        ax.legend(
-            handles[:num_hue_levels],
-            labels[:num_hue_levels],
-            title=hue_col,
-            bbox_to_anchor=(1.05, 1),
-            loc='upper left'
-        )
-    elif ax.get_legend():
-        ax.get_legend().remove()
-
-    ax.set_ylim(*y_lim)
-    ax.set_ylabel(y_col)
-    ax.set_xlabel("Group")
-    ax.set_title(title)
-
-    # Set label rotation and smaller font size
-    ax.tick_params(axis='x', rotation=0, labelsize='small')
-
+    labels, groups = [], []
+    for item in violin_data:
+        run_name, vals = item
+        arr = np.asarray(vals, dtype=float)
+        bad = ~np.isfinite(arr)
+        if bad.any():
+            idx = np.where(bad)[0][:5].tolist()
+            raise ValueError(f"non-finite values for {run_name}; idx={idx}; vals={arr[bad][:5].tolist()}")
+        labels.append(run_name)
+        groups.append(arr)
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.violinplot(groups, showmeans=False, showextrema=True, showmedians=False)
+    ax.set_xticks(range(1, len(labels) + 1))
+    ax.set_xticklabels(labels)
+    ax.set_ylim(-1.0, 1.0)
+    ax.set_ylabel("Pearson r")
+    ax.set_xlabel("Run")
+    ax.set_title("Pearson by run")
     fig.tight_layout()
-
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    fig.savefig(out_path, dpi=200, bbox_inches='tight')
+    out_dir = "../evaluation/debug/violins"
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = _ensure_out_path(os.path.join(out_dir, "violins"), "png")
+    fig.savefig(out_path, dpi=200)
     plt.close(fig)
+    return out_path
 
 def plot_violins(geneset):
     base_dir = "../evaluation/predictions/" + geneset
@@ -148,8 +130,8 @@ def plot_violins(geneset):
         pearsons = df[df["run_name"] == run_name]["pearson"].values()
         violin_data.append((run_name, pearsons))
 
-    _plotviolin_data(violin_data)
-
+    out_path = _plotviolin_data(violin_data)
+    print(f"saved violins to {out_path}")
 
 if __name__ == "__main__":
     import argparse
