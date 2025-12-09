@@ -45,9 +45,9 @@ def collect_predictions(geneset):
         if not read_config_parameter(config, "freeze_encoder"):
             trained_layers = "all layers"
         elif fine_tune_layers > 0:
-            trained_layers = f"{fine_tune_layers} enc layers"
+            trained_layers = f"{fine_tune_layers} e_layers"
         else:
-            trained_layers = "heads only"
+            trained_layers = "heads"
         for lab in label_cols:
             for pred_col in preds_cols:
                 if pred_col[:-5] in lab:
