@@ -18,7 +18,6 @@ import wandb
 from script.configs.dataset_config import get_dataset_cfg
 from script.xai_auto_config import build_auto_xai_config
 from script.evaluation.eval_pipeline import EvalPipeline
-from script.evaluation.gather_results import gather_forward_metrics
 from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, \
     read_config_parameter, compute_genes_id
 from script.boxplot_helpers import (
