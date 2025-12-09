@@ -72,7 +72,7 @@ def _plotviolin_data(violin_data, geneset):
     os.makedirs(plot_dir, exist_ok=True)
 
     if len(set(encoder_types)) == 1:
-        filename = f"{geneset}_d{encoder_types[0]}.svg"
+        filename = f"{geneset}_{encoder_types[0]}.svg"
     else:
         filename = f"{geneset}.svg"
     out_path = os.path.join(plot_dir, filename)
@@ -88,6 +88,7 @@ def plot_violins(geneset):
     violin_data_list = []
 
     if "icms" in geneset:
+        encoder_types = ["dinov3", "resnet", "uni", ""]
         for encoder_type in df_all["encoder_type"].unique():
             violin_data = []
             df = df_all[df_all["encoder_type"] == encoder_type]
