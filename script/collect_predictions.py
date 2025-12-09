@@ -43,7 +43,7 @@ def collect_predictions(base_dir):
                     labs = torch.tensor(df[lab])
 
                     pearson = pearson_corrcoef(preds, labs)
-                    row = [pred_col[:-4], pearson.item(), model_dir, run_name]
+                    row = [pred_col[:-4], round(pearson.item(), 4), model_dir, run_name]
                     rows.append(row)
 
     print("rows: ", rows[0])
