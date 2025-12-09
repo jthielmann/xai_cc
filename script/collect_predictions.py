@@ -64,7 +64,7 @@ def collect_predictions(geneset):
     results_filename = os.path.join(results_path, predictions_filename)
 
     print(f"saving to {results_filename}")
-    pd.DataFrame(rows, columns=["gene", "pearson", "model_dir", "run_name", "loss", "trained_layers"]).to_csv(results_filename, index=False)
+    pd.DataFrame(rows, columns=["gene", "pearson", "model_dir", "run_name", "loss", "trained_layers", "encoder_type"]).to_csv(results_filename, index=False)
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ def plot_violins(geneset):
         pearsons = df[df["run_name"] == run_name]["pearson"].values
         loss_fn_switch = df[df["run_name"] == run_name]["loss"].unique()[0]
         trained_layers = df[df["run_name"] == run_name]["trained_layers"].unique()[0]
-        encoder_type = "dino"#df[df["run_name"] == run_name]["encoder_type"].unique()[0]
+        encoder_type = df[df["run_name"] == run_name]["encoder_type"].unique()[0]
         violin_data.append((run_name, pearsons, loss_fn_switch, trained_layers, encoder_type))
 
     out_path = _plotviolin_data(violin_data)
