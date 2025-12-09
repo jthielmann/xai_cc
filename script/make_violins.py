@@ -2,42 +2,8 @@ import sys, os, numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as 
 
 sys.path.insert(0, "..")
 
-# todo: add these:
-"""
-    sns.stripplot(
-        data=data,
-        x=x_col,
-        y=y_col,
-        hue=hue_col,
-        dodge=True,
-        jitter=0.2,
-        color='black',
-        marker='o',
-        size=2,
-        alpha=0.6,
-        ax=ax,
-        legend=False
-    )
-
-    sns.pointplot(
-        data=data,
-        x=x_col,
-        y=y_col,
-        hue=hue_col,
-        estimator=np.mean,
-        markers='x',
-        linestyles='',
-        dodge=True,
-        color='black',
-        zorder=3,
-        legend=False,
-        ax=ax
-    )
-
-"""
-
-
-def _plotviolin_data(violin_data, geneset):
+encoder_keys = ["dino", "resnet", "uni"]
+def _plotviolin_data(violin_data, geneset, encoder_key=None):
     if not violin_data:
         raise ValueError(f"no violin_data provided; violin_data={violin_data}")
     labels, groups = [], []
@@ -70,9 +36,10 @@ def _plotviolin_data(violin_data, geneset):
     out_dir = "../evaluation"
     plot_dir = os.path.join(out_dir, "violins")
     os.makedirs(plot_dir, exist_ok=True)
+    filename = ""
 
-    if len(set(encoder_types)) == 1:
-        filename = f"{geneset}_{encoder_types[0]}.svg"
+    if encoder_key is not None:
+        filename = f"{geneset}_{encoder_key}.svg"
     else:
         filename = f"{geneset}.svg"
     out_path = os.path.join(plot_dir, filename)
@@ -85,35 +52,52 @@ def _plotviolin_data(violin_data, geneset):
 def plot_violins(geneset):
     base_dir = "../evaluation/predictions/" + geneset
     df_all = pd.read_csv(os.path.join(base_dir, "predictions.csv"))
-    violin_data_list = []
 
+    violin_jobs = []
+
+    # split the plotting in icms case because there are many runs
     if "icms" in geneset:
-        encoder_types = ["dino", "resnet", "uni"]
-        for encoder_type in encoder_types:
+        encoder_keys = ["dino", "resnet", "uni"]
+
+        for enc_key in encoder_keys:
+            df = df_all[df_all["encoder_type"].str.contains(enc_key, case=False, na=False)]
+            if df.empty:
+                continue
+
             violin_data = []
-            df = df_all[df_all["encoder_type"].str.contains("dinov3")]
+            for run_name in df["run_name"].unique():
+                df_run = df[df["run_name"] == run_name]
+                pearsons       = df_run["pearson"].values
+                loss_fn_switch = df_run["loss"].iloc[0]
+                trained_layers = df_run["trained_layers"].iloc[0]
+                encoder_type   = df_run["encoder_type"].iloc[0]
 
-            for run_name in df.run_name.unique():
-                pearsons = df[df["run_name"] == run_name]["pearson"].values
-                loss_fn_switch = df[df["run_name"] == run_name]["loss"].unique()[0]
-                trained_layers = df[df["run_name"] == run_name]["trained_layers"].unique()[0]
-                encoder_type = df[df["run_name"] == run_name]["encoder_type"].unique()[0]
-                violin_data.append((run_name, pearsons, loss_fn_switch, trained_layers, encoder_type))
-            violin_data_list.append(violin_data)
+                violin_data.append(
+                    (run_name, pearsons, loss_fn_switch, trained_layers, encoder_type)
+                )
+
+            violin_jobs.append((violin_data, enc_key))
+
     else:
-        violin_data = []
         df = df_all
-        for run_name in df.run_name.unique():
-            pearsons = df[df["run_name"] == run_name]["pearson"].values
-            loss_fn_switch = df[df["run_name"] == run_name]["loss"].unique()[0]
-            trained_layers = df[df["run_name"] == run_name]["trained_layers"].unique()[0]
-            encoder_type = df[df["run_name"] == run_name]["encoder_type"].unique()[0]
-            violin_data.append((run_name, pearsons, loss_fn_switch, trained_layers, encoder_type))
-        violin_data_list.append(violin_data)
+        violin_data = []
+        for run_name in df["run_name"].unique():
+            df_run = df[df["run_name"] == run_name]
+            pearsons       = df_run["pearson"].values
+            loss_fn_switch = df_run["loss"].iloc[0]
+            trained_layers = df_run["trained_layers"].iloc[0]
+            encoder_type   = df_run["encoder_type"].iloc[0]
 
-    for violin_data in violin_data_list:
-        out_path = _plotviolin_data(violin_data, geneset)
+            violin_data.append(
+                (run_name, pearsons, loss_fn_switch, trained_layers, encoder_type)
+            )
+
+        violin_jobs.append((violin_data, None))
+
+    for violin_data, enc_key in violin_jobs:
+        out_path = _plotviolin_data(violin_data, geneset, encoder_key=enc_key)
         print(f"saved violins to {out_path}")
+
 
 if __name__ == "__main__":
     import argparse
