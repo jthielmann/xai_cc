@@ -127,7 +127,7 @@ def plot_violins(geneset):
     df = pd.read_csv(os.path.join(base_dir, "predictions.csv"))
     violin_data = []
     for run_name in df.run_name.unique():
-        pearsons = df[df["run_name"] == run_name]["pearson"].values()
+        pearsons = df[df["run_name"] == run_name]["pearson"].values
         violin_data.append((run_name, pearsons))
 
     out_path = _plotviolin_data(violin_data)
