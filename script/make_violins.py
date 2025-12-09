@@ -53,7 +53,7 @@ def _plotviolin_data(violin_data):
     positions = np.arange(len(labels))
     plot_df = pd.DataFrame({"label": np.repeat(labels, [len(g) for g in groups]), "pearson": np.concatenate(groups)})
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.violinplot(groups, positions=positions, showmeans=False, showextrema=True, showmedians=False)
+    ax.violinplot(groups, positions=positions, showmeans=False, showextrema=True, showmedians=True)
     sns.stripplot(data=plot_df, x="label", y="pearson", order=labels, dodge=True, jitter=0.2, color="black", marker="o", size=2, alpha=0.6, ax=ax, legend=False)
     sns.pointplot(data=plot_df, x="label", y="pearson", order=labels, estimator=np.mean, markers="x", linestyles="", dodge=True, color="black", zorder=3, legend=False, ax=ax)
     ax.set_xticks(positions)
@@ -79,7 +79,8 @@ def plot_violins(geneset):
         pearsons = df[df["run_name"] == run_name]["pearson"].values
         loss_fn_switch = df[df["run_name"] == run_name]["loss"].unique()[0]
         trained_layers = df[df["run_name"] == run_name]["trained_layers"].unique()[0]
-        encoder_type = df[df["run_name"] == run_name]["encoder_type"].unique()[0]
+        encoder_type = df[df["run_name"] == run_name][("encoder_"
+                                                       "type")].unique()[0]
         violin_data.append((run_name, pearsons, loss_fn_switch, trained_layers, encoder_type))
 
     out_path = _plotviolin_data(violin_data)
