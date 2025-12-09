@@ -53,7 +53,17 @@ def _plotviolin_data(violin_data):
     positions = np.arange(len(labels))
     plot_df = pd.DataFrame({"label": np.repeat(labels, [len(g) for g in groups]), "pearson": np.concatenate(groups)})
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.violinplot(groups, positions=positions, showmeans=False, showextrema=True, showmedians=True)
+    ax.violinplot(groups, positions=positions, showmeans=False, showextrema=True, showmedians=False)
+    for pos, arr in zip(positions, groups):
+        ax.boxplot(
+            arr,
+            positions=[pos],
+            widths=0.12,
+            showfliers=False,
+            boxprops={"facecolor": "none", "linewidth": 0.8},
+            whiskerprops={"linewidth": 0.8},
+            medianprops={"color": "black", "linewidth": 1.5},
+        )
     sns.stripplot(data=plot_df, x="label", y="pearson", order=labels, dodge=True, jitter=0.2, color="black", marker="o", size=2, alpha=0.6, ax=ax, legend=False)
     sns.pointplot(data=plot_df, x="label", y="pearson", order=labels, estimator=np.mean, markers="x", linestyles="", dodge=True, color="black", zorder=3, legend=False, ax=ax)
     ax.set_xticks(positions)
