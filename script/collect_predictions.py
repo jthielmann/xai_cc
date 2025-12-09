@@ -13,7 +13,7 @@ def collect_predictions(base_dir):
     model_dirs = []
     model_dirs_incomplete = []
     # single run with best_model.pth and config directly there
-    predictions_filename = "/predictions.csv"
+    predictions_filename = "predictions.csv"
     for run_name in os.listdir(base_dir):
         run_dir = os.path.join(base_dir, run_name)
         pred_path = os.path.join(run_dir, predictions_filename)
@@ -31,7 +31,7 @@ def collect_predictions(base_dir):
 
     for model_dir, run_name in model_dirs:
         print(model_dir, )
-        df = pd.read_csv(model_dir + predictions_filename)
+        df = pd.read_csv(os.path.join(model_dir, predictions_filename))
         preds_cols = [col for col in df.columns if "_pred" in col]
         label_cols = [lab for lab in df.columns if "_label" in lab]
         exit(0)
