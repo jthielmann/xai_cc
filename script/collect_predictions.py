@@ -30,7 +30,6 @@ def collect_predictions(geneset):
 
     rows = []
     for model_dir, run_name in tqdm(model_dirs, desc="Runs"):
-        break
         df = pd.read_csv(os.path.join(model_dir, predictions_filename))
         preds_cols = [col for col in df.columns if "_pred" in col]
         label_cols = [lab for lab in df.columns if "_label" in lab]
