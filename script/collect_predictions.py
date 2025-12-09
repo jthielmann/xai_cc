@@ -29,7 +29,7 @@ def collect_predictions(base_dir):
                     print("split_genes_by: ", gene_split_dir)
 
     rows = []
-    for idx, (model_dir, run_name) in model_dirs:
+    for idx, (model_dir, run_name) in enumerate(model_dirs):
         print(idx, f"/{len(model_dirs)} runs")
         df = pd.read_csv(os.path.join(model_dir, predictions_filename))
         preds_cols = [col for col in df.columns if "_pred" in col]
