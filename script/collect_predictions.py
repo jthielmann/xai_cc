@@ -35,7 +35,7 @@ def collect_predictions(geneset):
         label_cols = [lab for lab in df.columns if "_label" in lab]
         for lab in label_cols:
             for pred_col in preds_cols:
-                if pred_col[:-4] in lab:
+                if pred_col[:-5] in lab:
                     preds = torch.tensor(df[pred_col])
                     labs = torch.tensor(df[lab])
 
@@ -49,7 +49,7 @@ def collect_predictions(geneset):
     results_filename = os.path.join(results_path, predictions_filename)
 
     print(f"saving to {results_filename}")
-    pd.DataFrame(rows).to_csv(results_filename, index=False)
+    pd.DataFrame(rows).to_csv(results_filename, index=False, columns=["gene", "pearson", "model_dir", "run_name"])
 
 
 if __name__ == "__main__":
