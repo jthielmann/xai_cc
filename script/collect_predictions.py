@@ -37,7 +37,7 @@ def collect_predictions(geneset):
         df = pd.read_csv(os.path.join(model_dir, predictions_filename))
         preds_cols = [col for col in df.columns if "_pred" in col]
         label_cols = [lab for lab in df.columns if "_label" in lab]
-        config_filename = os.path.join("../models/", model_dir[27:], "config")
+        config_filename = os.path.join("../models/", model_dir[26:], "config")
         config = parse_yaml_config(config_filename)
         loss_fn_switch = read_config_parameter(config, "loss_fn_switch")
         fine_tune_layers = int(read_config_parameter(config, "encoder_finetune_layers"))
