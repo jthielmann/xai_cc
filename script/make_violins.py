@@ -88,8 +88,8 @@ def plot_violins(geneset):
     violin_data_list = []
 
     if "icms" in geneset:
-        encoder_types = ["dinov3", "resnet", "uni", ""]
-        for encoder_type in df_all["encoder_type"].unique():
+        encoder_types = ["dinov3", "resnet", "uni"]
+        for encoder_type in encoder_types.unique():
             violin_data = []
             df = df_all[df_all["encoder_type"] == encoder_type]
 
