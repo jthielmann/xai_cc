@@ -209,7 +209,7 @@ def _resolve_config_path(name: str) -> str:
     if os.path.isfile(name):
         return name
     # search common config roots
-    roots = ["../sweeps/missing", "../sweeps/configs", "../sweeps/to_train"]
+    roots = ["../sweeps/missing", "../sweeps/configs", "../sweeps/to_train", "best_genes", "sae"]
     for root in roots:
         cand = os.path.join(root, name)
         if os.path.isfile(cand):

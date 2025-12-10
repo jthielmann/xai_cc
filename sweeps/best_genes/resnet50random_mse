@@ -61,7 +61,7 @@ parameters:
   head_lr:
     value: 0.001
   encoder_lr:
-    value: 0.0001
+    value: 0.001
   loss_fn_switch:
     value: MSE
   strategy:
