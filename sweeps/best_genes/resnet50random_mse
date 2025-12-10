@@ -1,5 +1,5 @@
-project: best_resnet50random_mse_all
-name: best_resnet50random_mse_all
+project: best_resnet50random_mse_all2
+name: best_resnet50random_mse_all2
 method: grid
 metric:
   name: valid_loss
@@ -7,9 +7,9 @@ metric:
 
 parameters:
   run_name:
-    value: best_resnet50random_mse_all
+    value: best_resnet50random_mse_all2
   group:
-    value: best_resnet50random_mse_all
+    value: best_resnet50random_mse_all2
   job_type:
     value: train
   tags:
