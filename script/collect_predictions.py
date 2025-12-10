@@ -55,13 +55,13 @@ def collect_predictions(geneset):
                     labs = torch.tensor(df[lab])
 
                     pearson = pearson_corrcoef(preds, labs)
-                    row = [pred_col[:-4], round(pearson.item(), 4), model_dir, run_name, loss_fn_switch, trained_layers, encoder_type]
+                    row = [pred_col[:-5], round(pearson.item(), 4), model_dir, run_name, loss_fn_switch, trained_layers, encoder_type]
                     rows.append(row)
 
     results_path = os.path.join("../evaluation/predictions", geneset)
     os.makedirs(results_path, exist_ok=True)
 
-    results_filename = os.path.join(results_path, predictions_filename)
+    results_filename = os.path.join(results_path, "pearsons.csv")
 
     print(f"saving to {results_filename}")
     pd.DataFrame(rows, columns=["gene", "pearson", "model_dir", "run_name", "loss", "trained_layers", "encoder_type"]).to_csv(results_filename, index=False)

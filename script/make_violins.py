@@ -36,7 +36,6 @@ def _plotviolin_data(violin_data, geneset, encoder_key=None):
     out_dir = "../evaluation"
     plot_dir = os.path.join(out_dir, "violins")
     os.makedirs(plot_dir, exist_ok=True)
-    filename = ""
 
     if encoder_key is not None:
         filename = f"{geneset}_{encoder_key}.svg"
