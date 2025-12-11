@@ -33,6 +33,7 @@ def _plotviolin_data(violin_data, geneset, encoder_key=None):
     ax.set_xlabel("Run")
     ax.set_title("Pearson by run")
     fig.tight_layout()
+    ax.set_xlim(min(positions) - 0.5, max(positions) + 0.5)
     out_dir = "../evaluation"
     plot_dir = os.path.join(out_dir, "violins")
     os.makedirs(plot_dir, exist_ok=True)
