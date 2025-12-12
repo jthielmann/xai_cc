@@ -1,0 +1,24 @@
+name: crp_dinov3
+channels:
+  - bioconda
+  - conda-forge
+  - pytorch
+  - nodefaults
+dependencies:
+  - python=3.11
+  - pip
+  - pytorch=2.1.2
+  - torchvision=0.16.2
+  - torchmetrics
+  - numpy<=1.23.5
+  - tqdm
+  - matplotlib
+  - pandas
+  - scikit-learn
+  - termcolor
+  - omegaconf
+  - regex
+  - submitit
+  - pip:
+    - "--no-deps -e ../repos/zennit-crp"
+    - "-e ../repos/dinov3"
