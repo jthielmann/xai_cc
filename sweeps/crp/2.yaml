@@ -1,4 +1,4 @@
-model_state_path: icms2up/icms2up_resnet50random_mse_all
+model_state_path: icms2up/icms2up_resnet50random_mse_all/enc-resnet50random_genes_id-01391cc340_genes_id-01391cc340_run_name-enc_resnet50random
 crp: true
 crp_backend: zennit
 #crp_rank: true

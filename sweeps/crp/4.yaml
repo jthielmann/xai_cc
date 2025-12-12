@@ -1,4 +1,4 @@
-model_state_path: icms3up/icms3up_dino_mse_gene_heads
+model_state_path: icms3up/icms3up_dino_mse_gene_heads/enc-dino_genes_id-b27914dcce_genes_id-b27914dcce_run_name-enc_dino
 crp: true
 crp_backend: zennit
 #crp_rank: true
