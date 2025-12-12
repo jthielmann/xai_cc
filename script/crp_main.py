@@ -1,6 +1,5 @@
 import os
 import sys
-from random import random
 
 sys.path.insert(0, '..')
 
@@ -13,27 +12,9 @@ import yaml
 import wandb
 
 from script.configs.dataset_config import get_dataset_cfg
-from script.xai_auto_config import build_auto_xai_config
 from script.evaluation.crp_pipeline import EvalPipeline
-from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, \
-    read_config_parameter, compute_genes_id
+from script.main_utils import ensure_free_disk_space, parse_args, parse_yaml_config, setup_dump_env, compute_genes_id
 
-
-def _resolve_relative(path: str, source_path=None) -> str:
-    if not path:
-        raise ValueError("_resolve_relative received empty path")
-    if os.path.isabs(path):
-        return path
-    bases = []
-    if source_path:
-        bases.append(os.path.dirname(os.path.abspath(source_path)))
-
-    bases.append(os.getcwd())
-    for base in bases:
-        candidate = os.path.normpath(os.path.join(base, path))
-        if os.path.exists(candidate):
-            return candidate
-    return os.path.normpath(os.path.join(bases[0], path)) if bases else path
 
 def _prepare_out_dir_and_dump_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     cfg.update(get_dataset_cfg(cfg))
@@ -45,7 +26,7 @@ def _prepare_out_dir_and_dump_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     crp_path = os.path.join(base_root, "crp", id, encoder_type)
     cfg["eval_path"] = crp_path
     cfg["out_path"] = crp_path
-    os.makedirs(crp_path, exist_ok=False)
+    os.makedirs(crp_path, exist_ok=True)
     ensure_free_disk_space(crp_path)
     with open(os.path.join(crp_path, "config"), "w") as handle:
         yaml.safe_dump(cfg, handle, sort_keys=False)
@@ -101,15 +82,10 @@ def _setup_model_config(config_name:str):
 
 def _update_crp_config(cfg) -> Dict[str, Any]:
     cfg["crp"] = True
-
-    cfg["lrp"] = False
-    cfg["pxc"] = False
-    cfg["diff"] = False
-    cfg["scatter"] = False
-    cfg["forward_to_csv"] = False
-    cfg["forward_to_csv_simple"] = False
-    cfg["umap"] = False
-    cfg["lxt"] = False
+    for key in ("lrp", "pxc", "diff", "scatter",
+                "forward_to_csv", "forward_to_csv_simple",
+                "umap", "lxt"):
+        cfg[key] = False
     return cfg
 
 
@@ -126,6 +102,8 @@ def main() -> None:
             cfg["eval_label"] = msp
 
     cfg = _update_crp_config(cfg)
+
+    # load the actual model config that was used for training into model_config
     cfg["model_config"] = _setup_model_config(os.path.join(cfg["model_state_path"], "config"))
     setup_dump_env()
 
@@ -145,17 +123,20 @@ def main() -> None:
             tags=cfg["tags"],
             config=wb_cfg
         )
-        # Merge back W&B-config values without losing our explicit run_name
-        cfg = dict(cfg)  # start from original cfg as source of truth
-        cfg.update(dict(run.config))
+
+        # merge but prio local config fields over wandb
+        for k, v in run.config.items():
+            cfg.setdefault(k, v)
         if original_run_name is not None:
             cfg["run_name"] = original_run_name
     cfg = _prepare_out_dir_and_dump_cfg(cfg)
 
-    EvalPipeline(cfg, run=run).run()
-
-    if run:
-        run.finish()
+    try:
+        EvalPipeline(cfg, run=run).run()
+    finally:
+        # finish run in case of issue :)
+        if run:
+            run.finish()
 
 
 if __name__ == "__main__":

@@ -1,16 +1,11 @@
-import itertools
-import os
 import json
-import torch
 import numpy as np
-from typing import Any, Dict
 from script.configs.dataset_config import get_dataset_cfg
-from script.evaluation.crp_plotting import plot_crp_zennit, plot_crp, _get_composite_and_layer
+from script.evaluation.crp_plotting import plot_crp_zennit, _get_composite_and_highest_layer
 from script.evaluation.pcx_plotting import plot_pcx
 from script.model.lit_model import load_lit_regressor
 from script.data_processing.data_loader import get_dataset_from_config
 from script.data_processing.image_transforms import get_transforms
-from torch.utils.data import DataLoader, Subset
 from script.main_utils import prepare_cfg
 import hashlib
 import os
@@ -30,8 +25,6 @@ class EvalPipeline:
         self.model = self._load_model()
         # Derive a model-based folder name and ensure base exists
         self.model_name = self._derive_model_name()
-        base = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name)
-        os.makedirs(base, exist_ok=True)
 
     def _load_model(self):
         state_dicts = collect_state_dicts(self.config)
@@ -68,7 +61,7 @@ class EvalPipeline:
         short = f"{tail}/__{h}"
         return short[:MAX_LEN]
 
-    # for easy unpacking
+    # for easy unpacking, dataset needs to return a sample and an idex
     class _RankDataset:
         def __init__(self, base, target_idx: int):
             self.base = base
@@ -80,30 +73,31 @@ class EvalPipeline:
             x = sample[0]
             return x, self.target_idx
 
-    def _run_crp_rank(self, ds, layer_name: str, target_index: int):
-        k = int(self.config.get("crp_rank_k"))
-        if k <= 0:
-            raise ValueError(f"crp_rank_k must be greater than zero, got {k}.")
-        composite, _ = _get_composite_and_layer(
-            self.model.encoder, self.config.get("encoder_type")
-        )
+    def _run_crp_rank(self, ds, layer_name: str, target_index: int, k = 10):
+        base = os.path.join(self.config.get("eval_path"), self.model_name)
+        os.makedirs(base, exist_ok=True)
+        out_fn = os.path.join(base, "crp_rank.json")
+        if os.path.exists(out_fn):
+            with open(out_fn) as f:
+                components = json.load(f)["components"]
+            self.config.setdefault("crp_components", components)
+            return components
+        composite, highest_layer = _get_composite_and_highest_layer(self.model.encoder, self.config["model_config"]["encoder_type"])
 
         ds = self._RankDataset(ds, target_index)
         fv = FeatureVisualization(CondAttribution(self.model), ds, {layer_name: ChannelConcept()})
         fv.run(composite, 0, len(ds))
-        _, rel_c_sorted, _ = load_maximization(fv.RelMax.PATH, layer_name)
+
+        # d_c_sorted: (S, C) — dataset indices of top‑S samples per channel
+        # rel_c_sorted: (S, C) — corresponding (normalized) relevance per sample & channel
+        # rf_c_sorted: (S, C) — neuron index (RF position) for each selected sample & channel
+        # S = Maximization.SAMPLE_SIZE (default 40)
+        d_c_sorted, rel_c_sorted, rf_c_sorted = load_maximization(fv.RelMax.PATH, layer_name)
         n_channels = rel_c_sorted.shape[1]
-        if k > n_channels:
-            raise ValueError(
-                f"crp_rank_k={k} exceeds channel count {n_channels} for {layer_name}."
-            )
+        k = min(n_channels, k)
         best = rel_c_sorted[0]
-        topk = np.argsort(-best)[:k].tolist()
-        refs = fv.get_max_reference(concept_ids=topk, layer_name=layer_name)
-        components = list(refs.keys())
-        base = os.path.join(self.config.get("eval_path"), self.model_name)
-        os.makedirs(base, exist_ok=False)
-        out_fn = os.path.join(base, "crp_rank.json")
+        components = np.argsort(-best)[:k].tolist()
+
         with open(out_fn, "w") as handle:
             json.dump({"layer": layer_name, "components": components}, handle)
         if not self.config.get("crp_components") and components:
@@ -111,44 +105,76 @@ class EvalPipeline:
         return components
 
     def run(self):
-        if self.config.get("crp"):
-            genes_model = []
-            for g in self.config["model_config"]["genes"]:
-                if g.lower().startswith("unnamed") or g.lower() in {"x", "y"}:
-                    continue
-                genes_model.append(g)
-
+        if self.config.get("rank_crp"):
+            print("[EvalPipeline] rank_crp case started")
             eval_tf = get_transforms(self.config["model_config"], split="eval")
-            genes_target = self.config["genes"]
             if hasattr(self.model, "encoder_is_fully_frozen"):
                 self.model.encoder_is_fully_frozen = False
 
             ds_config = get_dataset_cfg(self.config)
             self.config.update(ds_config)
 
-
+            gene = self.config.get("gene")
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
-                genes=genes_target,
+                genes=[gene],
                 split="test",
                 debug=bool(self.config.get("debug")),
                 transforms=eval_tf,
-                samples=self.config.get("test_samples"),
+                samples=["MISC33"],
                 only_inputs=False,
                 meta_data_dir=self.config["meta_data_dir"],
                 gene_data_filename=self.config["gene_data_filename"],
                 return_patient_and_tilepath=True,
+                max_len=5 if self.config.get("debug") else None
             )
 
-
-            items = 100 if self.config["debug"] else len(ds)
-            ds = Subset(ds, list(range(items)))
             crp_str = "crp_demo" if self.config["debug"] else "crp"
             # :10 cuts ../models/
             out_path = os.path.join("../evaluation/", crp_str, self.config["model_config"]["out_path"][10:])
             os.makedirs(out_path, exist_ok=True)
             # Resolve target layer from encoder_type mapping; users no longer override.
-            composite, layername = _get_composite_and_layer(self.config.get("encoder_type"))
+            composite, highest_layer = _get_composite_and_highest_layer(self.model.encoder, self.config["model_config"]["encoder_type"])
+            resolved_layer = f"encoder.{highest_layer}"
+            names = {n for n, _ in self.model.named_modules()}
+            if resolved_layer not in names:
+                raise KeyError(f"target_layer '{resolved_layer}' not found in model named_modules().")
+
+            ds_len = len(ds)
+            print(f"[CRP] Starting CRP (layer='{resolved_layer}') on {ds_len} items -> {out_path}")
+            idx = self.model.genes.index(gene)
+            self._run_crp_rank(ds, resolved_layer, idx)
+
+        if self.config.get("crp"):
+            print("[EvalPipeline] crp case started")
+            eval_tf = get_transforms(self.config["model_config"], split="eval")
+            if hasattr(self.model, "encoder_is_fully_frozen"):
+                self.model.encoder_is_fully_frozen = False
+
+            ds_config = get_dataset_cfg(self.config)
+            self.config.update(ds_config)
+
+            gene = self.config.get("gene")
+            ds = get_dataset_from_config(
+                dataset_name=self.config["model_config"]["dataset"],
+                genes=[gene],
+                split="test",
+                debug=bool(self.config.get("debug")),
+                transforms=eval_tf,
+                samples=self.config.get("patients"),
+                only_inputs=False,
+                meta_data_dir=self.config["meta_data_dir"],
+                gene_data_filename=self.config["gene_data_filename"],
+                return_patient_and_tilepath=True,
+                max_len=5 if self.config.get("debug") else None
+            )
+
+            crp_str = "crp_demo" if self.config["debug"] else "crp"
+            # :10 cuts ../models/
+            out_path = os.path.join("../evaluation/", crp_str, self.config["model_config"]["out_path"][10:])
+            os.makedirs(out_path, exist_ok=True)
+            # Resolve target layer from encoder_type mapping; users no longer override.
+            composite, layername = _get_composite_and_highest_layer(self.model.encoder, self.config["model_config"]["encoder_type"])
             resolved_layer = f"encoder.{layername}"
             names = {n for n, _ in self.model.named_modules()}
             if resolved_layer not in names:
@@ -157,44 +183,39 @@ class EvalPipeline:
             ds_len = len(ds)
             print(f"[CRP] Starting CRP (layer='{resolved_layer}') on {ds_len} items -> {out_path}")
 
-            for g in genes_target:
-                idx = self.model.genes.index(g)
-                top_channels = self._run_crp_rank(ds, resolved_layer, idx)
+            idx = self.model.genes.index(gene)
+            channels = self.config.get("crp_components")
+            if not channels:
+                channels = self._run_crp_rank(ds, resolved_layer, idx)
 
-                for c in top_channels:
+            for c in channels:
+                plot_crp_zennit(
+                    self.model,
+                    dataset=ds,
+                    model_config=self.config["model_config"],
+                    out_path=out_path,
+                    target_layer_name=resolved_layer,
+                    composite=composite,
+                    component=c,
+                    target_index=idx,
+                    run=self.wandb_run,
+                )
 
-                    plot_crp_zennit(
-                        self.model,
-                        ds,
-                        run=self.wandb_run,
-                        max_items=items,
-                        out_path=out_path,
-                        layer_name=resolved_layer,
-                        components=self.config.get("crp_components"),
-                        target_index=idx,
-                        sidecar_handle=_sidecar if bool(self.config.get("crp_rank_plot_sidecar")) else None,
-                    )
-                    if self.config.get("crp_rank_plot_sidecar") and sidecar_rows:
-                        meta_fn = os.path.join(out_path, "crp_rank_plot_sidecar.jsonl")
-                        with open(meta_fn, "w") as handle:
-                            for row in sidecar_rows:
-                                handle.write(json.dumps(row) + "\n")
 
         if self.config.get("pcx"):
             # Enforce: always use model genes; eval config must not set 'genes'.
-            model_cfg = self.config.get("model_config")
-            if "genes" in self.config and self.config["genes"] is not None:
-                raise ValueError(
-                    "CRP/PCX config must not set 'genes'. The trained model's genes are always used."
-                )
-            mc_genes = model_cfg.get("genes")
-            if not mc_genes:
-                raise ValueError("Trained model config does not contain 'genes'; cannot run PCX.")
-            cfg_pcx = dict(self.config)
+            model_config = self.config.get("model_config")
             # Route outputs under eval_path/<model_name>/pcx
-            cfg_pcx["out_path"] = os.path.join(self.config.get("eval_path", self.config.get("out_path", "./xai_out")), self.model_name, "pcx")
-            os.makedirs(cfg_pcx["out_path"], exist_ok=True)
+            out_path = "../evaluation"
+            if self.config.get("debug"):
+                out_path = os.path.join(out_path, "debug")
+            out_path = os.path.join(out_path, "pcx")
+            out_path = os.path.join(out_path, model_config["project"])
+            self.config["out_path"] = out_path
+
+            os.makedirs(out_path, exist_ok=True)
             # Ensure genes come from model
-            cfg_pcx["genes"] = list(mc_genes)
-            print(f"[CRP] Starting PCX -> {cfg_pcx['out_path']}")
-            plot_pcx(self.model, cfg_pcx, run=self.wandb_run, out_path=cfg_pcx["out_path"])
+            gene = self.config.get("gene")
+            self.config["genes"] = [gene]
+            print(f"[CRP] Starting PCX -> {self.config['out_path']}")
+            plot_pcx(self.model, self.config, run=self.wandb_run, out_path=self.config["out_path"])

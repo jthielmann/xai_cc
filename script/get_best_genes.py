@@ -90,6 +90,8 @@ def check_best_n(geneset, genes, pearsons, max_item=5):
         if idx > max_item:
             break
 
+check_best_n("coad", cmmn_best.values, best_pearsons[0].values)
+check_best_n("hvg", hvg_best.values, best_pearsons[1].values)
 check_best_n("icms2up", icms2up_best.values, best_pearsons[2].values)
 check_best_n("icms2down", icms2down_best.values, best_pearsons[3].values)
 check_best_n("icms3up", icms3up_best.values, best_pearsons[4].values)

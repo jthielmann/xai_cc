@@ -10,7 +10,7 @@ from zennit.composites import EpsilonPlusFlat
 from zennit.torchvision import VGGCanonizer, ResNetCanonizer
 from crp.attribution import CondAttribution
 from crp.concepts import ChannelConcept
-
+from tqdm.auto import tqdm
 
 def _get_layer_names(model, types):
     names = []
@@ -75,16 +75,24 @@ def _auto_record_layer_name(encoder: nn.Module, encoder_type: str) -> str:
     raise ValueError(f"Unsupported encoder_type {encoder_type!r} for CRP recording.")
 
 
-def _get_composite_and_layer(encoder, encoder_type: str = None):
-    if "VGG" in encoder_type:
-        composite = EpsilonPlusFlat(canonizers=[VGGCanonizer()])
-        layer_name = ""
+def _get_composite_and_highest_layer(encoder, encoder_type):
+    encoder_type = encoder_type.lower()
+    if "vgg" in encoder_type:
+        raise NotImplementedError
+
+        # composite = EpsilonPlusFlat(canonizers=[VGGCanonizer()])
+        # layer_name = ""
     elif "resnet" in encoder_type or encoder_type == "dino":
         composite = EpsilonPlusFlat(canonizers=[ResNetCanonizer()])
         layer_name = "layer4.2"
     elif "convnext" in encoder_type:
         composite = EpsilonPlusFlat() # no resnet specific stuff for these
-        layer_name = "stages.3.blocks.<max>"
+        blocks = [n for n, _ in encoder.named_modules() if n.startswith("stages.") and ".blocks." in n]
+        # stages.3.blocks.9 on '.' -> ["stages","3","blocks","9"], so we return max blocks of the max stages
+        def _stage_block_key(name):
+            p = name.split(".")
+            return int(p[1]), int(p[3])
+        layer_name = max(blocks, key=_stage_block_key)
     # dinov3 that is not convnext
     elif "dinov3" in encoder_type:
         raise NotImplementedError
@@ -96,111 +104,47 @@ def _get_composite_and_layer(encoder, encoder_type: str = None):
 
 def plot_crp_zennit(
     model,
+    model_config,
     dataset,
+    out_path: str,
+    component,
+    target_index: int,
+    target_layer_name: str,
+    composite,
     run=None,
-    max_items: int = None,
-    out_path: str = None,
-    components=None,
-    target_index: int = 0,
-    sidecar_handle=None,
-    layer_name: str = None,
     ):
-    """CRP using zennit-crp CondAttribution on a small dataset subset."""
     model.eval()
     device = next(model.parameters()).device
-    enc = getattr(model, "encoder", model)
-    enc_type = None
-    cfg = getattr(model, "config", None)
-    if isinstance(cfg, dict):
-        enc_type = cfg.get("encoder_type")
-    if not enc_type:
-        raise ValueError("encoder_type missing on model.config; required for CRP.")
-    composite, default_layer_name = _get_composite_and_layer(
-        enc, encoder_type=enc_type
-    )
-    target_layer = (
-        f"encoder.{default_layer_name}" if enc is not model else default_layer_name
-    )
+    encoder_type = model_config["encoder_type"]
     all_names = [n for n, _ in model.named_modules()]
-    has_encoder = (enc is not model)
-    print(f"[CRP][debug] resolved_target={target_layer} default_layer={default_layer_name} has_encoder={has_encoder}")
-    alt = default_layer_name if target_layer.startswith("encoder.") else f"encoder.{target_layer}"
-    record_candidates = [target_layer] if target_layer else []
-    if alt and alt not in record_candidates:
-        record_candidates.append(alt)
-    present = [n for n in record_candidates if n in all_names]
-    print(f"[CRP][debug] present_in_named_modules target={target_layer in all_names} alt={alt in all_names} present={present}")
-    record_for_call = present if present else record_candidates
+    if not target_layer_name in all_names:
+        raise ValueError(f"{target_layer_name!r} not found in {all_names}")
 
     attribution = CondAttribution(model)
-    count = 0
-    if out_path:
-        os.makedirs(out_path, exist_ok=True)
-    total = len(dataset)
-    mask_map = None
-    conditions = [{"y": [target_index]}]
-    if components:
-        mask_map = {target_layer: ChannelConcept.mask}
-        conditions = [{target_layer: components, "y": [target_index]}]
-    for i in range(total):
-        if max_items is not None and count >= max_items:
-            break
-        sample = dataset[i]
+    os.makedirs(out_path, exist_ok=True)
+    mask_map = {target_layer_name: ChannelConcept.mask}
+    conditions = [{target_layer_name: [component], "y": [target_index]}]
+
+    for i, sample in tqdm(enumerate(dataset), total=len(dataset)):
         x = sample[0] if isinstance(sample, (tuple, list)) else sample
         x = x.to(device)
         if x.dim() == 3:
             x = x.unsqueeze(0)
-        # Make input require grad and be non-leaf so zennit can attach grad_fn hooks
+
+        # zennit attaches grad_fn hooks
         x.requires_grad_(True)
         x = x + x.new_zeros(())
 
-        attr = attribution(
-            x, conditions, composite, record_layer=record_for_call, mask_map=mask_map
-        )
-        keys = list(attr.relevances.keys())
-        pick = None
-        for k in record_for_call:
-            if k in keys:
-                pick = k
-                break
-        if pick is None:
-            if i == 0:
-                sample_keys = keys[:8]
-                print(f"[CRP][debug] no match in recorded layers; candidates={record_for_call}; keys_sample={sample_keys}")
-            raise KeyError(record_for_call[0] if record_for_call else "<empty candidate list>")
-        if i == 0:
-            sample_keys = keys[:8]
-            print(f"[CRP][debug] picked_layer={pick}; keys_sample={sample_keys}")
+        attr = attribution(x, conditions, composite, record_layer=[target_layer_name], mask_map=mask_map)
+
         rel = attr.heatmap.detach().cpu()
-        # Sanitize and normalize to avoid NaN/Inf during visualization
-        rel = torch.nan_to_num(rel, nan=0.0, posinf=1.0, neginf=-1.0)
-        denom = torch.nan_to_num(rel.abs(), nan=0.0).amax(dim=(1, 2), keepdim=True).clamp_min(1e-12)
-        rel = rel / denom
         img = zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
         if run is not None:
-            run.log({f"crp/attribution[{i}]": wandb.Image(img)})
+            run.log({f"crp/{out_path}": wandb.Image(img)})
         if out_path:
-            fn = f"crp_{i:04d}.png"
+            fn = f"crp_{i:04d}_{component}.png"
             img.save(os.path.join(out_path, fn))
-            if sidecar_handle is not None:
-                patient = None
-                tile = None
-                if isinstance(sample, (tuple, list)) and len(sample) >= 4 and isinstance(sample[2], str) and isinstance(sample[3], str):
-                    patient = sample[2]
-                    tile = sample[3]
-                else:
-                    raise ValueError("CRP sidecar requires dataset to return (img, target, patient, tile).")
-                sidecar_handle(
-                    index=i,
-                    filename=fn,
-                    layer=pick,
-                    components=components,
-                    patient=patient,
-                    tile=tile,
-                )
-        count += 1
-        if (i + 1) % 100 == 0 or (i + 1) == total:
-            print(f"[CRP] progress: {i + 1}/{total}")
+
 
 
 def _find_module_by_name(model: nn.Module, name: str) -> nn.Module:
