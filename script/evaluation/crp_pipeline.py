@@ -347,7 +347,6 @@ class EvalPipeline:
 
 
             from crp.concepts import ChannelConcept
-            from crp.image import plot_grid
 
             crp_ds = self._RankDataset(ds, idx)
             attribution = CondAttribution(self.model)
@@ -375,6 +374,68 @@ class EvalPipeline:
                     target_index=idx,
                     run=self.wandb_run,
                 )
+
+        if self.config.get("crp_per_file"):
+            if self.config.get("crp"):
+                print("[EvalPipeline] crp case started")
+                eval_tf = get_transforms(self.config["model_config"], split="eval")
+                if hasattr(self.model, "encoder_is_fully_frozen"):
+                    self.model.encoder_is_fully_frozen = False
+
+                ds_config = get_dataset_cfg(self.config)
+                self.config.update(ds_config)
+
+                gene = self.config.get("gene")
+                patients = self.config["patients"]
+                if not patients:
+                    patients = self.config["test_samples"]
+                ds = get_dataset_from_config(
+                    dataset_name=self.config["model_config"]["dataset"],
+                    genes=[gene],
+                    split="test",
+                    debug=bool(self.config.get("debug")),
+                    transforms=eval_tf,
+                    samples=patients,
+                    only_inputs=False,
+                    meta_data_dir=self.config["meta_data_dir"],
+                    gene_data_filename=self.config["gene_data_filename"],
+                    return_patient_and_tilepath=True,
+                    max_len=5 if self.config.get("debug") else None,
+
+                )
+
+                crp_str = "crp_demo" if self.config["debug"] else "crp"
+                # :10 cuts ../models/
+                out_path = os.path.join("../evaluation/", crp_str, self.config["model_config"]["out_path"][10:])
+                os.makedirs(out_path, exist_ok=True)
+                # Resolve target layer from encoder_type mapping; users no longer override.
+                composite, layername = _get_composite_and_highest_layer(self.model.encoder,
+                                                                        self.config["model_config"]["encoder_type"])
+                resolved_layer = f"encoder.{layername}"
+                names = {n for n, _ in self.model.named_modules()}
+                if resolved_layer not in names:
+                    raise KeyError(f"target_layer '{resolved_layer}' not found in model named_modules().")
+
+                ds_len = len(ds)
+                print(f"[CRP] Starting CRP (layer='{resolved_layer}') on {ds_len} items -> {out_path}")
+
+                idx = self.model.genes.index(gene)
+                channels = self.config.get("crp_components")
+                if not channels:
+                    channels = self._run_crp_rank(ds, resolved_layer, idx)
+
+                for c in channels:
+                    plot_crp_zennit(
+                        self.model,
+                        dataset=ds,
+                        model_config=self.config["model_config"],
+                        out_path=out_path,
+                        target_layer_name=resolved_layer,
+                        composite=composite,
+                        component=c,
+                        target_index=idx,
+                        run=self.wandb_run,
+                    )
 
 
         if self.config.get("pcx"):

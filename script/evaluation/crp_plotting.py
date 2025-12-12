@@ -115,7 +115,6 @@ def plot_crp_zennit(
     ):
     model.eval()
     device = next(model.parameters()).device
-    encoder_type = model_config["encoder_type"]
     all_names = [n for n, _ in model.named_modules()]
     if not target_layer_name in all_names:
         raise ValueError(f"{target_layer_name!r} not found in {all_names}")
@@ -146,8 +145,12 @@ def plot_crp_zennit(
         img = zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-v, vmax=v)
         if run is not None:
             run.log({f"crp/{out_path}": wandb.Image(img)})
+
         if out_path:
-            fn = f"crp_{i:04d}_{component}.png"
+            tile = sample[3]
+            tile_name = os.path.splitext(os.path.basename(tile))[0] + ".png"
+            out_path = os.path.join(out_path, component, tile_name)
+            fn = f"{dataset.get_tilename(i)}.png"
             img.save(os.path.join(out_path, fn))
 
 
