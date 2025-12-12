@@ -1,5 +1,5 @@
 model_state_path: icms3up/icms3up_dinov3_convnext_large_mse_encoder_l5_gene_heads/enc-dinov3_convnext_larg_genes_id-b27914dcce_genes_id-b27914dcce_run_name-enc_dinov3_convnext_larg
-crp: true
+crp_per_file: true
 crp_backend: zennit
 #crp_rank: true
 crp_rank_k: 1

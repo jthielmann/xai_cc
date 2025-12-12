@@ -1,5 +1,5 @@
 model_state_path: icms3up/icms3up_resnet50random_mse_all/enc-resnet50random_genes_id-b27914dcce_genes_id-b27914dcce_run_name-enc_resnet50random
-crp: true
+crp_per_file: true
 crp_backend: zennit
 #crp_rank: true
 crp_rank_k: 1

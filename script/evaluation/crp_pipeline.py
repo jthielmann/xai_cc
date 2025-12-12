@@ -360,20 +360,7 @@ class EvalPipeline:
             ref_c = fv.get_max_reference(channels, resolved_layer, "relevance", (0, 8), rf=True, composite=composite, plot_fn=vis_opaque_img)
 
             self.plot_grid(ref_c, figsize=(6, 5), padding=False)
-            return
-            
-            for c in channels:
-                plot_crp_zennit(
-                    self.model,
-                    dataset=ds,
-                    model_config=self.config["model_config"],
-                    out_path=out_path,
-                    target_layer_name=resolved_layer,
-                    composite=composite,
-                    component=None,
-                    target_index=idx,
-                    run=self.wandb_run,
-                )
+
 
         if self.config.get("crp_per_file"):
             if self.config.get("crp"):
