@@ -17,6 +17,16 @@ from crp.concepts import ChannelConcept
 from crp.helper import load_maximization
 from crp.visualization import FeatureVisualization
 
+from typing import Dict, List, Union, Any, Tuple, Iterable
+from PIL import Image
+import torch
+from torchvision.transforms.functional import gaussian_blur
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import numpy as np
+import zennit.image as zimage
+from crp.helper import max_norm
+
 class EvalPipeline:
     def __init__(self, config, run):
         self.config = prepare_cfg(config)
@@ -77,11 +87,13 @@ class EvalPipeline:
         base = os.path.join(self.config.get("eval_path"), self.model_name)
         os.makedirs(base, exist_ok=True)
         out_fn = os.path.join(base, "crp_rank.json")
+        """
         if os.path.exists(out_fn):
             with open(out_fn) as f:
                 components = json.load(f)["components"]
             self.config.setdefault("crp_components", components)
             return components
+        """
         composite, highest_layer = _get_composite_and_highest_layer(self.model.encoder, self.config["model_config"]["encoder_type"])
 
         ds = self._RankDataset(ds, target_index)
@@ -93,17 +105,104 @@ class EvalPipeline:
         # rf_c_sorted: (S, C) — neuron index (RF position) for each selected sample & channel
         # S = Maximization.SAMPLE_SIZE (default 40)
         d_c_sorted, rel_c_sorted, rf_c_sorted = load_maximization(fv.RelMax.PATH, layer_name)
+
+        print("hello")
+        #for x in rel_c_sorted:
+        #    print(x)
+        #print(ds.base.get_tilename(0))
+        #for i in range(len(ds)):
+        #    print(ds.base[i][1])
+        
         n_channels = rel_c_sorted.shape[1]
         k = min(n_channels, k)
-        best = rel_c_sorted[0]
-        components = np.argsort(-best)[:k].tolist()
-
+        sample_0 = rel_c_sorted[1]
+        sample_0 = np.argsort(np.abs(sample_0))
+        print(sample_0)
+        components = sample_0[:k].tolist()
+        
         with open(out_fn, "w") as handle:
             json.dump({"layer": layer_name, "components": components}, handle)
         if not self.config.get("crp_components") and components:
             self.config["crp_components"] = components
         return components
 
+    def plot_grid(ref_c: Dict[int, Any], cmap_dim=1, cmap="bwr", vmin=None, vmax=None, symmetric=True, resize=None, padding=True, figsize=(6, 6)):
+        """
+        Plots dictionary of reference images as they are returned of the 'get_max_reference' method. To every element in the list crp.imgify is applied with its respective argument values.
+    
+        Parameters:
+        ----------
+        ref_c: dict with keys: integer and value: several lists filled with torch.Tensor, np.ndarray or PIL Image
+            To every element in the list crp.imgify is applied.
+        resize: None or int
+            If None, no resizing is applied. If int, sets the maximal aspect ratio of the image.
+        padding: boolean
+            If True, pads the image into a square shape by setting the alpha channel to zero outside the image.
+        figsize: tuple or None
+            Size of plt.figure
+        cmap_dim: int, 0 or 1 
+            Applies the remaining parameters to the first or second element of the tuple list, i.e. plot as heatmap
+    
+        REMAINING PARAMETERS: correspond to zennit.imgify
+    
+        Returns:
+        --------
+        shows matplotlib.pyplot plot
+        """
+    
+        keys = list(ref_c.keys())
+        nrows = len(keys)
+        value = next(iter(ref_c.values()))
+    
+        if cmap_dim > 2 or cmap_dim < 1 or cmap_dim == None:
+            raise ValueError("'cmap_dim' must be 0 or 1 or None.")
+    
+        if isinstance(value, Tuple) and isinstance(value[0], Iterable):
+            nsubrows = len(value)
+            ncols = len(value[0])
+        elif isinstance(value, Iterable):
+            nsubrows = 1
+            ncols = len(value)
+        else:
+            raise ValueError("'ref_c' dictionary must contain an iterable of torch.Tensor, np.ndarray or PIL Image or a tuple of thereof.")
+    
+        fig = plt.figure(figsize=figsize)
+        outer = gridspec.GridSpec(nrows, 1, wspace=0, hspace=0.2)
+    
+        for i in range(nrows):
+            inner = gridspec.GridSpecFromSubplotSpec(nsubrows, ncols, subplot_spec=outer[i], wspace=0, hspace=0.1)
+    
+            for sr in range(nsubrows):
+    
+                if nsubrows > 1:
+                    img_list = ref_c[keys[i]][sr]
+                else:
+                    img_list = ref_c[keys[i]]
+                
+                for c in range(ncols):
+                    ax = plt.Subplot(fig, inner[sr, c])
+    
+                    if sr == cmap_dim:
+                        img = imgify(img_list[c], cmap=cmap, vmin=vmin, vmax=vmax, symmetric=symmetric, resize=resize, padding=padding)
+                    else:
+                        img = imgify(img_list[c], resize=resize, padding=padding)
+    
+                    ax.imshow(img)
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+    
+                    if sr == 0 and c == 0:
+                        ax.set_ylabel(keys[i])
+    
+                    fig.add_subplot(ax)
+                    
+        outer.tight_layout(fig)
+        outpath = "../evaluation/crp_out/"
+        os.mkdirs(out_path, exist_ok=True)
+        out_path = os.path.join(out_path, self.config["model_state_path"],"crp_out.png")
+        fig.savefig(out_path)
+
+    
     def run(self):
         if self.config.get("rank_crp"):
             print("[EvalPipeline] rank_crp case started")
@@ -126,7 +225,7 @@ class EvalPipeline:
                 meta_data_dir=self.config["meta_data_dir"],
                 gene_data_filename=self.config["gene_data_filename"],
                 return_patient_and_tilepath=True,
-                max_len=5 if self.config.get("debug") else None
+                max_len=20 if self.config.get("debug") else None
             )
 
             crp_str = "crp_demo" if self.config["debug"] else "crp"
@@ -144,7 +243,7 @@ class EvalPipeline:
             print(f"[CRP] Starting CRP (layer='{resolved_layer}') on {ds_len} items -> {out_path}")
             idx = self.model.genes.index(gene)
             self._run_crp_rank(ds, resolved_layer, idx)
-
+        
         if self.config.get("crp"):
             print("[EvalPipeline] crp case started")
             eval_tf = get_transforms(self.config["model_config"], split="eval")
@@ -188,6 +287,25 @@ class EvalPipeline:
             if not channels:
                 channels = self._run_crp_rank(ds, resolved_layer, idx)
 
+
+
+            from crp.concepts import ChannelConcept
+            from crp.image import plot_grid
+
+            crp_ds = self._RankDataset(ds, idx)
+            attribution = CondAttribution(self.model)
+            cc = ChannelConcept()
+            layer_map = {layer : cc for layer in [resolved_layer]}
+            fv = FeatureVisualization(attribution, crp_ds, layer_map, preprocess_fn=eval_tf, path="../evaluation/crp_demo")
+            saved_files = fv.run(composite, 0, len(crp_ds), 32, 100)
+            ref_c = fv.get_max_reference(channels, resolved_layer, "relevance", (0, 8), composite=composite, plot_fn=None)
+            res = self.plot_grid(ref_c, figsize=(6, 9), cmap = "coldnhot")
+            from crp.image import vis_opaque_img
+            ref_c = fv.get_max_reference(channels, resolved_layer, "relevance", (0, 8), rf=True, composite=composite, plot_fn=vis_opaque_img)
+
+            self.plot_grid(ref_c, figsize=(6, 5), padding=False)
+            return
+            
             for c in channels:
                 plot_crp_zennit(
                     self.model,
@@ -196,7 +314,7 @@ class EvalPipeline:
                     out_path=out_path,
                     target_layer_name=resolved_layer,
                     composite=composite,
-                    component=c,
+                    component=None,
                     target_index=idx,
                     run=self.wandb_run,
                 )

@@ -130,9 +130,7 @@ def infer_encoder_out_dim(
         elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
             device = torch.device("mps")
         else:
-            raise RuntimeError(
-                "GPU required to infer encoder_out_dim (no CUDA/MPS available). Use a GPU runtime."
-            )
+            device = torch.device("cpu")
 
     # Capture original device to restore after probing
     p0 = next(encoder.parameters(), None)

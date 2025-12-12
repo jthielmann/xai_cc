@@ -138,7 +138,12 @@ def plot_crp_zennit(
         attr = attribution(x, conditions, composite, record_layer=[target_layer_name], mask_map=mask_map)
 
         rel = attr.heatmap.detach().cpu()
-        img = zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-1, vmax=1)
+        if np.isnan(rel).any():
+            print(f"rel isnan: {np.isnan(rel).any()}")
+        flat = rel.abs().flatten()
+        v = torch.quantile(flat, 0.99).item()  # 99% percentile of |rel|
+        v = max(v, 1e-8) 
+        img = zimage.imgify(rel, symmetric=True, cmap='coldnhot', vmin=-v, vmax=v)
         if run is not None:
             run.log({f"crp/{out_path}": wandb.Image(img)})
         if out_path:
