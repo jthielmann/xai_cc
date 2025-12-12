@@ -1,0 +1,12 @@
+model_state_path: enc-dino_genes_id-08bba863d4_genes_id-08bba863d4_run_name-enc_dino
+crp: true
+crp_backend: zennit
+#crp_rank: true
+crp_rank_k: 1
+eval_label: crp_rank_demo
+out_path: ../evaluation
+dataset: coad
+gene: FOSL1
+#gene: MYC
+debug: false
+patients: [MISC33]

@@ -126,7 +126,59 @@ class EvalPipeline:
             self.config["crp_components"] = components
         return components
 
-    def plot_grid(ref_c: Dict[int, Any], cmap_dim=1, cmap="bwr", vmin=None, vmax=None, symmetric=True, resize=None, padding=True, figsize=(6, 6)):
+    def imgify(self, image: Union[Image.Image, torch.Tensor, np.ndarray], cmap: str = "bwr", vmin=None, vmax=None,
+               symmetric=False, level=1.0, grid=False, gridfill=None, resize: int = None,
+               padding=False) -> Image.Image:
+        """
+        Convenient wrapper around zennit.image.imgify supporting tensors, numpy arrays and PIL Images. Allows resizing while keeping the aspect
+        ratio intact and padding to a square shape.
+
+        Parameters:
+        ----------
+        image: torch.Tensor, np.ndarray or PIL Image
+            With 2 dimensions greyscale, or 3 dimensions with 1 or 3 values in the first or last dimension (color).
+        resize: None or int
+            If None, no resizing is applied. If int, sets the maximal aspect ratio of the image.
+        padding: boolean
+            If True, pads the image into a square shape by setting the alpha channel to zero outside the image.
+        vmin: float or obj:numpy.ndarray
+            Manual minimum value of the array. Overrides the used norm's minimum value.
+        vmax: float or obj:numpy.ndarray
+            Manual maximum value of the array. Overrides the used norm's maximum value.
+        cmap: str or ColorMap
+            String to specify a built-in color map, code used to create a new color map, or a ColorMap instance, which will be used to create a palette. The color map will only be applied for arrays with only a single color channel. The color will be specified as a palette in the PIL Image.
+
+        Returns:
+        --------
+        image: PIL.Image object
+        """
+
+        if isinstance(image, torch.Tensor):
+            img = zimage.imgify(image.detach().cpu(), cmap=cmap, vmin=vmin, vmax=vmax, symmetric=symmetric, level=level,
+                                grid=grid, gridfill=gridfill)
+        elif isinstance(image, np.ndarray):
+            img = zimage.imgify(image, cmap=cmap, vmin=vmin, vmax=vmax, symmetric=symmetric, level=level, grid=grid,
+                                gridfill=gridfill)
+        elif isinstance(image, Image.Image):
+            img = image
+        else:
+            raise TypeError("Only PIL.Image, torch.Tensor or np.ndarray types are supported!")
+
+        if resize:
+            ratio = resize / max(img.size)
+            new_size = tuple([int(x * ratio) for x in img.size])
+            img = img.resize(new_size, Image.NEAREST)
+
+        if padding:
+            max_size = resize if resize else max(img.size)
+            new_im = Image.new("RGBA", (max_size, max_size))
+            new_im.putalpha(0)
+            new_im.paste(img, ((max_size - img.size[0]) // 2, (max_size - img.size[1]) // 2))
+            img = new_im
+
+        return img
+
+    def plot_grid(self, ref_c: Dict[int, Any], cmap_dim=1, cmap="bwr", vmin=None, vmax=None, symmetric=True, resize=None, padding=True, figsize=(6, 6)):
         """
         Plots dictionary of reference images as they are returned of the 'get_max_reference' method. To every element in the list crp.imgify is applied with its respective argument values.
     
@@ -183,23 +235,25 @@ class EvalPipeline:
                     ax = plt.Subplot(fig, inner[sr, c])
     
                     if sr == cmap_dim:
-                        img = imgify(img_list[c], cmap=cmap, vmin=vmin, vmax=vmax, symmetric=symmetric, resize=resize, padding=padding)
+                        img = self.imgify(img_list[c], cmap=cmap, vmin=vmin, vmax=vmax, symmetric=symmetric, resize=resize, padding=padding)
                     else:
-                        img = imgify(img_list[c], resize=resize, padding=padding)
+                        img = self.imgify(img_list[c], resize=resize, padding=padding)
     
                     ax.imshow(img)
-                    ax.set_xticks([])
-                    ax.set_yticks([])
-    
-                    if sr == 0 and c == 0:
-                        ax.set_ylabel(keys[i])
-    
-                    fig.add_subplot(ax)
                     
         outer.tight_layout(fig)
-        outpath = "../evaluation/crp_out/"
-        os.mkdirs(out_path, exist_ok=True)
-        out_path = os.path.join(out_path, self.config["model_state_path"],"crp_out.png")
+        out_path = os.path.join("../evaluation/crp_out/", self.config["model_state_path"][10:])
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        if sr == 0 and c == 0:
+            ax.set_ylabel(keys[i])
+
+        fig.add_subplot(ax)
+        os.makedirs(out_path, exist_ok=True)
+
+        # :10 to get rid of ../models/
+        out_path = os.path.join(out_path, "crp_out.png")
         fig.savefig(out_path)
 
     
@@ -254,13 +308,16 @@ class EvalPipeline:
             self.config.update(ds_config)
 
             gene = self.config.get("gene")
+            patients = self.config["patients"]
+            if not patients:
+                patients = self.config["test_samples"]
             ds = get_dataset_from_config(
                 dataset_name=self.config["model_config"]["dataset"],
                 genes=[gene],
                 split="test",
                 debug=bool(self.config.get("debug")),
                 transforms=eval_tf,
-                samples=self.config.get("patients"),
+                samples=patients,
                 only_inputs=False,
                 meta_data_dir=self.config["meta_data_dir"],
                 gene_data_filename=self.config["gene_data_filename"],

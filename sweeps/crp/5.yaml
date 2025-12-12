@@ -1,0 +1,12 @@
+model_state_path: icms3up/icms3up_resnet50random_mse_all
+crp: true
+crp_backend: zennit
+#crp_rank: true
+crp_rank_k: 1
+eval_label: crp_rank_demo
+out_path: ../evaluation
+dataset: coad
+gene: FOSL1
+#gene: MYC
+debug: false
+patients: [MISC33]

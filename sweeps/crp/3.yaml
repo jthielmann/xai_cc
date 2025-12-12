@@ -1,0 +1,12 @@
+model_state_path: icms2up/icms2up_dinov3_convnext_base_mse_encoder_l5_gene_heads
+crp: true
+crp_backend: zennit
+#crp_rank: true
+crp_rank_k: 1
+eval_label: crp_rank_demo
+out_path: ../evaluation
+dataset: coad
+gene: FOSL1
+#gene: MYC
+debug: false
+patients: [MISC33]
