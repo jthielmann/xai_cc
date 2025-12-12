@@ -102,6 +102,7 @@ def _get_composite_and_highest_layer(encoder, encoder_type):
         raise ValueError(f"Unsupported encoder type {encoder_type!r} for CRP recording.")
     return composite, layer_name
 
+once = False
 def plot_crp_zennit(
     model,
     model_config,
@@ -150,8 +151,11 @@ def plot_crp_zennit(
             tile = sample[3]
             tile_name = os.path.splitext(os.path.basename(tile))[0] + ".png"
             out_path = os.path.join(out_path, component, tile_name)
-            fn = f"{dataset.get_tilename(i)}.png"
-            img.save(os.path.join(out_path, fn))
+            img.save(os.path.join(out_path, out_path))
+            if not once:
+                once = True
+                print(f"saving to {out_path}")
+
 
 
 
