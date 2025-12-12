@@ -9,4 +9,4 @@ dataset: coad
 gene: FOSL1
 #gene: MYC
 debug: false
-patients: [MISC33]
+patients: []
