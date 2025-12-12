@@ -6,7 +6,7 @@ crp_rank_k: 1
 eval_label: crp_rank_demo
 out_path: ../evaluation
 dataset: coad
-gene: FOSL1
+gene: ATP1B1
 #gene: MYC
 debug: false
 patients: []
