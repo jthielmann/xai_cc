@@ -1,16 +1,20 @@
 name: crp_dinov3
 channels:
-  - bioconda
-  - conda-forge
   - pytorch
+  - conda-forge
+  - bioconda
   - nodefaults
+
 dependencies:
   - python=3.11
   - pip
-  - pytorch=2.1.2
-  - torchvision=0.16.2
+
+  # Pin these explicitly to the pytorch channel to avoid mixing builds
+  - pytorch::pytorch=2.1.2
+  - pytorch::torchvision=0.16.2
+
   - torchmetrics
-  - numpy<=1.23.5
+  - numpy=1.23.5
   - tqdm
   - matplotlib
   - pandas
@@ -19,6 +23,7 @@ dependencies:
   - omegaconf
   - regex
   - submitit
+
   - pip:
-    - "--no-deps -e ../repos/zennit-crp"
-    - "-e ../repos/dinov3"
+      - -e ../repos/zennit-crp
+      - -e ../repos/dinov3
