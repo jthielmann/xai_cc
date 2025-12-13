@@ -284,8 +284,8 @@ def cluster_explanations_genes_loop(cfg, model, data_dir, out_path, genes, targe
         print("loading dataset")
 
         # Prefer explicit eval overrides for metadata layout; fall back to model_config
-        meta_dir = cfg.get("meta_data_dir") or cfg.get("model_config", {}).get("meta_data_dir", "/meta_data/")
-        gene_csv = cfg.get("gene_data_filename") or cfg.get("model_config", {}).get("gene_data_filename", "gene_data.csv")
+        meta_dir = cfg.get("meta_data_dir")
+        gene_csv = cfg.get("gene_data_filename")
         dataset = get_dataset(
             data_dir,
             genes=[gene],

@@ -106,7 +106,6 @@ class EvalPipeline:
         # S = Maximization.SAMPLE_SIZE (default 40)
         d_c_sorted, rel_c_sorted, rf_c_sorted = load_maximization(fv.RelMax.PATH, layer_name)
 
-        print("hello")
         #for x in rel_c_sorted:
         #    print(x)
         #print(ds.base.get_tilename(0))
@@ -426,6 +425,7 @@ class EvalPipeline:
 
 
         if self.config.get("pcx"):
+
             # Enforce: always use model genes; eval config must not set 'genes'.
             model_config = self.config.get("model_config")
             # Route outputs under eval_path/<model_name>/pcx
@@ -441,4 +441,7 @@ class EvalPipeline:
             gene = self.config.get("gene")
             self.config["genes"] = [gene]
             print(f"[CRP] Starting PCX -> {self.config['out_path']}")
-            plot_pcx(self.model, self.config, run=self.wandb_run, out_path=self.config["out_path"])
+            config = self.config["model_config"]
+            config["patients"] = self.config.get("patients")
+            config["data_dir"] = "../data/coad/"
+            plot_pcx(self.model, self.config["model_config"], run=self.wandb_run, out_path=self.config["out_path"])

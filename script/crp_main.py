@@ -81,8 +81,7 @@ def _setup_model_config(config_name:str):
     return config
 
 def _update_crp_config(cfg) -> Dict[str, Any]:
-    cfg["crp"] = True
-    for key in ("lrp", "pxc", "diff", "scatter",
+    for key in ("lrp", "diff", "scatter",
                 "forward_to_csv", "forward_to_csv_simple",
                 "umap", "lxt"):
         cfg[key] = False

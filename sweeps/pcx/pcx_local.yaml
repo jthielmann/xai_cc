@@ -1,0 +1,9 @@
+model_state_path: enc-dino_genes_id-08bba863d4_genes_id-08bba863d4_run_name-enc_dino
+pcx: true
+eval_label: pcx
+out_path: ../evaluation
+dataset: coad
+gene: FOSL1
+#gene: MYC
+debug: true
+patients: [MISC33]
