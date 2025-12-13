@@ -1,0 +1,10 @@
+model_state_path: icms2up/icms2up_dino_mse_gene_heads/enc-dino_genes_id-01391cc340_genes_id-01391cc340_run_name-enc_dino
+pcx: true
+crp_rank_k: 1
+eval_label: crp_rank_demo
+out_path: ../evaluation
+dataset: coad
+gene: MYC
+#gene: MYC
+debug: false
+patients: []
